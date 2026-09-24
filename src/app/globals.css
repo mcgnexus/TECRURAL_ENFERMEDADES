@@ -1,38 +1,141 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap");
+
+:root {
+  /* Marca */
+  --tr-forest: #164B3B;
+  --tr-brand-green: #208C46;
+  --tr-leaf-text: #4C7847;
+  --tr-leaf: #54834C;
+  --tr-lime: #D7E6A1;
+  --tr-cyan: #02B2EB;
+
+  /* Interfaz */
+  --tr-paper: #F6F7F1;
+  --tr-surface: #FFFFFF;
+  --tr-ink: #1D2B25;
+  --tr-muted: #66756C;
+  --tr-line: #E3E8DE;
+  --tr-warning: #D69D52;
+
+  /* Tipografía */
+  --tr-font-heading: "Manrope", Arial, sans-serif;
+  --tr-font-body: "DM Sans", Arial, sans-serif;
+  --tr-text-body: 16px;
+  --tr-text-small: 14px;
+  --tr-text-caption: 12px;
+
+  /* Geometría */
+  --tr-radius-control: 8px;
+  --tr-radius-card: 14px;
+  --tr-radius-section: 20px;
+  --tr-content-width: 1160px;
+  --tr-focus: 3px solid #4C7847;
+  --tr-shadow-card: 0 8px 24px rgba(23, 62, 47, 0.08);
+}
 
 @theme {
-  --color-primary-50: #f0fdf4;
-  --color-primary-100: #dcfce7;
-  --color-primary-200: #bbf7d0;
-  --color-primary-300: #86efac;
-  --color-primary-400: #4ade80;
-  --color-primary-500: #22c55e;
-  --color-primary-600: #16a34a;
-  --color-primary-700: #15803d;
-  --color-primary-800: #166534;
-  --color-primary-900: #14532d;
-  --color-primary-950: #052e16;
+  /* Colors - Marca */
+  --color-tr-forest: var(--tr-forest);
+  --color-tr-brand-green: var(--tr-brand-green);
+  --color-tr-leaf-text: var(--tr-leaf-text);
+  --color-tr-leaf: var(--tr-leaf);
+  --color-tr-lime: var(--tr-lime);
+  --color-tr-cyan: var(--tr-cyan);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors - Interfaz */
+  --color-tr-paper: var(--tr-paper);
+  --color-tr-surface: var(--tr-surface);
+  --color-tr-ink: var(--tr-ink);
+  --color-tr-muted: var(--tr-muted);
+  --color-tr-line: var(--tr-line);
+  --color-tr-warning: var(--tr-warning);
+
+  /* Semantic aliases */
+  --color-primary: var(--tr-brand-green);
+  --color-primary-hover: var(--tr-forest);
+  --color-primary-light: var(--tr-lime);
+  --color-secondary: var(--tr-cyan);
+  --color-background: var(--tr-paper);
+  --color-surface: var(--tr-surface);
+  --color-text: var(--tr-ink);
+  --color-text-muted: var(--tr-muted);
+  --color-border: var(--tr-line);
+  --color-warning: var(--tr-warning);
+
+  /* Fonts */
+  --font-heading: var(--tr-font-heading);
+  --font-body: var(--tr-font-body);
+  --font-sans: var(--tr-font-body);
+
+  /* Radius */
+  --radius-control: var(--tr-radius-control);
+  --radius-card: var(--tr-radius-card);
+  --radius-section: var(--tr-radius-section);
+
+  /* Shadows */
+  --shadow-card: var(--tr-shadow-card);
 }
 
 @layer base {
   * {
-    @apply border-gray-200;
+    border-color: var(--tr-line);
   }
-  
+
+  html {
+    font-size: var(--tr-text-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    background-color: var(--tr-paper);
+    color: var(--tr-ink);
+    font-family: var(--tr-font-body);
+    font-size: var(--tr-text-body);
+    line-height: 1.6;
   }
-  
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--tr-font-heading);
+    font-weight: 700;
+    color: var(--tr-forest);
+    line-height: 1.2;
+  }
+
+  h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+  h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+  h3 { font-size: clamp(1.25rem, 2.5vw, 1.5rem); }
+  h4 { font-size: clamp(1.125rem, 2vw, 1.25rem); }
+
   :focus-visible {
-    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+    outline: none;
+    ring: var(--tr-focus);
+    ring-offset: 2px;
+    ring-offset-color: var(--tr-surface);
+  }
+
+  ::selection {
+    background-color: var(--tr-lime);
+    color: var(--tr-forest);
+  }
+
+  input[type="file"]::file-selector-button {
+    font-family: var(--tr-font-body);
+    font-weight: 600;
   }
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  .text-balance { text-wrap: balance; }
+  .font-heading { font-family: var(--tr-font-heading); }
+  .font-body { font-family: var(--tr-font-body); }
+  .text-body { font-size: var(--tr-text-body); }
+  .text-small { font-size: var(--tr-text-small); }
+  .text-caption { font-size: var(--tr-text-caption); }
+  .radius-control { border-radius: var(--tr-radius-control); }
+  .radius-card { border-radius: var(--tr-radius-card); }
+  .radius-section { border-radius: var(--tr-radius-section); }
+  .shadow-card { box-shadow: var(--tr-shadow-card); }
+  .focus-ring { outline: var(--tr-focus); }
 }

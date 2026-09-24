@@ -11,6 +11,14 @@ interface CameraCaptureProps {
   quality?: number;
 }
 
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
+
+const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+
+const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
+
+const inputCapture = "w-full aspect-[4/3] bg-tr-paper rounded-[var(--tr-radius-card)] border-2 border-dashed border-tr-line transition-colors duration-200";
+
 export function CameraCapture({
   onCapture,
   disabled = false,
@@ -35,7 +43,7 @@ export function CameraCapture({
 
       const compressedFile = await imageCompression(file, options);
       const base64 = await imageCompression.getDataUrlFromFile(compressedFile);
-      
+
       return {
         base64: base64.split(",")[1],
         mimeType: compressedFile.type,
@@ -86,7 +94,7 @@ export function CameraCapture({
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="relative aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300">
+      <div className={`relative ${inputCapture} hover:border-tr-brand-green hover:bg-tr-surface focus-within:border-tr-brand-green focus-within:bg-tr-surface overflow-hidden`}>
         {preview ? (
           <>
             <img
@@ -97,7 +105,8 @@ export function CameraCapture({
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
               <button
                 onClick={clearPreview}
-                className="bg-white/90 backdrop-blur px-4 py-2 rounded-lg text-sm font-medium text-gray-800 hover:bg-white transition-colors"
+                type="button"
+                className={`${btnSecondary} bg-white/90 backdrop-blur`}
               >
                 Cambiar foto
               </button>
@@ -107,11 +116,11 @@ export function CameraCapture({
           <button
             onClick={openCamera}
             disabled={disabled || isProcessing}
-            className="w-full h-full flex flex-col items-center justify-center gap-3 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-full flex flex-col items-center justify-center gap-3 text-tr-muted hover:text-tr-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
             <svg
-              className="w-12 h-12"
+              className="w-12 h-12 text-tr-brand-green"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -131,17 +140,17 @@ export function CameraCapture({
               />
             </svg>
             <span className="text-center px-4">
-              <p className="font-medium">Toma una foto</p>
-              <p className="text-sm text-gray-500">Usa la cámara trasera para mejor resultado</p>
+              <p className="font-heading font-semibold text-tr-ink">Toma una foto</p>
+              <p className="text-small text-tr-muted">Usa la cámara trasera para mejor resultado</p>
             </span>
           </button>
         )}
 
         {isProcessing && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white rounded-lg p-6 flex items-center gap-3">
-              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary-600 border-t-transparent" />
-              <span className="font-medium">Comprimiendo imagen...</span>
+            <div className="bg-tr-surface rounded-[var(--tr-radius-card)] p-6 flex items-center gap-3 shadow-[var(--tr-shadow-card)]">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-tr-brand-green border-t-transparent" />
+              <span className="font-body font-medium text-tr-ink">Comprimiendo imagen...</span>
             </div>
           </div>
         )}
@@ -159,12 +168,12 @@ export function CameraCapture({
       />
 
       {error && (
-        <p className="mt-3 text-sm text-red-600 text-center" role="alert">
+        <p className="mt-3 text-small text-tr-warning text-center" role="alert">
           {error}
         </p>
       )}
 
-      <p className="mt-2 text-xs text-gray-500 text-center">
+      <p className="mt-2 text-caption text-tr-muted text-center">
         Máx. {maxDimension}px lado mayor · Calidad {Math.round(quality * 100)}% · ~{maxSizeMB}MB
       </p>
     </div>

@@ -25,59 +25,64 @@ function formatDate(dateString: string): string {
   });
 }
 
-function getGravedadColor(gravedad: string): string {
-  switch (gravedad) {
-    case "leve":
-      return "bg-green-100 text-green-800";
-    case "moderada":
-      return "bg-yellow-100 text-yellow-800";
-    case "severa":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-}
+const TIPO_LABELS: Record<string, string> = {
+  enfermedad: "Enfermedad",
+  deficiencia_nutricional: "Deficiencia",
+  plaga: "Plaga",
+  sano: "Sano",
+};
 
-function getTipoLabel(tipo: string): string {
-  const labels: Record<string, string> = {
-    enfermedad: "Enfermedad",
-    deficiencia_nutricional: "Deficiencia",
-    plaga: "Plaga",
-    sano: "Sano",
-  };
-  return labels[tipo] || tipo;
-}
+const ORGANO_LABELS: Record<string, string> = {
+  hoja: "Hoja",
+  flor: "Flor",
+  fruto: "Fruto",
+  tallo: "Tallo",
+  planta_completa: "Planta completa",
+};
+
+const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
+const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
+const badgePurple = `${badgeBase} bg-purple-100 text-purple-800`;
+const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
+const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning`;
+const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
+const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
+
+const SEVERITY_CLASSES = {
+  leve: badgeGreen,
+  moderada: badgeYellow,
+  severa: badgeRed,
+};
+
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
+const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+
+const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
 export default async function HistorialPage() {
   const historial = await getHistorial();
 
   return (
-    <main className="min-h-screen bg-gray-50 py-8 px-4">
+    <main className="min-h-screen bg-tr-paper py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <header className="mb-8 flex items-center justify-between">
+        <header className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Historial de diagnósticos</h1>
-            <p className="text-gray-500 mt-1">{historial.length} registros</p>
+            <h1 className="font-heading font-bold text-tr-forest text-2xl">Historial de diagnósticos</h1>
+            <p className="text-tr-muted mt-1 text-body">{historial.length} registros</p>
           </div>
-          <Link
-            href="/"
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-          >
+          <Link href="/" className={`${btnPrimary} whitespace-nowrap`}>
             Nuevo diagnóstico
           </Link>
         </header>
 
         {historial.length === 0 ? (
-          <div className="text-center py-12">
-            <svg className="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <div className={`text-center py-12 ${cardStyles}`}>
+            <svg className="mx-auto h-16 w-16 text-tr-line" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h2 className="mt-4 text-lg font-medium text-gray-900">No hay diagnósticos aún</h2>
-            <p className="mt-2 text-gray-500">Realiza tu primer análisis para ver el historial aquí</p>
-            <Link
-              href="/"
-              className="mt-6 inline-block px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-            >
+            <h2 className="mt-4 font-heading font-semibold text-tr-forest text-xl">No hay diagnósticos aún</h2>
+            <p className="mt-2 text-tr-muted text-body">Realiza tu primer análisis para ver el historial aquí</p>
+            <Link href="/" className={`mt-6 ${btnPrimary} inline-flex`}>
               Hacer diagnóstico
             </Link>
           </div>
@@ -86,29 +91,32 @@ export default async function HistorialPage() {
             {historial.map((item) => (
               <article
                 key={item.id}
-                className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                className={`${cardStyles} p-4 hover:shadow-[var(--tr-shadow-card)] transition-shadow border-tr-line`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-                        {item.organo_detectado}
+                      <span className={badgeBlue}>
+                        {ORGANO_LABELS[item.organo_detectado] || item.organo_detectado}
                       </span>
-                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded">
+                      <span className={badgePurple}>
                         {item.especie_identificada}
                       </span>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getGravedadColor(item.diagnostico.gravedad)}`}>
-                        {getTipoLabel(item.diagnostico.tipo)}: {item.diagnostico.nombre}
+                      <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
+                        {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}: {item.diagnostico.nombre}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 line-clamp-2">{item.recomendacion}</p>
-                    <p className="mt-2 text-xs text-gray-400">{item.created_at ? formatDate(item.created_at) : "Fecha desconocida"}</p>
+                    <p className="text-body text-tr-ink line-clamp-2">{item.recomendacion}</p>
+                    <p className="mt-2 text-caption text-tr-muted">
+                      {item.created_at ? formatDate(item.created_at) : "Fecha desconocida"}
+                      {item.proveedor_usado && ` · ${item.proveedor_usado.toUpperCase()}`}
+                    </p>
                   </div>
                   {item.imagen_url && (
                     <img
                       src={item.imagen_url}
                       alt={`Diagnóstico ${item.especie_identificada}`}
-                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                      className="w-20 h-20 object-cover rounded-[var(--tr-radius-control)] flex-shrink-0 border border-tr-line"
                     />
                   )}
                 </div>
