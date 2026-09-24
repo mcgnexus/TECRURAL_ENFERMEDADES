@@ -51,6 +51,7 @@ const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
 const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning`;
 const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
 const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
+const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
@@ -117,6 +118,11 @@ export function Results({
         <span className={CONFIDENCE_CLASSES(confianza_identificacion)}>
           Confianza ID: {Math.round(confianza_identificacion * 100)}%
         </span>
+        {diagnostico.proveedor_usado && (
+          <span className={badgeModel}>
+            Modelo: {diagnostico.proveedor_usado === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+          </span>
+        )}
       </div>
 
       <div className={`p-5 border-l-4 ${cardStyles} ${

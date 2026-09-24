@@ -47,6 +47,7 @@ const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
 const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning`;
 const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
 const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
+const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
 
 const SEVERITY_CLASSES = {
   leve: badgeGreen,
@@ -105,11 +106,15 @@ export default async function HistorialPage() {
                       <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
                         {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}: {item.diagnostico.nombre}
                       </span>
+                      {item.proveedor_usado && (
+                        <span className={badgeModel}>
+                          {item.proveedor_usado === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+                        </span>
+                      )}
                     </div>
                     <p className="text-body text-tr-ink line-clamp-2">{item.recomendacion}</p>
                     <p className="mt-2 text-caption text-tr-muted">
                       {item.created_at ? formatDate(item.created_at) : "Fecha desconocida"}
-                      {item.proveedor_usado && ` · ${item.proveedor_usado.toUpperCase()}`}
                     </p>
                   </div>
                   {item.imagen_url && (
