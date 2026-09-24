@@ -1,6 +1,7 @@
 import { obtenerHistorial } from "@/lib/database";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 import Link from "next/link";
+import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
 
 export const metadata = {
   title: "Historial | TECRURAL Diagnóstico",
@@ -60,7 +61,7 @@ const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest a
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
-export default async function HistorialPage() {
+async function HistorialContent() {
   const historial = await getHistorial();
 
   return (
@@ -131,5 +132,13 @@ export default async function HistorialPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function HistorialPage() {
+  return (
+    <HistorialWrapper>
+      <HistorialContent />
+    </HistorialWrapper>
   );
 }

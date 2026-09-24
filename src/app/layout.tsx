@@ -42,7 +42,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-full flex flex-col bg-tr-paper">{children}</body>
+      <body className="min-h-full flex flex-col bg-tr-paper">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js').catch(() => {});
+                });
+              }
+            `,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

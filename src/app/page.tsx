@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { CameraCapture } from "@/components/CameraCapture";
 import { Results } from "@/components/Results";
+import { PWAProviders } from "@/components/PWA/Providers";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Proveedor = "gemini" | "deepseek";
@@ -15,7 +16,7 @@ const btnPurple = `${btnBase} bg-purple-600 text-white hover:bg-purple-700 activ
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
-export default function HomePage() {
+function HomeContent() {
   const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
@@ -238,5 +239,13 @@ export default function HomePage() {
         </footer>
       </div>
     </main>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <PWAProviders>
+      <HomeContent />
+    </PWAProviders>
   );
 }
