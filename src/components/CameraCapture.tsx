@@ -3,12 +3,15 @@
 import { useState, useCallback, useRef } from "react";
 import imageCompression from "browser-image-compression";
 
+type Proveedor = "gemini" | "deepseek";
+
 interface CameraCaptureProps {
   onCapture: (base64: string, mimeType: string, file: File) => void;
   disabled?: boolean;
   maxSizeMB?: number;
   maxDimension?: number;
   quality?: number;
+  proveedor?: Proveedor;
 }
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
@@ -19,13 +22,21 @@ const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-
 
 const inputCapture = "w-full aspect-[4/3] bg-tr-paper rounded-[var(--tr-radius-card)] border-2 border-dashed border-tr-line transition-colors duration-200";
 
+// DeepSeek tiene límite más bajo para imágenes
+const getMaxDimension = (proveedor?: Proveedor, maxDimension = 1024) => {
+  if (proveedor === "deepseek") return 512;
+  return maxDimension;
+};
+
 export function CameraCapture({
   onCapture,
   disabled = false,
   maxSizeMB = 1,
   maxDimension = 1024,
   quality = 0.7,
+  proveedor = "gemini",
 }: CameraCaptureProps) {
+  const effectiveMaxDimension = getMaxDimension(proveedor, maxDimension);
   const [isProcessing, setIsProcessing] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +46,7 @@ export function CameraCapture({
     async (file: File): Promise<{ base64: string; mimeType: string; compressedFile: File }> => {
       const options = {
         maxSizeMB,
-        maxWidthOrHeight: maxDimension,
+        maxWidthOrHeight: effectiveMaxDimension,
         useWebWorker: true,
         quality,
         fileType: file.type || "image/jpeg",
@@ -50,7 +61,7 @@ export function CameraCapture({
         compressedFile,
       };
     },
-    [maxSizeMB, maxDimension, quality]
+    [maxSizeMB, effectiveMaxDimension, quality]
   );
 
   const handleFileSelect = useCallback(
@@ -174,7 +185,8 @@ export function CameraCapture({
       )}
 
       <p className="mt-2 text-caption text-tr-muted text-center">
-        Máx. {maxDimension}px lado mayor · Calidad {Math.round(quality * 100)}% · ~{maxSizeMB}MB
+        Máx. {effectiveMaxDimension}px lado mayor · Calidad {Math.round(quality * 100)}% · ~{maxSizeMB}MB
+        {proveedor === "deepseek" && " (optimizado para DeepSeek)"}
       </p>
     </div>
   );

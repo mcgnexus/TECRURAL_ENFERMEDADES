@@ -67,12 +67,20 @@ const RESPONSE_SCHEMA = {
   ],
 };
 
+function buildDeepSeekPrompt(basePrompt: string): string {
+  return `${basePrompt}
+
+IMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido (sin markdown, sin texto extra). El JSON debe seguir exactamente este esquema:
+${JSON.stringify(RESPONSE_SCHEMA, null, 2)}`;
+}
+
 export async function analizarImagenDeepSeek(
   base64Image: string,
   mimeType: string,
   isRetry = false
 ): Promise<DiagnosticoResponse> {
-  const prompt = isRetry ? RETRY_PROMPT : SYSTEM_PROMPT;
+  const basePrompt = isRetry ? RETRY_PROMPT : SYSTEM_PROMPT;
+  const prompt = buildDeepSeekPrompt(basePrompt);
   const client = getDeepSeek();
 
   const response = await client.chat.completions.create({
@@ -91,14 +99,7 @@ export async function analizarImagenDeepSeek(
         ],
       },
     ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "diagnostico_fitosanitario",
-        schema: RESPONSE_SCHEMA,
-        strict: true,
-      },
-    },
+    response_format: { type: "json_object" },
     temperature: 0.1,
     max_tokens: 2048,
   });

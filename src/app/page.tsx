@@ -163,7 +163,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <CameraCapture onCapture={handleCapture} disabled={isLoading} />
+        <CameraCapture onCapture={handleCapture} disabled={isLoading} proveedor={proveedor} />
 
         {imagenPreview && capturedFile && !diagnostico && (
           <div className="mt-6">
