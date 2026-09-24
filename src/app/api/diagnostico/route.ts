@@ -1,15 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analizarConReintento } from "@/lib/gemini";
+import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
 import { initDatabase, guardarDiagnostico } from "@/lib/database";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+type Proveedor = "gemini" | "deepseek";
+
+async function analizarConProveedor(
+  base64: string,
+  mimeType: string,
+  proveedor: Proveedor
+) {
+  if (proveedor === "gemini") {
+    return await analizarConReintento(base64, mimeType);
+  }
+  return await analizarConReintentoDeepSeek(base64, mimeType);
+}
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("imagen") as File | null;
     const usuarioId = formData.get("usuario_id") as string || "anonimo";
+    const proveedor = (formData.get("proveedor") as Proveedor) || "gemini";
 
     if (!file) {
       return NextResponse.json(
@@ -28,7 +43,24 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
 
-    const diagnostico = await analizarConReintento(base64, file.type);
+    let diagnostico;
+    let proveedorUsado = proveedor;
+
+    try {
+      diagnostico = await analizarConProveedor(base64, file.type, proveedor);
+    } catch (error) {
+      console.warn(`Fallo ${proveedor}, intentando fallback...`, error);
+      
+      const fallback: Proveedor = proveedor === "gemini" ? "deepseek" : "gemini";
+      
+      try {
+        diagnostico = await analizarConProveedor(base64, file.type, fallback);
+        proveedorUsado = fallback;
+      } catch (fallbackError) {
+        console.error(`Fallo también ${fallback}:`, fallbackError);
+        throw fallbackError;
+      }
+    }
 
     await initDatabase();
 
@@ -39,6 +71,7 @@ export async function POST(request: NextRequest) {
       ...diagnostico,
       id: saved.id,
       created_at: saved.created_at,
+      proveedor_usado: proveedorUsado,
     });
   } catch (error) {
     console.error("Error en diagnóstico:", error);

@@ -32,4 +32,5 @@ export interface DiagnosticoWithMeta extends DiagnosticoResponse {
   imagen_url?: string;
   feedback_usuario?: string;
   created_at?: string;
+  proveedor_usado?: "gemini" | "deepseek";
 }

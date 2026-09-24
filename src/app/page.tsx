@@ -3,13 +3,16 @@
 import { useState, useCallback } from "react";
 import { CameraCapture } from "@/components/CameraCapture";
 import { Results } from "@/components/Results";
-import type { DiagnosticoResponse } from "@/types/diagnostico";
+import type { DiagnosticoWithMeta } from "@/types/diagnostico";
+
+type Proveedor = "gemini" | "deepseek";
 
 export default function HomePage() {
-  const [diagnostico, setDiagnostico] = useState<DiagnosticoResponse | null>(null);
+  const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [proveedor, setProveedor] = useState<Proveedor>("gemini");
 
   const handleCapture = useCallback(async (base64: string, mimeType: string, file: File) => {
     setImagenPreview(`data:${mimeType};base64,${base64}`);
@@ -20,6 +23,7 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append("imagen", file);
       formData.append("usuario_id", "usuario_demo");
+      formData.append("proveedor", proveedor);
 
       const response = await fetch("/api/diagnostico", {
         method: "POST",
@@ -40,7 +44,7 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [proveedor]);
 
   const handleFeedback = useCallback(async (feedback: string) => {
     if (!diagnostico || !("id" in diagnostico)) return;
@@ -69,7 +73,7 @@ export default function HomePage() {
         <div className="max-w-md mx-auto">
           <header className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-gray-900">Resultado del diagnóstico</h1>
-            <p className="text-gray-500 mt-1">Análisis completado</p>
+            <p className="text-gray-500 mt-1">Análisis completado {diagnostico.proveedor_usado && `· ${diagnostico.proveedor_usado.toUpperCase()}`}</p>
           </header>
           
           <Results
@@ -103,6 +107,34 @@ export default function HomePage() {
             </button>
           </div>
         )}
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Modelo IA</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setProveedor("gemini")}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                proveedor === "gemini"
+                  ? "bg-primary-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              type="button"
+            >
+              Gemini 2.5 Flash
+            </button>
+            <button
+              onClick={() => setProveedor("deepseek")}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                proveedor === "deepseek"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              type="button"
+            >
+              DeepSeek Chat
+            </button>
+          </div>
+        </div>
 
         <CameraCapture onCapture={handleCapture} disabled={isLoading} />
 
@@ -139,7 +171,7 @@ export default function HomePage() {
         </div>
 
         <footer className="mt-8 text-center text-xs text-gray-400">
-          <p>Desarrollado para TECRURAL · Powered by Gemini 2.5 Flash</p>
+          <p>Desarrollado para TECRURAL · Gemini 2.5 Flash / DeepSeek Chat</p>
           <p className="mt-1">No sustituye asesoramiento técnico profesional</p>
         </footer>
       </div>
