@@ -13,6 +13,9 @@ export const metadata: Metadata = {
     locale: "es_ES",
   },
   robots: "index, follow",
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
@@ -23,14 +26,21 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production";
+
   return (
     <html lang="es" className="h-full antialiased">
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="TECRURAL" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        {isProduction && (
+          <>
+            <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
+            <meta name="apple-mobile-web-app-capable" content="yes" />
+            <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+            <meta name="apple-mobile-web-app-title" content="TECRURAL" />
+            <link rel="apple-touch-icon" href="/icon-192.png" />
+          </>
+        )}
+        <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="min-h-full flex flex-col bg-tr-paper">{children}</body>
     </html>
