@@ -18,18 +18,27 @@ const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-
 export default function HomePage() {
   const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proveedor, setProveedor] = useState<Proveedor>("gemini");
 
-  const handleCapture = useCallback(async (base64: string, mimeType: string, file: File) => {
+  const handleCapture = useCallback((base64: string, mimeType: string, file: File) => {
     setImagenPreview(`data:${mimeType};base64,${base64}`);
+    setCapturedFile(file);
     setError(null);
+    setDiagnostico(null);
+  }, []);
+
+  const handleAnalyze = useCallback(async () => {
+    if (!capturedFile) return;
+
     setIsLoading(true);
+    setError(null);
 
     try {
       const formData = new FormData();
-      formData.append("imagen", file);
+      formData.append("imagen", capturedFile);
       formData.append("usuario_id", "usuario_demo");
       formData.append("proveedor", proveedor);
 
@@ -52,7 +61,7 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [proveedor]);
+  }, [capturedFile, proveedor]);
 
   const handleFeedback = useCallback(async (feedback: string) => {
     if (!diagnostico || !("id" in diagnostico)) return;
@@ -72,6 +81,7 @@ export default function HomePage() {
   const handleRetry = useCallback(() => {
     setDiagnostico(null);
     setImagenPreview(null);
+    setCapturedFile(null);
     setError(null);
   }, []);
 
@@ -132,6 +142,7 @@ export default function HomePage() {
               onClick={() => setProveedor("gemini")}
               type="button"
               className={`flex-1 ${proveedor === "gemini" ? btnPrimary : btnSecondary}`}
+              disabled={isLoading}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z" />
@@ -142,6 +153,7 @@ export default function HomePage() {
               onClick={() => setProveedor("deepseek")}
               type="button"
               className={`flex-1 ${proveedor === "deepseek" ? btnPurple : btnSecondary}`}
+              disabled={isLoading}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -153,7 +165,42 @@ export default function HomePage() {
 
         <CameraCapture onCapture={handleCapture} disabled={isLoading} />
 
-        {isLoading && (
+        {imagenPreview && capturedFile && !diagnostico && (
+          <div className="mt-6">
+            <div className="relative aspect-[4/3] rounded-[var(--tr-radius-card)] overflow-hidden border border-tr-line mb-4">
+              <img
+                src={imagenPreview}
+                alt="Vista previa"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <button
+              onClick={handleAnalyze}
+              disabled={isLoading}
+              type="button"
+              className={`${btnPrimary} w-full py-3 text-lg`}
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                  Analizando...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z" />
+                  </svg>
+                  Analizar con {proveedor === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+                </>
+              )}
+            </button>
+            <p className="mt-2 text-caption text-tr-muted text-center">
+              Modelo seleccionado: {proveedor === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+            </p>
+          </div>
+        )}
+
+        {isLoading && !imagenPreview && (
           <div className="mt-6 text-center">
             <div className="inline-flex items-center gap-2 text-tr-brand-green font-body font-medium">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-tr-brand-green border-t-transparent" />
