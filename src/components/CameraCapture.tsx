@@ -41,6 +41,7 @@ export function CameraCapture({
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const compressImage = useCallback(
     async (file: File): Promise<{ base64: string; mimeType: string; compressedFile: File }> => {
@@ -89,6 +90,9 @@ export function CameraCapture({
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
+        if (galleryInputRef.current) {
+          galleryInputRef.current.value = "";
+        }
       }
     },
     [compressImage, onCapture]
@@ -96,6 +100,10 @@ export function CameraCapture({
 
   const openCamera = useCallback(() => {
     fileInputRef.current?.click();
+  }, []);
+
+  const openGallery = useCallback(() => {
+    galleryInputRef.current?.click();
   }, []);
 
   const clearPreview = useCallback(() => {
@@ -177,6 +185,28 @@ export function CameraCapture({
         disabled={disabled || isProcessing}
         aria-label="Capturar foto con cámara"
       />
+
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileSelect}
+        className="hidden"
+        disabled={disabled || isProcessing}
+        aria-label="Adjuntar foto desde la galería"
+      />
+
+      <button
+        onClick={openGallery}
+        disabled={disabled || isProcessing}
+        type="button"
+        className={`${btnSecondary} mt-3 w-full`}
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Adjuntar desde la galería
+      </button>
 
       {error && (
         <p className="mt-3 text-small text-tr-warning text-center" role="alert">

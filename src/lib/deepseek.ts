@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { SYSTEM_PROMPT, RETRY_PROMPT } from "./system-prompt";
+import { SYSTEM_PROMPT, RETRY_PROMPT, conContextoPlanta } from "./system-prompt";
 import type { DiagnosticoResponse } from "@/types/diagnostico";
 
 let deepseek: OpenAI | null = null;
@@ -77,9 +77,13 @@ ${JSON.stringify(RESPONSE_SCHEMA, null, 2)}`;
 export async function analizarImagenDeepSeek(
   base64Image: string,
   mimeType: string,
-  isRetry = false
+  isRetry = false,
+  nombrePlanta?: string
 ): Promise<DiagnosticoResponse> {
-  const basePrompt = isRetry ? RETRY_PROMPT : SYSTEM_PROMPT;
+  const basePrompt = conContextoPlanta(
+    isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
+    nombrePlanta
+  );
   const prompt = buildDeepSeekPrompt(basePrompt);
   const client = getDeepSeek();
 
@@ -119,12 +123,13 @@ export async function analizarImagenDeepSeek(
 
 export async function analizarConReintentoDeepSeek(
   base64Image: string,
-  mimeType: string
+  mimeType: string,
+  nombrePlanta?: string
 ): Promise<DiagnosticoResponse> {
   try {
-    return await analizarImagenDeepSeek(base64Image, mimeType, false);
+    return await analizarImagenDeepSeek(base64Image, mimeType, false, nombrePlanta);
   } catch (error) {
     console.warn("Primer intento DeepSeek fallido, reintentando...", error);
-    return await analizarImagenDeepSeek(base64Image, mimeType, true);
+    return await analizarImagenDeepSeek(base64Image, mimeType, true, nombrePlanta);
   }
 }

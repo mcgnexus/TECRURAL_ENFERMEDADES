@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { SYSTEM_PROMPT, RETRY_PROMPT } from "./system-prompt";
+import { SYSTEM_PROMPT, RETRY_PROMPT, conContextoPlanta } from "./system-prompt";
 import type { DiagnosticoResponse } from "@/types/diagnostico";
 
 const ai = new GoogleGenAI({
@@ -58,9 +58,13 @@ const RESPONSE_SCHEMA = {
 export async function analizarImagen(
   base64Image: string,
   mimeType: string,
-  isRetry = false
+  isRetry = false,
+  nombrePlanta?: string
 ): Promise<DiagnosticoResponse> {
-  const prompt = isRetry ? RETRY_PROMPT : SYSTEM_PROMPT;
+  const prompt = conContextoPlanta(
+    isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
+    nombrePlanta
+  );
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
@@ -101,12 +105,13 @@ export async function analizarImagen(
 
 export async function analizarConReintento(
   base64Image: string,
-  mimeType: string
+  mimeType: string,
+  nombrePlanta?: string
 ): Promise<DiagnosticoResponse> {
   try {
-    return await analizarImagen(base64Image, mimeType, false);
+    return await analizarImagen(base64Image, mimeType, false, nombrePlanta);
   } catch (error) {
     console.warn("Primer intento fallido, reintentando...", error);
-    return await analizarImagen(base64Image, mimeType, true);
+    return await analizarImagen(base64Image, mimeType, true, nombrePlanta);
   }
 }

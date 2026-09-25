@@ -33,6 +33,15 @@ REGLAS CRÍTICAS:
 5. "gravedad": leve = daño estético/sin impacto productivo; moderada = reducción de calidad/rendimiento; severa = riesgo de pérdida de cosecha o muerte de planta.
 6. Cultivos típicos zona: olivo, almendro, cítricos, hortícolas (tomate, pimiento, berenjena), vid, cereales.`;
 
+export function conContextoPlanta(prompt: string, nombrePlanta?: string): string {
+  const nombre = nombrePlanta?.trim();
+  if (!nombre) return prompt;
+
+  return `${prompt}
+
+CONTEXTO APORTADO POR EL USUARIO: El agricultor indica que la planta fotografiada es "${nombre}". Úsalo como referencia para la identificación de especie y el diagnóstico. Si lo observado contradice claramente ese dato, indícalo en "sintomas_observados" o en la recomendación.`;
+}
+
 export const RETRY_PROMPT = `La respuesta anterior tuvo baja confianza o JSON inválido. 
 Reanaliza la imagen siendo MÁS ESPECÍFICO en:
 - Descripción detallada de síntomas visuales exactos

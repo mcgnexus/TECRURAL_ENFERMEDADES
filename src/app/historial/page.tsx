@@ -104,6 +104,11 @@ async function HistorialContent() {
                       <span className={badgePurple}>
                         {item.especie_identificada}
                       </span>
+                      {item.nombre_planta && (
+                        <span className={badgeSecondary}>
+                          Indicada: {item.nombre_planta}
+                        </span>
+                      )}
                       <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
                         {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}: {item.diagnostico.nombre}
                       </span>

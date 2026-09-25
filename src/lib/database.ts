@@ -24,9 +24,15 @@ export async function initDatabase() {
       organo TEXT NOT NULL,
       especie TEXT NOT NULL,
       diagnostico_json JSONB NOT NULL,
+      nombre_planta TEXT,
       feedback_usuario TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `;
+
+  await db`
+    ALTER TABLE diagnosticos
+    ADD COLUMN IF NOT EXISTS nombre_planta TEXT
   `;
   
   await db`
@@ -44,13 +50,14 @@ export async function guardarDiagnostico(
   usuarioId: string,
   imagenUrl: string,
   diagnostico: DiagnosticoResponse,
+  nombrePlanta?: string,
   feedbackUsuario?: string
 ): Promise<DiagnosticoWithMeta> {
   const db = getSql();
   const [row] = await db`
-    INSERT INTO diagnosticos (usuario_id, imagen_url, organo, especie, diagnostico_json, feedback_usuario)
-    VALUES (${usuarioId}, ${imagenUrl}, ${diagnostico.organo_detectado}, ${diagnostico.especie_identificada}, ${JSON.stringify(diagnostico)}, ${feedbackUsuario ?? null})
-    RETURNING id, usuario_id, imagen_url, organo, especie, diagnostico_json, feedback_usuario, created_at
+    INSERT INTO diagnosticos (usuario_id, imagen_url, organo, especie, diagnostico_json, nombre_planta, feedback_usuario)
+    VALUES (${usuarioId}, ${imagenUrl}, ${diagnostico.organo_detectado}, ${diagnostico.especie_identificada}, ${JSON.stringify(diagnostico)}, ${nombrePlanta ?? null}, ${feedbackUsuario ?? null})
+    RETURNING id, usuario_id, imagen_url, organo, especie, diagnostico_json, nombre_planta, feedback_usuario, created_at
   `;
   
   return {
@@ -60,6 +67,7 @@ export async function guardarDiagnostico(
     organo_detectado: row.organo,
     especie_identificada: row.especie,
     ...row.diagnostico_json,
+    nombre_planta: row.nombre_planta,
     feedback_usuario: row.feedback_usuario,
     created_at: row.created_at,
   };
@@ -80,7 +88,7 @@ export async function actualizarFeedback(
 export async function obtenerHistorial(usuarioId: string, limit = 50): Promise<DiagnosticoWithMeta[]> {
   const db = getSql();
   const rows = await db`
-    SELECT id, usuario_id, imagen_url, organo, especie, diagnostico_json, feedback_usuario, created_at
+    SELECT id, usuario_id, imagen_url, organo, especie, diagnostico_json, nombre_planta, feedback_usuario, created_at
     FROM diagnosticos
     WHERE usuario_id = ${usuarioId}
     ORDER BY created_at DESC
@@ -94,6 +102,7 @@ export async function obtenerHistorial(usuarioId: string, limit = 50): Promise<D
     organo_detectado: row.organo,
     especie_identificada: row.especie,
     ...row.diagnostico_json,
+    nombre_planta: row.nombre_planta,
     feedback_usuario: row.feedback_usuario,
     created_at: row.created_at,
   }));

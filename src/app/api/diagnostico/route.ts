@@ -11,12 +11,13 @@ type Proveedor = "gemini" | "deepseek";
 async function analizarConProveedor(
   base64: string,
   mimeType: string,
-  proveedor: Proveedor
+  proveedor: Proveedor,
+  nombrePlanta?: string
 ) {
   if (proveedor === "gemini") {
-    return await analizarConReintento(base64, mimeType);
+    return await analizarConReintento(base64, mimeType, nombrePlanta);
   }
-  return await analizarConReintentoDeepSeek(base64, mimeType);
+  return await analizarConReintentoDeepSeek(base64, mimeType, nombrePlanta);
 }
 
 function isMissingApiKeyError(error: unknown): boolean {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get("imagen") as File | null;
     const usuarioId = formData.get("usuario_id") as string || "anonimo";
     const proveedor = (formData.get("proveedor") as Proveedor) || "gemini";
+    const nombrePlanta = ((formData.get("nombre_planta") as string) || "").trim() || undefined;
 
     if (!file) {
       return NextResponse.json(
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
     let proveedorUsado = proveedor;
 
     try {
-      diagnostico = await analizarConProveedor(base64, file.type, proveedor);
+      diagnostico = await analizarConProveedor(base64, file.type, proveedor, nombrePlanta);
     } catch (error) {
       console.warn(`Fallo ${proveedor}, intentando fallback...`, error);
       
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
       }
       
       try {
-        diagnostico = await analizarConProveedor(base64, file.type, fallback);
+        diagnostico = await analizarConProveedor(base64, file.type, fallback, nombrePlanta);
         proveedorUsado = fallback;
       } catch (fallbackError) {
         console.error(`Fallo también ${fallback}:`, fallbackError);
@@ -80,11 +82,12 @@ export async function POST(request: NextRequest) {
     await initDatabase();
 
     const imagenUrl = `data:${file.type};base64,${base64}`;
-    const saved = await guardarDiagnostico(usuarioId, imagenUrl, diagnostico);
+    const saved = await guardarDiagnostico(usuarioId, imagenUrl, diagnostico, nombrePlanta);
 
     return NextResponse.json({
       ...diagnostico,
       id: saved.id,
+      nombre_planta: saved.nombre_planta,
       created_at: saved.created_at,
       proveedor_usado: proveedorUsado,
     });

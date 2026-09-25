@@ -115,6 +115,11 @@ export function Results({
         <span className={badgePurple}>
           Especie: {especie_identificada}
         </span>
+        {diagnostico.nombre_planta && (
+          <span className={badgeSecondary}>
+            Planta indicada: {diagnostico.nombre_planta}
+          </span>
+        )}
         <span className={CONFIDENCE_CLASSES(confianza_identificacion)}>
           Confianza ID: {Math.round(confianza_identificacion * 100)}%
         </span>

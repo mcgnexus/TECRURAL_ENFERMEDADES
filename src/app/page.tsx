@@ -23,6 +23,7 @@ function HomeContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proveedor, setProveedor] = useState<Proveedor>("gemini");
+  const [nombrePlanta, setNombrePlanta] = useState("");
 
   const handleCapture = useCallback((base64: string, mimeType: string, file: File) => {
     setImagenPreview(`data:${mimeType};base64,${base64}`);
@@ -42,6 +43,7 @@ function HomeContent() {
       formData.append("imagen", capturedFile);
       formData.append("usuario_id", "usuario_demo");
       formData.append("proveedor", proveedor);
+      formData.append("nombre_planta", nombrePlanta.trim());
 
       const response = await fetch("/api/diagnostico", {
         method: "POST",
@@ -62,7 +64,7 @@ function HomeContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [capturedFile, proveedor]);
+  }, [capturedFile, proveedor, nombrePlanta]);
 
   const handleFeedback = useCallback(async (feedback: string) => {
     if (!diagnostico || !("id" in diagnostico)) return;
@@ -162,6 +164,26 @@ function HomeContent() {
               <span>DeepSeek Chat</span>
             </button>
           </div>
+        </div>
+
+        <div className={`mb-6 p-5 ${cardStyles}`}>
+          <label htmlFor="nombre-planta" className="block font-body font-semibold text-tr-forest text-small mb-3">
+            Nombre de la planta{" "}
+            <span className="font-normal text-tr-muted">(opcional)</span>
+          </label>
+          <input
+            id="nombre-planta"
+            type="text"
+            value={nombrePlanta}
+            onChange={(e) => setNombrePlanta(e.target.value)}
+            disabled={isLoading}
+            placeholder="Ej: olivo, tomate, vid, almendro..."
+            autoComplete="off"
+            className="w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface focus-visible:outline-none focus-visible:ring-[var(--tr-focus)] disabled:opacity-50"
+          />
+          <p className="mt-2 text-caption text-tr-muted">
+            Ayuda a la IA a identificar mejor la especie y ajustar el diagnóstico.
+          </p>
         </div>
 
         <CameraCapture onCapture={handleCapture} disabled={isLoading} proveedor={proveedor} />
