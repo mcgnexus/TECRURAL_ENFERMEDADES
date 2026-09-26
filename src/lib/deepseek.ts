@@ -55,6 +55,7 @@ const RESPONSE_SCHEMA = {
     },
     recomendacion: { type: "string" },
     requiere_experto: { type: "boolean" },
+    razonamiento: { type: "string" },
   },
   required: [
     "organo_detectado",
@@ -64,6 +65,7 @@ const RESPONSE_SCHEMA = {
     "estado_madurez",
     "recomendacion",
     "requiere_experto",
+    "razonamiento",
   ],
 };
 
@@ -105,7 +107,7 @@ export async function analizarImagenDeepSeek(
     ],
     response_format: { type: "json_object" },
     temperature: 0.1,
-    max_tokens: 2048,
+    max_tokens: 4096,
   });
 
   const text = response.choices[0]?.message?.content;

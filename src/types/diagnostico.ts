@@ -24,6 +24,7 @@ export interface DiagnosticoResponse {
   estado_madurez: EstadoMadurez;
   recomendacion: string;
   requiere_experto: boolean;
+  razonamiento?: string;
 }
 
 export interface DiagnosticoWithMeta extends DiagnosticoResponse {

@@ -96,6 +96,7 @@ function HomeContent() {
             <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Resultado del diagnóstico</h1>
             <p className="text-tr-muted mt-1 text-body">
               Análisis completado {diagnostico.proveedor_usado && `· ${diagnostico.proveedor_usado.toUpperCase()}`}
+              {diagnostico.angulo_usado && ` · Ángulo: ${diagnostico.angulo_usado}`}
             </p>
           </header>
 
@@ -186,7 +187,12 @@ function HomeContent() {
           </p>
         </div>
 
-        <CameraCapture onCapture={handleCapture} disabled={isLoading} proveedor={proveedor} />
+        <CameraCapture 
+          onCapture={handleCapture} 
+          disabled={isLoading} 
+          proveedor={proveedor}
+          multiAngulo={true}
+        />
 
         {imagenPreview && capturedFile && !diagnostico && (
           <div className="mt-6">
@@ -251,6 +257,10 @@ function HomeContent() {
             <li className="flex items-start gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
               Incluye hoja sana de referencia al lado si es posible
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+              Captura los 3 ángulos: haz, envés y planta completa
             </li>
           </ul>
         </div>

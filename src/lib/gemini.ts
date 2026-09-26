@@ -43,6 +43,7 @@ const RESPONSE_SCHEMA = {
     },
     recomendacion: { type: "string" },
     requiere_experto: { type: "boolean" },
+    razonamiento: { type: "string" },
   },
   required: [
     "organo_detectado",
@@ -52,6 +53,7 @@ const RESPONSE_SCHEMA = {
     "estado_madurez",
     "recomendacion",
     "requiere_experto",
+    "razonamiento",
   ],
 };
 
@@ -86,7 +88,7 @@ export async function analizarImagen(
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0.1,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
     },
   });
 
