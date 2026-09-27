@@ -78,12 +78,36 @@ function validarCoherencia(diagnostico: DiagnosticoResponse): { valido: boolean;
 function requiereExpertoPorValidacion(diagnostico: DiagnosticoResponse): boolean {
   const { errores } = validarCoherencia(diagnostico);
   if (errores.length > 0) return true;
-  
+
   if (diagnostico.confianza_identificacion < 0.4) return true;
   if (diagnostico.diagnostico.confianza < 0.4) return true;
   if (diagnostico.diagnostico.tipo !== "sano" && diagnostico.diagnostico.sintomas_observados.length < 2) return true;
-  
+
+  // Calidad de imagen insuficiente → requiere experto
+  const calidad = diagnostico.calidad_imagen;
+  if (calidad) {
+    if (calidad.nitidez === "baja" || calidad.encuadre === "insuficiente") return true;
+  }
+
+  // Sin diagnósticos diferenciales → requiere experto
+  if (!diagnostico.diagnosticos_diferenciales || diagnostico.diagnosticos_diferenciales.length === 0) return true;
+
   return false;
+}
+
+function notaCalidadImagen(diagnostico: DiagnosticoResponse): string {
+  const calidad = diagnostico.calidad_imagen;
+  if (!calidad) return "";
+
+  const problemas: string[] = [];
+  if (calidad.nitidez === "baja") problemas.push("imagen poco nítida");
+  if (calidad.iluminacion === "deficiente") problemas.push("iluminación deficiente");
+  if (calidad.iluminacion === "excesiva") problemas.push("sobreexposición");
+  if (calidad.encuadre === "parcial") problemas.push("encuadre parcial");
+  if (calidad.encuadre === "insuficiente") problemas.push("encuadre insuficiente");
+
+  if (problemas.length === 0) return "";
+  return ` ⚠ Calidad de imagen: ${problemas.join(", ")}. Se recomienda tomar otra foto en mejores condiciones.`;
 }
 
 export async function POST(request: NextRequest) {
@@ -137,6 +161,11 @@ export async function POST(request: NextRequest) {
     }
 
     diagnostico.diagnostico.sintomas_observados = sanitizarSintomas(diagnostico.diagnostico.sintomas_observados);
+
+    const notaCalidad = notaCalidadImagen(diagnostico);
+    if (notaCalidad) {
+      diagnostico.recomendacion = `${diagnostico.recomendacion}${notaCalidad}`;
+    }
 
     const validacion = validarCoherencia(diagnostico);
     if (!validacion.valido) {

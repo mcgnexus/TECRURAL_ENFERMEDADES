@@ -16,6 +16,18 @@ export interface EstadoMadurez {
   dias_estimados_cosecha: number;
 }
 
+export interface DiagnosticoDiferencial {
+  nombre: string;
+  confianza: number;
+  por_que_descartado: string;
+}
+
+export interface CalidadImagen {
+  nitidez: "alta" | "media" | "baja";
+  iluminacion: "adecuada" | "deficiente" | "excesiva";
+  encuadre: "adecuado" | "parcial" | "insuficiente";
+}
+
 export interface DiagnosticoResponse {
   organo_detectado: OrganoDetectado;
   especie_identificada: string;
@@ -25,6 +37,9 @@ export interface DiagnosticoResponse {
   recomendacion: string;
   requiere_experto: boolean;
   razonamiento?: string;
+  hallazgos_negativos?: string[];
+  diagnosticos_diferenciales?: DiagnosticoDiferencial[];
+  calidad_imagen?: CalidadImagen;
 }
 
 export interface DiagnosticoWithMeta extends DiagnosticoResponse {
@@ -35,4 +50,5 @@ export interface DiagnosticoWithMeta extends DiagnosticoResponse {
   feedback_usuario?: string;
   created_at?: string;
   proveedor_usado?: "gemini" | "deepseek";
+  angulo_usado?: "haz" | "enves" | "planta_completa";
 }
