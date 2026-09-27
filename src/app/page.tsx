@@ -1,49 +1,77 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { CameraCapture } from "@/components/CameraCapture";
+import Link from "next/link";
+import { CameraCapture, type FotosEstado } from "@/components/CameraCapture";
+import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
 import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
+import { trackEvento } from "@/lib/analitica";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
-type Proveedor = "gemini" | "deepseek";
+type Vista = "portada" | "captura" | "resultado";
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
 
 const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
-const btnPurple = `${btnBase} bg-purple-600 text-white hover:bg-purple-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
+/** Traduce errores técnicos a mensajes claros para el agricultor. */
+function mensajeAmigable(err: unknown, status?: number): string {
+  if (err instanceof TypeError) {
+    return "Sin conexión suficiente. Comprueba tu red y reintenta: no has perdido las fotos ni los datos.";
+  }
+  if (status === 429) {
+    return "Se ha alcanzado el límite de uso temporal. Espera un rato y vuelve a intentarlo.";
+  }
+  if (status === 400 || status === 413) {
+    if (err instanceof Error && err.message) return err.message;
+    return "Revisa la foto e inténtalo de nuevo.";
+  }
+  if (status === 502) {
+    if (err instanceof Error && err.message) return err.message;
+    return "No hemos podido interpretar bien esta foto. Repítela con más luz y el síntoma enfocado.";
+  }
+  if (status === 503) {
+    return "El servicio de análisis no está disponible ahora mismo. Inténtalo de nuevo en unos minutos.";
+  }
+  return "No hemos podido completar el análisis. Comprueba tu conexión e inténtalo de nuevo.";
+}
+
 function HomeContent() {
+  const [vista, setVista] = useState<Vista>("portada");
+  const [contexto, setContexto] = useState<ContextoForm>(CONTEXTO_INICIAL);
+  const [fotos, setFotos] = useState<FotosEstado>({ principal: null, enves: null, planta_completa: null });
+  const [modoMulti, setModoMulti] = useState(false);
   const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
-  const [imagenPreview, setImagenPreview] = useState<string | null>(null);
-  const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [proveedor, setProveedor] = useState<Proveedor>("gemini");
-  const [nombrePlanta, setNombrePlanta] = useState("");
 
-  const handleCapture = useCallback((base64: string, mimeType: string, file: File) => {
-    setImagenPreview(`data:${mimeType};base64,${base64}`);
-    setCapturedFile(file);
-    setError(null);
-    setDiagnostico(null);
+  const handleFotosChange = useCallback((nuevas: FotosEstado) => {
+    setFotos(nuevas);
   }, []);
 
-  const handleAnalyze = useCallback(async () => {
-    if (!capturedFile) return;
+  const handleAnalizar = useCallback(async () => {
+    if (!fotos.principal || isLoading) return;
 
     setIsLoading(true);
     setError(null);
+    trackEvento("analisis_iniciado", { fotos: 1 + (fotos.enves ? 1 : 0) + (fotos.planta_completa ? 1 : 0) });
 
     try {
+      const resumen = resumenContexto(contexto);
       const formData = new FormData();
-      formData.append("imagen", capturedFile);
+      formData.append("imagen", fotos.principal.file);
+      if (fotos.enves) formData.append("imagen_enves", fotos.enves.file);
+      if (fotos.planta_completa) formData.append("imagen_planta", fotos.planta_completa.file);
       formData.append("usuario_id", "usuario_demo");
-      formData.append("proveedor", proveedor);
-      formData.append("nombre_planta", nombrePlanta.trim());
+      formData.append("cultivo", resumen.cultivo);
+      formData.append("municipio", resumen.municipio);
+      formData.append("sintoma", resumen.sintoma);
+      formData.append("duracion", resumen.duracion);
+      formData.append("nombre_planta", resumen.variedad);
 
       const response = await fetch("/api/diagnostico", {
         method: "POST",
@@ -53,58 +81,64 @@ function HomeContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Error en el diagnóstico");
+        throw new Error(data.error || "Error en el análisis");
       }
 
       setDiagnostico(data);
+      setVista("resultado");
+      trackEvento("analisis_completado", {
+        proveedor: data.proveedor_usado,
+        gravedad: data.diagnostico?.gravedad,
+        tipo: data.diagnostico?.tipo,
+        requiere_experto: data.requiere_experto,
+      });
+      trackEvento("resultado_visto", {
+        gravedad: data.diagnostico?.gravedad,
+        requiere_experto: data.requiere_experto,
+      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error desconocido";
-      setError(message);
-      setDiagnostico(null);
+      const mensaje = mensajeAmigable(err);
+      setError(mensaje);
+      trackEvento("analisis_error", { message: mensaje });
+      // Las fotos y el contexto se conservan para reintentar
     } finally {
       setIsLoading(false);
     }
-  }, [capturedFile, proveedor, nombrePlanta]);
+  }, [fotos, contexto, isLoading]);
 
-  const handleFeedback = useCallback(async (feedback: string) => {
-    if (!diagnostico || !("id" in diagnostico)) return;
-
-    try {
-      await fetch("/api/feedback", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: diagnostico.id, feedback }),
-      });
-      alert("Gracias por tu feedback. Nos ayuda a mejorar.");
-    } catch {
-      alert("Error guardando feedback");
-    }
-  }, [diagnostico]);
-
-  const handleRetry = useCallback(() => {
+  const handleReiniciar = useCallback(() => {
     setDiagnostico(null);
-    setImagenPreview(null);
-    setCapturedFile(null);
+    setFotos({ principal: null, enves: null, planta_completa: null });
+    setContexto(CONTEXTO_INICIAL);
     setError(null);
+    setVista("portada");
   }, []);
 
-  if (diagnostico && imagenPreview) {
+  // ---------------------------------------------------------------------------
+  // VISTA: RESULTADO
+  // ---------------------------------------------------------------------------
+
+  if (vista === "resultado" && diagnostico && fotos.principal) {
     return (
       <main className="min-h-screen bg-tr-paper py-8 px-4">
         <div className="max-w-md mx-auto">
           <header className="mb-8 text-center">
-            <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Resultado del diagnóstico</h1>
+            <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Orientación inicial</h1>
             <p className="text-tr-muted mt-1 text-body">
-              Análisis completado {diagnostico.proveedor_usado && `· ${diagnostico.proveedor_usado.toUpperCase()}`}
-              {diagnostico.angulo_usado && ` · Ángulo: ${diagnostico.angulo_usado}`}
+              Hipótesis de trabajo a partir de tu foto · No es un diagnóstico definitivo
             </p>
           </header>
 
           <Results
             diagnostico={diagnostico}
-            imagenPreview={imagenPreview}
-            onFeedback={handleFeedback}
-            onRetry={handleRetry}
+            imagenPreview={`data:${fotos.principal.mimeType};base64,${fotos.principal.base64}`}
+            fotosBase64={[
+              fotos.principal.base64,
+              ...(fotos.enves ? [fotos.enves.base64] : []),
+              ...(fotos.planta_completa ? [fotos.planta_completa.base64] : []),
+            ]}
+            contextoUsuario={resumenContexto(contexto)}
+            onRetry={handleReiniciar}
             isLoading={isLoading}
           />
         </div>
@@ -112,12 +146,81 @@ function HomeContent() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // VISTA: PORTADA
+  // ---------------------------------------------------------------------------
+
+  if (vista === "portada") {
+    return (
+      <main className="min-h-screen bg-tr-paper flex flex-col">
+        <div className="flex-1 flex items-center justify-center py-10 px-4">
+          <div className="max-w-md w-full">
+            <div className="text-center mb-8">
+              <h1 className="font-heading font-bold text-tr-forest text-3xl sm:text-4xl leading-tight">
+                ¿Has observado algo extraño en tus plantas?
+              </h1>
+              <p className="text-tr-muted mt-4 text-body leading-relaxed">
+                Sube una foto para recibir una orientación inicial sobre los síntomas de tu
+                cultivo. Disponible para agricultores del Altiplano y la Costa Tropical de
+                Granada.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setVista("captura")}
+              type="button"
+              className={`${btnPrimary} w-full py-4 text-lg`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Analizar una planta
+            </button>
+
+            <div className={`mt-8 p-5 ${cardStyles}`}>
+              <ul className="text-small text-tr-muted space-y-3" role="list">
+                <li className="flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  La herramienta ofrece una <span className="text-tr-ink font-semibold">orientación inicial</span>, no un diagnóstico definitivo.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  Una <span className="text-tr-ink font-semibold">fotografía clara</span> mejora el análisis.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  Después de ver el resultado, podrás solicitar una <span className="text-tr-ink font-semibold">revisión de TecRural</span> si lo necesitas.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <footer className="pb-6 text-center text-caption text-tr-muted px-4">
+          <p>
+            <Link href="/historial" className="hover:underline">Historial</Link>
+            {" · "}
+            <Link href="/contacto" className="text-tr-brand-green font-semibold hover:underline">Contacta con TecRural</Link>
+          </p>
+          <p className="mt-1">No sustituye asesoramiento técnico profesional</p>
+        </footer>
+      </main>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VISTA: CAPTURA (contexto + fotos + analizar)
+  // ---------------------------------------------------------------------------
+
   return (
     <main className="min-h-screen bg-tr-paper py-8 px-4">
       <div className="max-w-md mx-auto">
-        <header className="mb-8 text-center">
-          <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">TECRURAL Diagnóstico</h1>
-          <p className="text-tr-muted mt-1 text-body">Análisis fitosanitario por IA para cultivos de Andalucía oriental</p>
+        <header className="mb-6 text-center">
+          <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Analizar una planta</h1>
+          <p className="text-tr-muted mt-1 text-body">
+            Cuéntanos qué ves y sube una foto del síntoma
+          </p>
         </header>
 
         {error && (
@@ -139,136 +242,58 @@ function HomeContent() {
           </div>
         )}
 
-        <div className={`mb-6 p-5 ${cardStyles}`}>
-          <label className="block font-body font-semibold text-tr-forest text-small mb-3">Modelo IA</label>
-          <div className="flex gap-2" role="group" aria-label="Seleccionar modelo de IA">
-            <button
-              onClick={() => setProveedor("gemini")}
-              type="button"
-              className={`flex-1 ${proveedor === "gemini" ? btnPrimary : btnSecondary}`}
-              disabled={isLoading}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z" />
-              </svg>
-              <span>Gemini 2.5 Flash</span>
-            </button>
-            <button
-              onClick={() => setProveedor("deepseek")}
-              type="button"
-              className={`flex-1 ${proveedor === "deepseek" ? btnPurple : btnSecondary}`}
-              disabled={isLoading}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span>DeepSeek Chat</span>
-            </button>
-          </div>
-        </div>
+        <ContextoCultivo valor={contexto} onChange={setContexto} disabled={isLoading} />
 
-        <div className={`mb-6 p-5 ${cardStyles}`}>
-          <label htmlFor="nombre-planta" className="block font-body font-semibold text-tr-forest text-small mb-3">
-            Nombre de la planta{" "}
-            <span className="font-normal text-tr-muted">(opcional)</span>
-          </label>
-          <input
-            id="nombre-planta"
-            type="text"
-            value={nombrePlanta}
-            onChange={(e) => setNombrePlanta(e.target.value)}
+        <div className="mt-5">
+          <CameraCapture
+            onFotosChange={handleFotosChange}
             disabled={isLoading}
-            placeholder="Ej: olivo, tomate, vid, almendro..."
-            autoComplete="off"
-            className="w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface focus-visible:outline-none focus-visible:ring-[var(--tr-focus)] disabled:opacity-50"
+            modoMulti={modoMulti}
+            onToggleModoMulti={() => setModoMulti((v) => !v)}
           />
-          <p className="mt-2 text-caption text-tr-muted">
-            Ayuda a la IA a identificar mejor la especie y ajustar el diagnóstico.
-          </p>
         </div>
 
-        <CameraCapture 
-          onCapture={handleCapture} 
-          disabled={isLoading} 
-          proveedor={proveedor}
-          multiAngulo={true}
-        />
-
-        {imagenPreview && capturedFile && !diagnostico && (
+        {fotos.principal && !isLoading && (
           <div className="mt-6">
-            <div className="relative aspect-[4/3] rounded-[var(--tr-radius-card)] overflow-hidden border border-tr-line mb-4">
-              <img
-                src={imagenPreview}
-                alt="Vista previa"
-                className="w-full h-full object-cover"
-              />
-            </div>
             <button
-              onClick={handleAnalyze}
+              onClick={handleAnalizar}
               disabled={isLoading}
               type="button"
               className={`${btnPrimary} w-full py-3 text-lg`}
             >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                  Analizando...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z" />
-                  </svg>
-                  Analizar con {proveedor === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
-                </>
-              )}
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Analizar foto
             </button>
             <p className="mt-2 text-caption text-tr-muted text-center">
-              Modelo seleccionado: {proveedor === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+              El sistema elige automáticamente el modelo de IA más adecuado para tu foto.
             </p>
           </div>
         )}
 
-        {isLoading && !imagenPreview && (
-          <div className="mt-6 text-center">
+        {isLoading && (
+          <div className="mt-6 text-center" role="status" aria-live="polite">
             <div className="inline-flex items-center gap-2 text-tr-brand-green font-body font-medium">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-tr-brand-green border-t-transparent" />
-              Analizando con IA...
+              Analizando la foto...
             </div>
-            <p className="text-small text-tr-muted mt-1">Esto puede tardar unos segundos</p>
+            <p className="text-small text-tr-muted mt-1">
+              Puede tardar unos segundos. Mantén esta pantalla abierta.
+            </p>
           </div>
         )}
 
-        <div className={`mt-8 p-5 ${cardStyles}`}>
-          <h3 className="font-heading font-semibold text-tr-forest mb-3">Consejos para mejor resultado</h3>
-          <ul className="text-body text-tr-muted space-y-2" role="list">
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-              Usa la cámara trasera y enfoca bien el síntoma
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-              Evita sombras duras; luz difusa (nublado) es ideal
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-              Foto del envés de la hoja si ves plagas/ácaros
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-              Incluye hoja sana de referencia al lado si es posible
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-              Captura los 3 ángulos: haz, envés y planta completa
-            </li>
-          </ul>
-        </div>
-
-        <footer className="mt-8 text-center text-caption text-tr-muted">
-          <p>Desarrollado para TECRURAL · Gemini 2.5 Flash / DeepSeek Chat</p>
-          <p className="mt-1">No sustituye asesoramiento técnico profesional</p>
-        </footer>
+        <p className="mt-8 text-center">
+          <button
+            onClick={() => setVista("portada")}
+            type="button"
+            className="text-caption text-tr-muted hover:text-tr-ink hover:underline"
+            disabled={isLoading}
+          >
+            ← Volver al inicio
+          </button>
+        </p>
       </div>
     </main>
   );

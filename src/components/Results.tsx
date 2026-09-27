@@ -1,11 +1,20 @@
 "use client";
 
-import type { DiagnosticoWithMeta } from "@/types/diagnostico";
+import { useState } from "react";
+import Link from "next/link";
+import type { DiagnosticoWithMeta, ContextoUsuario } from "@/types/diagnostico";
+import { debeOfrecerRevision } from "@/lib/leads";
+import { LeadForm } from "@/components/LeadForm";
+import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
+import { trackEvento } from "@/lib/analitica";
+import type { ContextoDiagnosticoLead } from "@/types/lead";
 
 interface ResultsProps {
   diagnostico: DiagnosticoWithMeta;
   imagenPreview: string;
-  onFeedback: (feedback: string) => void;
+  /** Fotos comprimidas (base64 sin cabecera) para adjuntar a la revisión */
+  fotosBase64?: string[];
+  contextoUsuario?: ContextoUsuario;
   onRetry: () => void;
   isLoading?: boolean;
 }
@@ -14,7 +23,7 @@ const TIPO_LABELS: Record<string, string> = {
   enfermedad: "Enfermedad",
   deficiencia_nutricional: "Deficiencia nutricional",
   plaga: "Plaga",
-  sano: "Sano",
+  sano: "Sin síntomas claros",
 };
 
 const ORGANO_LABELS: Record<string, string> = {
@@ -25,33 +34,14 @@ const ORGANO_LABELS: Record<string, string> = {
   planta_completa: "Planta completa",
 };
 
-const GRAVEDAD_ICONS = {
-  leve: (
-    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-    </svg>
-  ),
-  moderada: (
-    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-    </svg>
-  ),
-  severa: (
-    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-    </svg>
-  ),
-};
-
 const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
 
 const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
-const badgePurple = `${badgeBase} bg-purple-100 text-purple-800`;
 const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
 const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning`;
 const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
 const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
-const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
+const badgeEspecie = `${badgeBase} bg-tr-leaf/15 text-tr-leaf-text`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
@@ -60,19 +50,28 @@ const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 round
 const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
-const SEVERITY_CLASSES = {
-  leve: badgeGreen,
-  moderada: badgeYellow,
-  severa: badgeRed,
-};
+/** Nivel cualitativo: no mostramos porcentajes porque la confianza del modelo
+ * no es una medida calibrada. Los valores numéricos se siguen usando internamente. */
+function nivelSenal(conf: number): { label: string; badge: string; ayuda: string } {
+  if (conf >= 0.7) return { label: "Señales claras", badge: badgeGreen, ayuda: "La foto muestra señales consistentes con esta hipótesis." };
+  if (conf >= 0.4) return { label: "Indicios moderados", badge: badgeYellow, ayuda: "Hay indicios, pero harían falta más datos o fotos para afinar." };
+  return { label: "Señales poco claras", badge: badgeRed, ayuda: "La foto no aporta suficiente evidencia: tómala como orientación muy preliminar." };
+}
 
-const CONFIDENCE_CLASSES = (conf: number) =>
-  conf >= 0.7 ? badgeGreen : conf >= 0.4 ? badgeYellow : badgeRed;
+function seccion(titulo: string, children: React.ReactNode) {
+  return (
+    <div className={`p-5 ${cardStyles}`}>
+      <h3 className="font-heading font-semibold text-tr-forest mb-2">{titulo}</h3>
+      {children}
+    </div>
+  );
+}
 
 export function Results({
   diagnostico,
   imagenPreview,
-  onFeedback,
+  fotosBase64,
+  contextoUsuario,
   onRetry,
   isLoading = false,
 }: ResultsProps) {
@@ -81,20 +80,99 @@ export function Results({
     estado_madurez,
     organo_detectado,
     especie_identificada,
-    confianza_identificacion,
     recomendacion,
     requiere_experto,
+    datos_faltantes,
+    diagnosticos_diferenciales,
   } = diagnostico;
 
-  const showFeedback = () => {
-    const feedback = prompt("¿Qué corregirías del diagnóstico? (opcional)");
-    if (feedback !== null) {
-      onFeedback(feedback);
+  const [ctaAbierto, setCtaAbierto] = useState(false);
+  const [feedbackEstado, setFeedbackEstado] = useState<"idle" | "enviando" | "ok" | "error">("idle");
+  const [compartido, setCompartido] = useState<"idle" | "ok" | "error">("idle");
+
+  const contexto: ContextoDiagnosticoLead = {
+    especie: especie_identificada,
+    gravedad: diag.gravedad,
+    tipo: diag.tipo,
+    requiere_experto,
+    organo: organo_detectado,
+    cultivo: contextoUsuario?.cultivo,
+    municipio: contextoUsuario?.municipio,
+    sintoma: contextoUsuario?.sintoma,
+  };
+
+  const mostrarCTA = debeOfrecerRevision(contexto);
+  const esSano = diag.tipo === "sano";
+  const nivel = nivelSenal(diag.confianza);
+
+  const enviarFeedback = async (feedback: string) => {
+    if (!diagnostico.id || !feedback) return;
+    setFeedbackEstado("enviando");
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: diagnostico.id, feedback }),
+      });
+      if (!response.ok) throw new Error();
+      setFeedbackEstado("ok");
+    } catch {
+      setFeedbackEstado("error");
     }
   };
 
+  const showFeedback = () => {
+    const feedback = prompt("¿Qué corregirías de esta orientación? (opcional)");
+    if (feedback !== null) {
+      enviarFeedback(feedback);
+    }
+  };
+
+  const abrirCTA = () => {
+    setCtaAbierto(true);
+    trackEvento("cta_revision_abierto", {
+      gravedad: diag.gravedad,
+      requiere_experto,
+      tipo: diag.tipo,
+    });
+  };
+
+  const textoCompartir = [
+    `Orientación inicial TecRural — ${especie_identificada}`,
+    `Observado: ${diag.sintomas_observados.slice(0, 2).join("; ") || "sin síntomas claros en la foto"}.`,
+    `Hipótesis: ${diag.nombre} (impacto potencial ${diag.gravedad}).`,
+    recomendacion ? `Pasos prudentes: ${recomendacion}` : "",
+    "Orientación generada con IA a partir de una foto; no sustituye una inspección técnica.",
+  ].filter(Boolean).join("\n");
+
+  const compartir = async () => {
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: "Orientación TecRural", text: textoCompartir });
+        setCompartido("ok");
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(textoCompartir);
+        setCompartido("ok");
+      } else {
+        setCompartido("error");
+      }
+    } catch {
+      setCompartido("error");
+    }
+  };
+
+  const datosFaltantes = (() => {
+    if (datos_faltantes && datos_faltantes.length > 0) return datos_faltantes;
+    const fallback: string[] = [];
+    if (diagnostico.calidad_imagen?.nitidez === "baja") fallback.push("Una foto más nítida del síntoma");
+    if (diagnostico.calidad_imagen?.encuadre !== "adecuado") fallback.push("Una foto con el síntoma bien encuadrado");
+    if (!contextoUsuario?.municipio) fallback.push("Tu municipio o comarca");
+    if (!contextoUsuario?.sintoma) fallback.push("Qué síntoma has observado principalmente");
+    return fallback;
+  })();
+
   return (
-    <div className="space-y-5" role="region" aria-label="Resultados del diagnóstico">
+    <div className="space-y-5" role="region" aria-label="Resultado de la orientación">
       <div className="relative aspect-[4/3] rounded-[var(--tr-radius-card)] overflow-hidden border border-tr-line">
         <img
           src={imagenPreview}
@@ -103,7 +181,7 @@ export function Results({
         />
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
           <p className="text-white text-small font-medium truncate font-body">
-            {ORGANO_LABELS[organo_detectado] || organo_detectado} - {especie_identificada}
+            {ORGANO_LABELS[organo_detectado] || organo_detectado} · {especie_identificada}
           </p>
         </div>
       </div>
@@ -112,83 +190,106 @@ export function Results({
         <span className={badgeBlue}>
           Órgano: {ORGANO_LABELS[organo_detectado] || organo_detectado}
         </span>
-        <span className={badgePurple}>
+        <span className={badgeEspecie}>
           Especie: {especie_identificada}
         </span>
         {diagnostico.nombre_planta && (
           <span className={badgeSecondary}>
-            Planta indicada: {diagnostico.nombre_planta}
+            Indicada: {diagnostico.nombre_planta}
           </span>
         )}
-        <span className={CONFIDENCE_CLASSES(confianza_identificacion)}>
-          Confianza ID: {Math.round(confianza_identificacion * 100)}%
-        </span>
+        <span className={nivel.badge}>Fiabilidad: {nivel.label}</span>
         {diagnostico.proveedor_usado && (
-          <span className={badgeModel}>
-            Modelo: {diagnostico.proveedor_usado === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
+          <span className={badgeSecondary}>
+            Análisis: {diagnostico.proveedor_usado === "gemini" ? "Gemini" : "DeepSeek"}
           </span>
         )}
       </div>
 
-      <div className={`p-5 border-l-4 ${cardStyles} ${
-        diag.gravedad === "leve" ? "border-tr-brand-green" :
-        diag.gravedad === "moderada" ? "border-tr-warning" :
-        "border-red-500"
-      }`}>
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 mt-0.5 text-tr-brand-green">{GRAVEDAD_ICONS[diag.gravedad]}</div>
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-heading font-semibold text-tr-forest capitalize">{TIPO_LABELS[diag.tipo] || diag.tipo}</span>
-              <span className={badgeSecondary}>{diag.nombre}</span>
-              <span className={CONFIDENCE_CLASSES(diag.confianza)}>
-                Confianza: {Math.round(diag.confianza * 100)}%
-              </span>
-              <span className={SEVERITY_CLASSES[diag.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
-                {diag.gravedad.charAt(0).toUpperCase() + diag.gravedad.slice(1)}
-              </span>
-            </div>
-            <p className="mt-3 text-body text-tr-ink leading-relaxed">{recomendacion}</p>
+      {seccion("1. Qué se observa en la foto", (
+        diag.sintomas_observados.length > 0 ? (
+          <ul className="space-y-2" role="list">
+            {diag.sintomas_observados.map((sintoma, i) => (
+              <li key={i} className="text-body text-tr-muted flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                <span>{sintoma}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-body text-tr-muted">
+            No se aprecian síntomas claros en esta foto. Ten en cuenta que el problema puede
+            estar en una parte de la planta que no aparece en la imagen.
+          </p>
+        )
+      ))}
 
-            {diag.sintomas_observados.length > 0 && (
-              <div className="mt-4">
-                <p className="font-body font-semibold text-tr-forest text-small">Síntomas observados</p>
-                <ul className="mt-2 space-y-2" role="list">
-                  {diag.sintomas_observados.map((sintoma, i) => (
-                    <li key={i} className="text-body text-tr-muted flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
-                      <span>{sintoma}</span>
-                    </li>
-                  ))}
-                </ul>
+      {seccion("2. Posibles causas (hipótesis, no certezas)", (
+        <div>
+          {!esSano && (
+            <div className="mb-3">
+              <p className="text-body text-tr-ink">
+                <span className="font-semibold">Hipótesis principal:</span> {diag.nombre}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className={badgeSecondary}>{TIPO_LABELS[diag.tipo] || diag.tipo}</span>
+                <span className={nivel.badge}>{nivel.label}</span>
+                <span className={diag.gravedad === "leve" ? badgeGreen : diag.gravedad === "moderada" ? badgeYellow : badgeRed}>
+                  Impacto potencial: {diag.gravedad}
+                </span>
               </div>
-            )}
-          </div>
+              <p className="mt-2 text-caption text-tr-muted">{nivel.ayuda}</p>
+            </div>
+          )}
+          {esSano && (
+            <p className="text-body text-tr-ink mb-3">
+              En esta foto el cultivo no muestra señales claras de problema. Es una observación
+              puntual: sigue atento por si aparecen síntomas.
+            </p>
+          )}
+          {diagnosticos_diferenciales && diagnosticos_diferenciales.length > 0 && (
+            <div>
+              <p className="font-body font-semibold text-tr-forest text-small">Otras posibilidades que valoraría un técnico</p>
+              <ul className="mt-2 space-y-2" role="list">
+                {diagnosticos_diferenciales.map((d, i) => (
+                  <li key={i} className="text-body text-tr-muted flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-tr-line mt-2 flex-shrink-0" />
+                    <span>
+                      <span className="text-tr-ink">{d.nombre}</span>
+                      {d.por_que_descartado ? ` — ${d.por_que_descartado}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      </div>
+      ))}
+
+      {datosFaltantes.length > 0 && seccion("3. Qué faltaría para afinar la orientación", (
+        <ul className="space-y-2" role="list">
+          {datosFaltantes.map((d, i) => (
+            <li key={i} className="text-body text-tr-muted flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-tr-warning mt-2 flex-shrink-0" />
+              <span>{d}</span>
+            </li>
+          ))}
+        </ul>
+      ))}
+
+      {recomendacion && seccion("4. Próximos pasos prudentes", (
+        <p className="text-body text-tr-ink leading-relaxed">{recomendacion}</p>
+      ))}
 
       {estado_madurez.aplica && (
         <div className={`${cardStyles} p-5`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-heading font-semibold text-tr-forest">Estado de madurez</h3>
+            <h3 className="font-heading font-semibold text-tr-forest">Estado de madurez (estimación)</h3>
             <span className={badgeSecondary}>{estado_madurez.estado}</span>
           </div>
-          <div className="w-full bg-tr-line rounded-full h-2.5">
-            <div
-              className="bg-tr-brand-green h-2.5 rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(100, Math.max(0, (1 - (estado_madurez.dias_estimados_cosecha / 60)) * 100))}%`,
-              }}
-              role="progressbar"
-              aria-valuenow={Math.min(100, Math.max(0, (1 - (estado_madurez.dias_estimados_cosecha / 60)) * 100))}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Progreso hacia cosecha"
-            />
-          </div>
-          <p className="mt-2 text-small text-tr-muted">
+          <p className="text-small text-tr-muted">
             {estado_madurez.dias_estimados_cosecha > 0
-              ? `~${estado_madurez.dias_estimados_cosecha} días para cosecha`
+              ? `~${estado_madurez.dias_estimados_cosecha} días estimados para cosecha (orientativo)`
               : "Cosecha inminente o no estimable"}
           </p>
         </div>
@@ -201,23 +302,111 @@ export function Results({
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <div>
-              <p className="font-heading font-semibold text-tr-forest">Se recomienda validación experta</p>
+              <p className="font-heading font-semibold text-tr-forest">Cuándo conviene una revisión técnica</p>
               <p className="mt-1 text-body text-tr-muted">
-                La confianza es baja. Considera tomar otra foto (envés de hoja, detalle de síntoma, planta completa) o consultar a un técnico agronómico.
+                En este caso, la IA no tiene suficiente evidencia para orientarte con seguridad:
+                conviene más fotos o la comprobación de un técnico agronómico.
               </p>
             </div>
           </div>
         </div>
       )}
 
+      {mostrarCTA && (
+        <div className={`${cardStyles} p-5 border-l-4 ${diag.gravedad === "severa" ? "border-red-500" : "border-tr-brand-green"}`}>
+          <h3 className="font-heading font-semibold text-tr-forest">¿Quieres que revisemos este caso contigo?</h3>
+          <p className="mt-1 text-body text-tr-muted">
+            Solicita una revisión de la fotografía y cuéntanos el cultivo y el municipio. Un
+            técnico de TecRural valorará tu caso y te propondrá el siguiente paso.
+          </p>
+          {!ctaAbierto ? (
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              <button onClick={abrirCTA} type="button" className={`${btnPrimary} flex-1`}>
+                Solicitar revisión de TecRural
+              </button>
+              {whatsappDisponible && (
+                <a
+                  href={urlWhatsApp(`Hola, he hecho un diagnóstico con la app de TecRural sobre ${especie_identificada} y quiero que revisen mi caso.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackEvento("whatsapp_click", { origen: "post_diagnostico" })}
+                  className={`${btnSecondary} flex-1`}
+                >
+                  WhatsApp
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4">
+              <LeadForm
+                origen="post_diagnostico"
+                diagnosticoId={diagnostico.id}
+                contexto={contexto}
+                prefill={{
+                  cultivo: contextoUsuario?.cultivo,
+                  municipio: contextoUsuario?.municipio,
+                  variedad: diagnostico.nombre_planta || contextoUsuario?.variedad,
+                  sintoma: contextoUsuario?.sintoma,
+                }}
+                mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
+                adjuntarFotos={fotosBase64}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!mostrarCTA && (
+        <div className={`${cardStyles} p-4 text-center`}>
+          <p className="text-small text-tr-muted">
+            {esSano
+              ? "El cultivo se ve bien en esta foto. Vigílalo y repite el análisis si notas cambios."
+              : "Daño leve: vigila la evolución y repite el análisis en unos días."}{" "}
+            <Link href="/contacto" className="text-tr-brand-green font-semibold hover:underline">
+              ¿Dudas? Contacta con TecRural
+            </Link>
+          </p>
+        </div>
+      )}
+
+      <div className={`${cardStyles} p-4 bg-tr-paper`}>
+        <p className="text-caption text-tr-muted leading-relaxed">
+          <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación la genera
+          una IA a partir de tu foto y puede contener errores. Es una hipótesis inicial, no un
+          diagnóstico definitivo, y no sustituye una inspección profesional ni una prescripción
+          de tratamientos. Tu foto se envió al proveedor de IA para el análisis y no se guarda,
+          salvo que solicites una revisión (entonces se comparte con el técnico, informándote
+          antes).
+        </p>
+      </div>
+
+      {feedbackEstado !== "idle" && feedbackEstado !== "enviando" && (
+        <p
+          className={`text-small text-center ${feedbackEstado === "ok" ? "text-tr-brand-green" : "text-tr-warning"}`}
+          role="status"
+        >
+          {feedbackEstado === "ok"
+            ? "Gracias por tu feedback. Nos ayuda a mejorar."
+            : "No se pudo guardar el feedback. Inténtalo de nuevo."}
+        </p>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3 pt-2">
         <button
           onClick={showFeedback}
-          disabled={isLoading}
+          disabled={isLoading || feedbackEstado === "enviando"}
           type="button"
           className={`${btnSecondary} flex-1`}
         >
           Esto no es correcto
+        </button>
+        <button
+          onClick={compartir}
+          disabled={isLoading}
+          type="button"
+          className={`${btnSecondary} flex-1`}
+        >
+          {compartido === "ok" ? "Copiado / compartido" : "Compartir resultado"}
         </button>
         <button
           onClick={onRetry}
@@ -225,7 +414,7 @@ export function Results({
           type="button"
           className={`${btnPrimary} flex-1`}
         >
-          Nueva análisis
+          Nuevo análisis
         </button>
       </div>
     </div>

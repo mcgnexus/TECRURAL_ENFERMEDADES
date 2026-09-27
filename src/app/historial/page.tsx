@@ -123,12 +123,19 @@ async function HistorialContent() {
                       {item.created_at ? formatDate(item.created_at) : "Fecha desconocida"}
                     </p>
                   </div>
-                  {item.imagen_url && (
+                  {item.imagen_url ? (
                     <img
                       src={item.imagen_url}
                       alt={`Diagnóstico ${item.especie_identificada}`}
                       className="w-20 h-20 object-cover rounded-[var(--tr-radius-control)] flex-shrink-0 border border-tr-line"
                     />
+                  ) : (
+                    <div className="w-20 h-20 rounded-[var(--tr-radius-control)] flex-shrink-0 border border-tr-line bg-tr-paper flex flex-col items-center justify-center text-tr-line" title="Foto no almacenada: solo se guarda si solicitas una revisión">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-[10px] text-tr-muted mt-1 px-1 text-center leading-tight">Sin foto guardada</span>
+                    </div>
                   )}
                 </div>
               </article>

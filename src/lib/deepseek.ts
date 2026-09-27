@@ -4,12 +4,15 @@ import {
   RETRY_PROMPT,
   OBSERVATION_PROMPT,
   VERIFICATION_PROMPT,
-  conContextoPlanta,
+  conContextoUsuario,
   selectFewShots,
   type Observacion,
   type Verificacion,
 } from "./system-prompt";
-import type { DiagnosticoResponse } from "@/types/diagnostico";
+import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
+import type { ImagenAnalisis } from "./gemini";
+
+export type { ImagenAnalisis };
 
 let deepseek: OpenAI | null = null;
 
@@ -113,6 +116,7 @@ const RESPONSE_SCHEMA = {
       },
     },
     recomendacion: { type: "string" },
+    datos_faltantes: { type: "array", items: { type: "string" } },
     requiere_experto: { type: "boolean" },
     razonamiento: { type: "string" },
   },
@@ -124,6 +128,7 @@ const RESPONSE_SCHEMA = {
     "estado_madurez",
     "hallazgos_negativos",
     "diagnosticos_diferenciales",
+    "datos_faltantes",
     "recomendacion",
     "requiere_experto",
     "razonamiento",
@@ -155,14 +160,24 @@ IMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido (sin markdown, sin t
 ${JSON.stringify(schema, null, 2)}`;
 }
 
+function contenidoMultimodal(
+  texto: string,
+  imagenes: ImagenAnalisis[]
+): Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> {
+  return [
+    { type: "text", text: texto },
+    ...imagenes.map((img) => ({
+      type: "image_url" as const,
+      image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+    })),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // FASE 1 — OBSERVACIÓN
 // ---------------------------------------------------------------------------
 
-async function observarImagen(
-  base64Image: string,
-  mimeType: string
-): Promise<Observacion> {
+async function observarImagen(imagenes: ImagenAnalisis[]): Promise<Observacion> {
   const client = getDeepSeek();
   const prompt = buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA);
 
@@ -171,13 +186,7 @@ async function observarImagen(
     messages: [
       {
         role: "user",
-        content: [
-          { type: "text", text: prompt },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64Image}` },
-          },
-        ],
+        content: contenidoMultimodal(prompt, imagenes),
       },
     ],
     response_format: { type: "json_object" },
@@ -203,7 +212,7 @@ function buildDiagnosisPrompt(
   basePrompt: string,
   fewShots: string,
   observacion: Observacion | undefined,
-  nombrePlanta: string | undefined,
+  contexto: ContextoUsuario | undefined,
   retroalimentacion: string | undefined
 ): string {
   let prompt = basePrompt;
@@ -213,30 +222,29 @@ function buildDiagnosisPrompt(
   }
 
   if (observacion) {
-    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA IMAGEN (hechos verificados, úsala como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
+    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA(S) IMAGEN(ES) (hechos verificados, úsalos como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
   }
 
   if (retroalimentacion) {
     prompt += `\n\nRETROALIMENTACIÓN DEL REVISOR (corrige tu diagnóstico anterior):\n${retroalimentacion}`;
   }
 
-  return conContextoPlanta(prompt, nombrePlanta);
+  return conContextoUsuario(prompt, contexto);
 }
 
 export async function analizarImagenDeepSeek(
-  base64Image: string,
-  mimeType: string,
+  imagenes: ImagenAnalisis[],
   isRetry = false,
-  nombrePlanta?: string,
+  contexto?: ContextoUsuario,
   observacion?: Observacion,
   retroalimentacion?: string
 ): Promise<DiagnosticoResponse> {
-  const fewShots = selectFewShots(nombrePlanta, observacion?.organo_detectado);
+  const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
   const prompt = buildDiagnosisPrompt(
     isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
     fewShots,
     observacion,
-    nombrePlanta,
+    contexto,
     retroalimentacion
   );
   const fullPrompt = buildPromptWithSchema(prompt, RESPONSE_SCHEMA);
@@ -247,13 +255,7 @@ export async function analizarImagenDeepSeek(
     messages: [
       {
         role: "user",
-        content: [
-          { type: "text", text: fullPrompt },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64Image}` },
-          },
-        ],
+        content: contenidoMultimodal(fullPrompt, imagenes),
       },
     ],
     response_format: { type: "json_object" },
@@ -276,8 +278,7 @@ export async function analizarImagenDeepSeek(
 // ---------------------------------------------------------------------------
 
 async function verificarDiagnostico(
-  base64Image: string,
-  mimeType: string,
+  imagenes: ImagenAnalisis[],
   diagnostico: DiagnosticoResponse,
   observacion: Observacion
 ): Promise<Verificacion> {
@@ -286,7 +287,7 @@ async function verificarDiagnostico(
 HECHOS OBSERVADOS:
 ${JSON.stringify(observacion, null, 2)}
 
-DIAGNÓSTICO PROPUESTO:
+HIPÓTESIS PROPUESTA:
 ${JSON.stringify(diagnostico, null, 2)}`;
 
   const fullPrompt = buildPromptWithSchema(prompt, VERIFICATION_SCHEMA);
@@ -297,13 +298,7 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     messages: [
       {
         role: "user",
-        content: [
-          { type: "text", text: fullPrompt },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64Image}` },
-          },
-        ],
+        content: contenidoMultimodal(fullPrompt, imagenes),
       },
     ],
     response_format: { type: "json_object" },
@@ -326,22 +321,19 @@ ${JSON.stringify(diagnostico, null, 2)}`;
 // ---------------------------------------------------------------------------
 
 async function analizarConVerificacion(
-  base64Image: string,
-  mimeType: string,
-  nombrePlanta: string | undefined,
+  imagenes: ImagenAnalisis[],
+  contexto: ContextoUsuario | undefined,
   observacion: Observacion,
   isRetry: boolean
 ): Promise<DiagnosticoResponse> {
   const diag = await analizarImagenDeepSeek(
-    base64Image,
-    mimeType,
+    imagenes,
     isRetry,
-    nombrePlanta,
+    contexto,
     observacion
   );
   const verificacion = await verificarDiagnostico(
-    base64Image,
-    mimeType,
+    imagenes,
     diag,
     observacion
   );
@@ -349,16 +341,14 @@ async function analizarConVerificacion(
   if (!verificacion.diagnostico_validado && !isRetry) {
     try {
       const diag2 = await analizarImagenDeepSeek(
-        base64Image,
-        mimeType,
+        imagenes,
         true,
-        nombrePlanta,
+        contexto,
         observacion,
         verificacion.inconsistencias.join("; ")
       );
       const ver2 = await verificarDiagnostico(
-        base64Image,
-        mimeType,
+        imagenes,
         diag2,
         observacion
       );
@@ -385,27 +375,14 @@ async function analizarConVerificacion(
 }
 
 export async function analizarConReintentoDeepSeek(
-  base64Image: string,
-  mimeType: string,
-  nombrePlanta?: string
+  imagenes: ImagenAnalisis[],
+  contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
-  const observacion = await observarImagen(base64Image, mimeType);
+  const observacion = await observarImagen(imagenes);
   try {
-    return await analizarConVerificacion(
-      base64Image,
-      mimeType,
-      nombrePlanta,
-      observacion,
-      false
-    );
+    return await analizarConVerificacion(imagenes, contexto, observacion, false);
   } catch (error) {
     console.warn("Primer intento DeepSeek fallido, reintentando...", error);
-    return await analizarConVerificacion(
-      base64Image,
-      mimeType,
-      nombrePlanta,
-      observacion,
-      true
-    );
+    return await analizarConVerificacion(imagenes, contexto, observacion, true);
   }
 }

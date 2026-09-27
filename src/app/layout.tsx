@@ -27,6 +27,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production";
+  const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
   return (
     <html lang="es" className="h-full antialiased">
@@ -41,6 +42,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </>
         )}
         <meta name="mobile-web-app-capable" content="yes" />
+        {gaId && (
+          <>
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${gaId}');
+                `,
+              }}
+            />
+          </>
+        )}
       </head>
       <body className="min-h-full flex flex-col bg-tr-paper">
         <script

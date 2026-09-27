@@ -40,6 +40,15 @@ export interface DiagnosticoResponse {
   hallazgos_negativos?: string[];
   diagnosticos_diferenciales?: DiagnosticoDiferencial[];
   calidad_imagen?: CalidadImagen;
+  datos_faltantes?: string[];
+}
+
+export interface ContextoUsuario {
+  cultivo?: string;
+  municipio?: string;
+  sintoma?: string;
+  duracion?: string;
+  variedad?: string;
 }
 
 export interface DiagnosticoWithMeta extends DiagnosticoResponse {
@@ -51,4 +60,5 @@ export interface DiagnosticoWithMeta extends DiagnosticoResponse {
   created_at?: string;
   proveedor_usado?: "gemini" | "deepseek";
   angulo_usado?: "haz" | "enves" | "planta_completa";
+  contexto_usuario?: ContextoUsuario;
 }

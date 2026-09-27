@@ -4,16 +4,25 @@ import {
   RETRY_PROMPT,
   OBSERVATION_PROMPT,
   VERIFICATION_PROMPT,
-  conContextoPlanta,
+  conContextoUsuario,
   selectFewShots,
   type Observacion,
   type Verificacion,
 } from "./system-prompt";
-import type { DiagnosticoResponse } from "@/types/diagnostico";
+import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
+
+export interface ImagenAnalisis {
+  base64: string;
+  mimeType: string;
+}
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
 });
+
+function partesImagen(imagenes: ImagenAnalisis[]) {
+  return imagenes.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } }));
+}
 
 // ---------------------------------------------------------------------------
 // SCHEMAS
@@ -113,6 +122,7 @@ const RESPONSE_SCHEMA = {
       },
     },
     recomendacion: { type: "string" },
+    datos_faltantes: { type: "array", items: { type: "string" } },
     requiere_experto: { type: "boolean" },
     razonamiento: { type: "string" },
   },
@@ -124,6 +134,7 @@ const RESPONSE_SCHEMA = {
     "estado_madurez",
     "hallazgos_negativos",
     "diagnosticos_diferenciales",
+    "datos_faltantes",
     "recomendacion",
     "requiere_experto",
     "razonamiento",
@@ -159,8 +170,7 @@ const VERIFICATION_SCHEMA = {
 // ---------------------------------------------------------------------------
 
 async function observarImagen(
-  base64Image: string,
-  mimeType: string
+  imagenes: ImagenAnalisis[]
 ): Promise<Observacion> {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
@@ -169,7 +179,7 @@ async function observarImagen(
         role: "user",
         parts: [
           { text: OBSERVATION_PROMPT },
-          { inlineData: { mimeType, data: base64Image } },
+          ...partesImagen(imagenes),
         ],
       },
     ],
@@ -199,7 +209,7 @@ function buildDiagnosisPrompt(
   basePrompt: string,
   fewShots: string,
   observacion: Observacion | undefined,
-  nombrePlanta: string | undefined,
+  contexto: ContextoUsuario | undefined,
   retroalimentacion: string | undefined
 ): string {
   let prompt = basePrompt;
@@ -209,30 +219,29 @@ function buildDiagnosisPrompt(
   }
 
   if (observacion) {
-    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA IMAGEN (hechos verificados, úsala como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
+    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA(S) IMAGEN(ES) (hechos verificados, úsalos como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
   }
 
   if (retroalimentacion) {
     prompt += `\n\nRETROALIMENTACIÓN DEL REVISOR (corrige tu diagnóstico anterior):\n${retroalimentacion}`;
   }
 
-  return conContextoPlanta(prompt, nombrePlanta);
+  return conContextoUsuario(prompt, contexto);
 }
 
 export async function analizarImagen(
-  base64Image: string,
-  mimeType: string,
+  imagenes: ImagenAnalisis[],
   isRetry = false,
-  nombrePlanta?: string,
+  contexto?: ContextoUsuario,
   observacion?: Observacion,
   retroalimentacion?: string
 ): Promise<DiagnosticoResponse> {
-  const fewShots = selectFewShots(nombrePlanta, observacion?.organo_detectado);
+  const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
   const prompt = buildDiagnosisPrompt(
     isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
     fewShots,
     observacion,
-    nombrePlanta,
+    contexto,
     retroalimentacion
   );
 
@@ -243,7 +252,7 @@ export async function analizarImagen(
         role: "user",
         parts: [
           { text: prompt },
-          { inlineData: { mimeType, data: base64Image } },
+          ...partesImagen(imagenes),
         ],
       },
     ],
@@ -270,8 +279,7 @@ export async function analizarImagen(
 // ---------------------------------------------------------------------------
 
 async function verificarDiagnostico(
-  base64Image: string,
-  mimeType: string,
+  imagenes: ImagenAnalisis[],
   diagnostico: DiagnosticoResponse,
   observacion: Observacion
 ): Promise<Verificacion> {
@@ -280,7 +288,7 @@ async function verificarDiagnostico(
 HECHOS OBSERVADOS:
 ${JSON.stringify(observacion, null, 2)}
 
-DIAGNÓSTICO PROPUESTO:
+HIPÓTESIS PROPUESTA:
 ${JSON.stringify(diagnostico, null, 2)}`;
 
   const response = await ai.models.generateContent({
@@ -290,7 +298,7 @@ ${JSON.stringify(diagnostico, null, 2)}`;
         role: "user",
         parts: [
           { text: prompt },
-          { inlineData: { mimeType, data: base64Image } },
+          ...partesImagen(imagenes),
         ],
       },
     ],
@@ -317,22 +325,19 @@ ${JSON.stringify(diagnostico, null, 2)}`;
 // ---------------------------------------------------------------------------
 
 async function analizarConVerificacion(
-  base64Image: string,
-  mimeType: string,
-  nombrePlanta: string | undefined,
+  imagenes: ImagenAnalisis[],
+  contexto: ContextoUsuario | undefined,
   observacion: Observacion,
   isRetry: boolean
 ): Promise<DiagnosticoResponse> {
   const diag = await analizarImagen(
-    base64Image,
-    mimeType,
+    imagenes,
     isRetry,
-    nombrePlanta,
+    contexto,
     observacion
   );
   const verificacion = await verificarDiagnostico(
-    base64Image,
-    mimeType,
+    imagenes,
     diag,
     observacion
   );
@@ -340,16 +345,14 @@ async function analizarConVerificacion(
   if (!verificacion.diagnostico_validado && !isRetry) {
     try {
       const diag2 = await analizarImagen(
-        base64Image,
-        mimeType,
+        imagenes,
         true,
-        nombrePlanta,
+        contexto,
         observacion,
         verificacion.inconsistencias.join("; ")
       );
       const ver2 = await verificarDiagnostico(
-        base64Image,
-        mimeType,
+        imagenes,
         diag2,
         observacion
       );
@@ -376,27 +379,14 @@ async function analizarConVerificacion(
 }
 
 export async function analizarConReintento(
-  base64Image: string,
-  mimeType: string,
-  nombrePlanta?: string
+  imagenes: ImagenAnalisis[],
+  contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
-  const observacion = await observarImagen(base64Image, mimeType);
+  const observacion = await observarImagen(imagenes);
   try {
-    return await analizarConVerificacion(
-      base64Image,
-      mimeType,
-      nombrePlanta,
-      observacion,
-      false
-    );
+    return await analizarConVerificacion(imagenes, contexto, observacion, false);
   } catch (error) {
     console.warn("Primer intento fallido, reintentando...", error);
-    return await analizarConVerificacion(
-      base64Image,
-      mimeType,
-      nombrePlanta,
-      observacion,
-      true
-    );
+    return await analizarConVerificacion(imagenes, contexto, observacion, true);
   }
 }

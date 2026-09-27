@@ -1,33 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analizarConReintento } from "@/lib/gemini";
+import { analizarConReintento, type ImagenAnalisis } from "@/lib/gemini";
 import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
 import { initDatabase, guardarDiagnostico } from "@/lib/database";
-import type { DiagnosticoResponse } from "@/types/diagnostico";
+import { validarImagenServidor } from "@/lib/imagen";
+import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+// El proveedor se elige automáticamente (recomendado: Gemini) y se registra
+// internamente en la respuesta y la BD para comparar coste y calidad.
 type Proveedor = "gemini" | "deepseek";
-type Angulo = "haz" | "enves" | "planta_completa";
 
 async function analizarConProveedor(
-  base64: string,
-  mimeType: string,
+  imagenes: ImagenAnalisis[],
   proveedor: Proveedor,
-  nombrePlanta?: string
+  contexto?: ContextoUsuario
 ) {
   if (proveedor === "gemini") {
-    return await analizarConReintento(base64, mimeType, nombrePlanta);
+    return await analizarConReintento(imagenes, contexto);
   }
-  return await analizarConReintentoDeepSeek(base64, mimeType, nombrePlanta);
-}
-
-function isMissingApiKeyError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("DEEPSEEK_API_KEY no configurada") || 
-         message.includes("GEMINI_API_KEY") ||
-         message.includes("apiKey") ||
-         message.includes("Missing credentials");
+  return await analizarConReintentoDeepSeek(imagenes, contexto);
 }
 
 function sanitizarSintomas(sintomas: string[]): string[] {
@@ -36,7 +29,7 @@ function sanitizarSintomas(sintomas: string[]): string[] {
     "amarillo", "marron", "negro", "blanco", "verde", "seco", "marchito",
     "mancha", "punto", "rayas", "lineas", "zonas", "areas",
   ]);
-  
+
   return sintomas
     .map((s) => s.trim())
     .filter((s) => s.length > 5)
@@ -47,31 +40,31 @@ function sanitizarSintomas(sintomas: string[]): string[] {
 
 function validarCoherencia(diagnostico: DiagnosticoResponse): { valido: boolean; errores: string[] } {
   const errores: string[] = [];
-  
+
   if (diagnostico.diagnostico.tipo === "sano" && diagnostico.diagnostico.confianza > 0.8) {
     errores.push("Diagnóstico 'sano' con confianza muy alta (>0.8) sin síntomas observados");
   }
-  
+
   if (diagnostico.diagnostico.tipo !== "sano" && diagnostico.diagnostico.sintomas_observados.length === 0) {
     errores.push("Diagnóstico de problema sin síntomas observados");
   }
-  
+
   if (["fruto", "flor"].includes(diagnostico.organo_detectado) && !diagnostico.estado_madurez.aplica) {
     errores.push(`Órgano ${diagnostico.organo_detectado} pero estado_madurez.aplica = false`);
   }
-  
+
   if (!["fruto", "flor"].includes(diagnostico.organo_detectado) && diagnostico.estado_madurez.aplica) {
     errores.push(`Órgano ${diagnostico.organo_detectado} no es fruto/flor pero estado_madurez.aplica = true`);
   }
-  
+
   if (diagnostico.diagnostico.confianza < 0.3 && diagnostico.confianza_identificacion < 0.3) {
     errores.push("Confianza muy baja en ambas identificaciones");
   }
-  
+
   if (diagnostico.diagnostico.gravedad === "severa" && diagnostico.diagnostico.confianza < 0.6) {
     errores.push("Gravedad 'severa' con confianza baja (<0.6)");
   }
-  
+
   return { valido: errores.length === 0, errores };
 }
 
@@ -83,13 +76,11 @@ function requiereExpertoPorValidacion(diagnostico: DiagnosticoResponse): boolean
   if (diagnostico.diagnostico.confianza < 0.4) return true;
   if (diagnostico.diagnostico.tipo !== "sano" && diagnostico.diagnostico.sintomas_observados.length < 2) return true;
 
-  // Calidad de imagen insuficiente → requiere experto
   const calidad = diagnostico.calidad_imagen;
   if (calidad) {
     if (calidad.nitidez === "baja" || calidad.encuadre === "insuficiente") return true;
   }
 
-  // Sin diagnósticos diferenciales → requiere experto
   if (!diagnostico.diagnosticos_diferenciales || diagnostico.diagnosticos_diferenciales.length === 0) return true;
 
   return false;
@@ -107,55 +98,73 @@ function notaCalidadImagen(diagnostico: DiagnosticoResponse): string {
   if (calidad.encuadre === "insuficiente") problemas.push("encuadre insuficiente");
 
   if (problemas.length === 0) return "";
-  return ` ⚠ Calidad de imagen: ${problemas.join(", ")}. Se recomienda tomar otra foto en mejores condiciones.`;
+  return ` ⚠ Calidad de imagen: ${problemas.join(", ")}. Una foto más clara permitiría afinar mejor la orientación.`;
+}
+
+interface ImagenValidada extends ImagenAnalisis {
+  tipoReal: string;
+}
+
+async function leerImagenValidada(
+  file: File | null,
+  etiqueta: string,
+  obligatoria: boolean
+): Promise<ImagenValidada | null> {
+  if (!file || file.size === 0) {
+    if (obligatoria) throw new Error("Falta la foto principal. Sube una foto del síntoma para continuar.");
+    return null;
+  }
+
+  const buffer = await file.arrayBuffer();
+  const validacion = validarImagenServidor(buffer, file.type || "");
+  if (!validacion.ok) {
+    throw new Error(`${etiqueta}: ${validacion.error}`);
+  }
+
+  return {
+    base64: Buffer.from(buffer).toString("base64"),
+    mimeType: validacion.tipo === "png" ? "image/png" : validacion.tipo === "webp" ? "image/webp" : "image/jpeg",
+    tipoReal: validacion.tipo!,
+  };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get("imagen") as File | null;
-    const usuarioId = formData.get("usuario_id") as string || "anonimo";
-    const proveedor = (formData.get("proveedor") as Proveedor) || "gemini";
+    const usuarioId = (formData.get("usuario_id") as string) || "anonimo";
     const nombrePlanta = ((formData.get("nombre_planta") as string) || "").trim() || undefined;
-    const angulo = (formData.get("angulo") as Angulo) || undefined;
 
-    if (!file) {
-      return NextResponse.json(
-        { error: "No se recibió ninguna imagen" },
-        { status: 400 }
-      );
-    }
+    // Contexto declarado por el agricultor (mejora la orientación, opcional)
+    const contexto: ContextoUsuario = {
+      cultivo: ((formData.get("cultivo") as string) || "").trim() || undefined,
+      municipio: ((formData.get("municipio") as string) || "").trim() || undefined,
+      sintoma: ((formData.get("sintoma") as string) || "").trim() || undefined,
+      duracion: ((formData.get("duracion") as string) || "").trim() || undefined,
+      variedad: nombrePlanta,
+    };
 
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "El archivo debe ser una imagen" },
-        { status: 400 }
-      );
-    }
+    // Foto principal obligatoria + opcionales (envés, planta completa)
+    const principal = await leerImagenValidada(formData.get("imagen") as File | null, "La foto principal", true);
+    const enves = await leerImagenValidada(formData.get("imagen_enves") as File | null, "La foto del envés", false);
+    const planta = await leerImagenValidada(formData.get("imagen_planta") as File | null, "La foto de la planta completa", false);
 
-    const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString("base64");
+    const imagenes: ImagenAnalisis[] = [principal!];
+    if (enves) imagenes.push(enves);
+    if (planta) imagenes.push(planta);
 
+    // Proveedor automático (recomendado) con fallback interno al alternativo
     let diagnostico: DiagnosticoResponse;
-    let proveedorUsado = proveedor;
+    let proveedorUsado: Proveedor = "gemini";
 
     try {
-      diagnostico = await analizarConProveedor(base64, file.type, proveedor, nombrePlanta);
+      diagnostico = await analizarConProveedor(imagenes, "gemini", contexto);
     } catch (error) {
-      console.warn(`Fallo ${proveedor}, intentando fallback...`, error);
-      
-      const fallback: Proveedor = proveedor === "gemini" ? "deepseek" : "gemini";
-      
-      if (isMissingApiKeyError(error)) {
-        console.warn(`Error de API key en ${proveedor}, fallback no disponible`);
-        throw error;
-      }
-      
+      console.warn("Fallo gemini, intentando fallback a deepseek...", error);
       try {
-        diagnostico = await analizarConProveedor(base64, file.type, fallback, nombrePlanta);
-        proveedorUsado = fallback;
+        diagnostico = await analizarConProveedor(imagenes, "deepseek", contexto);
+        proveedorUsado = "deepseek";
       } catch (fallbackError) {
-        console.error(`Fallo también ${fallback}:`, fallbackError);
+        console.error("Fallo también deepseek:", fallbackError);
         throw fallbackError;
       }
     }
@@ -171,25 +180,40 @@ export async function POST(request: NextRequest) {
     if (!validacion.valido) {
       console.warn("Validación de coherencia fallida:", validacion.errores);
       diagnostico.requiere_experto = true;
-      diagnostico.recomendacion = `${diagnostico.recomendacion} ⚠ Validación automática detectó inconsistencias: ${validacion.errores.join("; ")}. Consulte a técnico para confirmar.`;
+      diagnostico.recomendacion = `${diagnostico.recomendacion} ⚠ La revisión automática detectó inconsistencias (${validacion.errores.join("; ")}). Conviene que un técnico confirme esta orientación.`;
     }
 
     if (requiereExpertoPorValidacion(diagnostico)) {
       diagnostico.requiere_experto = true;
     }
 
-    await initDatabase();
-
-    const imagenUrl = `data:${file.type};base64,${base64}`;
-    const saved = await guardarDiagnostico(usuarioId, imagenUrl, diagnostico, nombrePlanta);
+    // Guardado best-effort SIN la foto: la imagen no se almacena de forma
+    // permanente. Solo se guardarán las fotos si el usuario solicita una
+    // revisión (se adjuntan al lead, informándole antes de enviar).
+    let id: string | undefined;
+    try {
+      await initDatabase();
+      const saved = await guardarDiagnostico(
+        usuarioId,
+        "", // imagen no almacenada permanentemente
+        diagnostico,
+        nombrePlanta,
+        undefined,
+        contexto,
+        proveedorUsado
+      );
+      id = saved.id;
+    } catch (dbError) {
+      console.warn("BD no disponible; se devuelve el análisis sin persistir:", dbError);
+    }
 
     return NextResponse.json({
       ...diagnostico,
-      id: saved.id,
-      nombre_planta: saved.nombre_planta,
-      created_at: saved.created_at,
+      id,
+      nombre_planta: nombrePlanta ?? null,
+      contexto_usuario: contexto,
+      created_at: new Date().toISOString(),
       proveedor_usado: proveedorUsado,
-      angulo_usado: angulo,
       validacion: {
         coherente: validacion.valido,
         errores: validacion.errores,
@@ -197,25 +221,28 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error en diagnóstico:", error);
-    
+
     const message = error instanceof Error ? error.message : "Error interno del servidor";
-    
+
+    if (message.includes("Falta la foto principal") || message.startsWith("La foto")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
     if (message.includes("JSON inválido") || message.includes("Respuesta vacía")) {
       return NextResponse.json(
-        { error: "Error procesando la respuesta de IA, intente de nuevo", retry: true },
+        { error: "No hemos podido interpretar bien esta foto. Prueba a repetirla con más luz y el síntoma bien enfocado.", retry: true },
         { status: 502 }
       );
     }
-    
+
     if (message.includes("API_KEY no configurada") || message.includes("Missing credentials")) {
       return NextResponse.json(
-        { error: "Proveedor de IA no configurado. Contacte al administrador." },
+        { error: "El servicio de análisis no está disponible ahora mismo. Inténtalo de nuevo en unos minutos." },
         { status: 503 }
       );
     }
-    
+
     return NextResponse.json(
-      { error: message },
+      { error: "No hemos podido completar el análisis. Comprueba tu conexión e inténtalo de nuevo." },
       { status: 500 }
     );
   }

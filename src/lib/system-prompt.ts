@@ -2,6 +2,8 @@
 // TIPOS DE SOPORTE
 // ============================================================================
 
+import type { ContextoUsuario } from "@/types/diagnostico";
+
 export interface CalidadImagen {
   nitidez: "alta" | "media" | "baja";
   iluminacion: "adecuada" | "deficiente" | "excesiva";
@@ -25,6 +27,16 @@ export interface Verificacion {
   confianza_ajustada: number;
   diagnostico_validado: boolean;
 }
+
+// ============================================================================
+// CONVENCIÓN MULTIFOTO
+// ============================================================================
+
+export const CONVENCION_FOTOS = `PUEDES RECIBIR UNA O VARIAS FOTOS, SIEMPRE EN ESTE ORDEN:
+Foto 1 (principal): primer plano del síntoma. Siempre presente.
+Foto 2 (opcional): envés de la hoja.
+Foto 3 (opcional): planta completa en su contexto.
+Analiza las fotos disponibles en conjunto. Si una foto relevante no está disponible y su ausencia limita la orientación, refléjalo en "datos_faltantes".`;
 
 // ============================================================================
 // CAPA 2 — FEW-SHOT DINÁMICO
@@ -78,9 +90,14 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
           por_que_descartado: "no hay clorosis internerval; las manchas son localizadas con fructificaciones fúngicas",
         },
       ],
-      recomendacion: "Aplicar tratamiento cúprico preventivo (oxicloruro de cobre) tras poda y antes de lluvias de otoño. Repetir a los 21 días si persiste humedad. Eliminar hojas caídas del suelo.",
+      datos_faltantes: [
+        "porcentaje aproximado de hojas afectadas en el árbol",
+        "fotos de ramas bajas y de hojas caídas en el suelo",
+        "historial de tratamientos de la campaña anterior",
+      ],
+      recomendacion: "Hipótesis compatible con repilo, un hongo frecuente en otoños húmedos. Vigila si las manchas se extienden y anota cuántas hojas caen. Evita mojar el follaje en riegos. Antes de los periodos de lluvia, valora con un técnico agronómico si procede un tratamiento preventivo autorizado para tu zona y variedad.",
       requiere_experto: false,
-      razonamiento: "Las manchas circulares con halo amarillo y fructificaciones en envés son patognomónicas de repilo. La distribución en hojas de distinta edad confirma infección activa. No es antracnosis (manchas irregulares, bordes definidos) ni clorosis férrica (clorosis internerval simétrica sin manchas).",
+      razonamiento: "Las manchas circulares con halo amarillo y fructificaciones en envés son compatibles con repilo. La distribución en hojas de distinta edad sugiere infección activa. No parece antracnosis (manchas irregulares, bordes definidos) ni clorosis férrica (clorosis internerval simétrica sin manchas), pero solo la confirmación en campo o laboratorio lo valida.",
     },
   },
   {
@@ -94,11 +111,11 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
       confianza_identificacion: 0.85,
       diagnostico: {
         tipo: "deficiencia_nutricional",
-        nombre: "clorosis férrica (deficiencia de hierro)",
+        nombre: "clorosis compatible con falta de hierro",
         sintomas_observados: [
           "clorosis internerval amarilla intensa en brotes nuevos",
           "nervios principales y secundarios mantienen color verde",
-          "hojas viejas sin síntomas (inmovilidad del Fe en planta)",
+          "hojas viejas sin síntomas (patrón típico de nutrientes inmóviles)",
           "crecimiento reducido de brotes afectados",
         ],
         confianza: 0.82,
@@ -114,17 +131,22 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         {
           nombre: "deficiencia de manganeso",
           confianza: 0.2,
-          por_que_descartado: "la clorosis por Mn es más difusa con manchas necróticas pequeñas, no internerval intensa con nervios verdes",
+          por_que_descartado: "la clorosis por Mn suele ser más difusa con manchas necróticas pequeñas, no internerval intensa con nervios verdes",
         },
         {
           nombre: "deficiencia de zinc",
           confianza: 0.12,
-          por_que_descartado: "Zn causa hojas pequeñas con entrenudos cortos ('roseta'), no clorosis internerval",
+          por_que_descartado: "Zn suele causar hojas pequeñas con entrenudos cortos ('roseta'), no clorosis internerval",
         },
       ],
-      recomendacion: "Aplicar quelato de hierro EDDHA (6% Fe) al suelo: 30-50g/árbol adulto disuelto en agua. Complementar con aplicación foliar de Fe-EDTA (1-2g/L) cada 15 días. Verificar pH suelo >7.5 y corregir con azufre elemental si procede.",
+      datos_faltantes: [
+        "pH y características del suelo o análisis de suelo reciente",
+        "calidad del agua de riego (exceso de cal)",
+        "foto del árbol completo para valorar extensión",
+      ],
+      recomendacion: "Patrón compatible con una carencia de hierro, frecuente en suelos calizos de la zona. Es una hipótesis: conviene confirmarla con análisis de suelo u hoja. Revisa que el riego no encharque y consulta con un técnico la corrección más adecuada (quelatos o enmiendas) según tu suelo.",
       requiere_experto: false,
-      razonamiento: "Clorosis internerval en hojas jóvenes con nervios verdes es clásico de deficiencia de Fe (inmóvil). No es Mn (clorosis más difusa, manchas necróticas) ni Zn (hojas pequeñas, entrenudos cortos, 'roseta'). El pH alcalino típico de la zona limita disponibilidad de Fe.",
+      razonamiento: "Clorosis internerval en hojas jóvenes con nervios verdes es un patrón clásico de deficiencia de Fe (nutriente inmóvil). No parece Mn (clorosis más difusa, manchas necróticas) ni Zn (hojas pequeñas, entrenudos cortos). El pH alcalino típico de la zona puede limitar la disponibilidad de Fe, pero requiere confirmación analítica.",
     },
   },
   {
@@ -138,11 +160,11 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
       confianza_identificacion: 0.9,
       diagnostico: {
         tipo: "plaga",
-        nombre: "araña roja (Tetranychus urticae)",
+        nombre: "daño compatible con araña roja (Tetranychus urticae)",
         sintomas_observados: [
           "punteado clorótico fino (alimentación celular) en haz",
           "telarañas sedosas finas en envés y ápice de brotes",
-          "ácaros rojo-verdosos de 0.5mm visibles en envés con lupa",
+          "puntos móviles diminutos compatibles con ácaros en envés",
           "hojas basales más afectadas, progresión apical",
         ],
         confianza: 0.9,
@@ -166,9 +188,14 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
           por_que_descartado: "mosca blanca deja ninfas en envés y melaza, no telarañas ni punteado clorótico",
         },
       ],
-      recomendacion: "Soltar depredadores: Phytoseiulus persimilis (5-10 ind/m²) o Amblyseius californicus. Si población alta: abamectina 1.8% EC (0.5ml/L) + aceite vegetal 1%, respetar plazo seguridad. Mantener humedad relativa >60% para favorecer depredadores.",
+      datos_faltantes: [
+        "foto con lupa o lente macro del envés para confirmar el ácaro",
+        "estado de la plaga en plantas vecinas",
+        "condiciones de humedad y temperatura del invernadero/cultivo",
+      ],
+      recomendacion: "Señales compatibles con araña roja, que prospera con calor y ambiente seco. Vigila las hojas basales y marca 2-3 plantas para seguir la evolución. Consulta con un técnico el manejo más adecuado (control biológico o tratamientos autorizados respetando plazos de seguridad) antes de actuar.",
       requiere_experto: false,
-      razonamiento: "Punteado fino + telarañas + ácaros visibles en envés = araña roja. No es trips (rayas plateadas, excrementos negros) ni mosca blanca (ninfas en envés, melaza). La progresión basal-apical y condiciones secas/calurosas favorecen Tetranychus.",
+      razonamiento: "Punteado fino + telarañas + puntos móviles en envés son compatibles con araña roja. No parece trips (rayas plateadas, excrementos negros) ni mosca blanca (ninfas en envés, melaza). La progresión basal-apical y condiciones secas/calurosas favorecen a Tetranychus.",
     },
   },
   {
@@ -182,11 +209,11 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
       confianza_identificacion: 0.95,
       diagnostico: {
         tipo: "sano",
-        nombre: "sano",
+        nombre: "sin síntomas claros de problema en la foto",
         sintomas_observados: [
           "color verde oscuro uniforme en haz",
           "envés plateado característico (tricomas), sin alteraciones",
-          "bordes enteros, sin necróficación marginal",
+          "bordes enteros, sin necrosis marginal",
           "textura cuerosa, turgencia normal",
         ],
         confianza: 0.75,
@@ -205,9 +232,14 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
           por_que_descartado: "no se observan manchas ni fructificaciones; síntomas tempranos pueden ser sutiles, se recomienda vigilancia",
         },
       ],
-      recomendacion: "Mantener manejo actual. Vigilar en primavera-otoño (períodos de riesgo repilo) y verano (araña roja). Programa de fertirrigación equilibrado según análisis de suelo/hoja.",
+      datos_faltantes: [
+        "estado general del árbol y de las hojas más viejas",
+        "foto de otras zonas del árbol",
+        "presencia de hojas caídas recientes en el suelo",
+      ],
+      recomendacion: "En esta foto no se aprecian síntomas de problema. Mantén el manejo habitual y vigila en las épocas de riesgo (primavera-otoño por hongos, verano por araña). Repite una foto si notas cambios.",
       requiere_experto: false,
-      razonamiento: "Hoja presenta fenotipo típico de olivo sano: color, textura, tricomas en envés, ausencia de lesiones. Confianza de diagnóstico no 1.0 porque síntomas tempranos de repilo o deficiencias pueden ser sutiles; recomendar vigilancia rutinaria.",
+      razonamiento: "La hoja presenta un fenotipo típico de olivo sano: color, textura, tricomas en envés, ausencia de lesiones. No se descarta un problema en otras partes del árbol que no aparecen en la foto.",
     },
   },
   {
@@ -221,9 +253,9 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
       confianza_identificacion: 0.9,
       diagnostico: {
         tipo: "enfermedad",
-        nombre: "mildiu (Plasmopara viticola)",
+        nombre: "síntomas compatibles con mildiu (Plasmopara viticola)",
         sintomas_observados: [
-          "manchas aceitosas amarillo-verdosas irregulares en haz (manchas de aceite)",
+          "manchas aceitosas amarillo-verdosas irregulares en haz",
           "moho blanco algodonoso (esporulación) en envés bajo manchas",
           "necrosis parda en centro de manchas antiguas",
           "brotes jóvenes con curvatura 'gancho' y moho",
@@ -249,9 +281,14 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
           por_que_descartado: "antracnosis causa lesiones angulares con bordes rojizos, no manchas aceitosas con esporulación en envés",
         },
       ],
-      recomendacion: "Tratamiento sistémico inmediato: mandipropamida (25g/L) + folpet (200g/L) o cimoxanilo + mancozeb. Repetir a 7-10 días si humedad >90% y T 12-25°C. Eliminar sarmientos afectados en poda. Predecir riesgo con modelo epidemiológico (regla 10-10-24).",
+      datos_faltantes: [
+        "extensión del daño en el conjunto de la parcela",
+        "lluvias y humedad de las últimas 2 semanas",
+        "fase fenológica del viñedo",
+      ],
+      recomendacion: "Señales muy compatibles con mildiu, que puede avanzar rápido con humedad. Revisa toda la parcela y marca las cepas afectadas para seguir su evolución. Dada la gravedad potencial, contacta cuanto antes con un técnico para valorar un tratamiento autorizado: actuar a tiempo importa más que el producto concreto.",
       requiere_experto: false,
-      razonamiento: "Manchas de aceite en haz + esporulación blanca en envés = mildiu patognomónico. No es oídio (polvo blanco en ambas caras, sin manchas aceitosas) ni antracnosis (lesiones angulares, bordes rojizos). Condiciones de humedad/calor reciente confirman epidemia activa.",
+      razonamiento: "Manchas de aceite en haz + esporulación blanca en envés son patognomónicas de mildiu. No parece oídio (polvo blanco en ambas caras, sin manchas aceitosas) ni antracnosis (lesiones angulares, bordes rojizos). Humedad y temperatura recientes habrían favorecido la epidemia.",
     },
   },
 ];
@@ -293,15 +330,18 @@ export function selectFewShots(nombrePlanta?: string, organo?: string, max = 3):
 // CAPA 1 — PROMPT DE OBSERVACIÓN (fase 1: hechos sin diagnóstico)
 // ============================================================================
 
-export const OBSERVATION_PROMPT = `Eres un observador botánico entrenado. Describe ÚNICAMENTE hechos visuales verificables en la foto. NO diagnostiques, NO nombres enfermedades, NO especules sobre causas.
+export const OBSERVATION_PROMPT = `Eres un observador botánico entrenado. Describe ÚNICAMENTE hechos visuales verificables en la(s) foto(s). NO diagnostiques, NO nombres enfermedades, NO especules sobre causas.
+
+${CONVENCION_FOTOS}
 
 Describe con precisión:
-1. Órgano fotografiado (hoja, flor, fruto, tallo, planta completa) y parte visible (haz, envés, ambos)
+1. Órgano fotografiado (hoja, flor, fruto, tallo, planta completa) y parte visible (haz, envés, ambas)
 2. Color y textura del tejido sano y del tejido afectado
 3. Lesiones: forma, tamaño aproximado, color, bordes, distribución (aisladas, agrupadas, dispersas)
 4. Signos visibles: moho, telarañas, insectos, huevos, melaza, excrementos, fructificaciones
 5. Patrón de distribución en la hoja/planta (nervios, márgenes, ápice, base)
 6. Calidad de la imagen: nitidez, iluminación, encuadre
+7. Si hay varias fotos, integra la información de todas en una sola descripción
 
 ESQUEMA JSON:
 {
@@ -321,73 +361,78 @@ ESQUEMA JSON:
 Responde SOLO con el JSON.`;
 
 // ============================================================================
-// PROMPT DE DIAGNÓSTICO (fase 2: diagnóstico basado en observación + imagen)
+// PROMPT DE DIAGNÓSTICO (fase 2: hipótesis basada en observación + imagen)
 // ============================================================================
 
-export const SYSTEM_PROMPT = `Eres un agrónomo experto analizando fotos de campo de cultivos de Andalucía oriental.
+export const SYSTEM_PROMPT = `Eres un agrónomo experto analizando fotos de campo de cultivos del Altiplano de Granada y la Costa Tropical.
 
-Tu tarea es identificar el órgano vegetal fotografiado, la especie si es posible, y realizar un diagnóstico fitosanitario basado en síntomas visuales (color, manchas, deformaciones, necrosis, clorosis, patrones de daño). Si es fruto o flor, estima el estado de madurez.
+Tu tarea es formular una HIPÓTESIS de orientación inicial: identificar el órgano y la especie si es posible, y proponer las causas más probables de los síntomas visuales (color, manchas, deformaciones, necrosis, clorosis, patrones de daño). Si es fruto o flor, estima el estado de madurez.
 
 PIENSA PASO A PASO antes de responder. Incluye tu razonamiento en el campo "razonamiento" del JSON.
+
+${CONVENCION_FOTOS}
 
 ESQUEMA JSON REQUERIDO:
 {
   "organo_detectado": "hoja | flor | fruto | tallo | planta_completa",
   "especie_identificada": "string (nombre común o científico, 'desconocida' si no se puede determinar)",
-  "confianza_identificacion": "number (0-1, confianza en la identificación de especie/órgano)",
+  "confianza_identificacion": "number (0-1, indicador interno de fiabilidad de la identificación)",
   "diagnostico": {
     "tipo": "enfermedad | deficiencia_nutricional | plaga | sano",
-    "nombre": "string (nombre de la enfermedad/plaga/deficiencia, 'sano' si no hay problema)",
-    "sintomas_observados": ["string array con síntomas visuales específicos observados"],
-    "confianza": "number (0-1, confianza en el diagnóstico)",
-    "gravedad": "leve | moderada | severa"
+    "nombre": "string (hipótesis principal, redactada como 'compatible con...' o 'síntomas compatibles con...')",
+    "sintomas_observados": ["string array con lo que se VE específicamente en la foto"],
+    "confianza": "number (0-1, indicador interno de fiabilidad de la hipótesis)",
+    "gravedad": "leve | moderada | severa (impacto potencial SI la hipótesis se confirmara)"
   },
   "estado_madurez": {
     "aplica": "boolean (true solo si el órgano es fruto o flor)",
     "estado": "string (ej: 'floración', 'cuajado', 'envero', 'maduro', 'sobremaduro', 'no aplica')",
-    "dias_estimados_cosecha": "number (estimación en días, 0 si no aplica o no se puede estimar)"
+    "dias_estimados_cosecha": "number (estimación orientativa en días, 0 si no aplica)"
   },
-  "hallazgos_negativos": ["string: qué NO se observa y es relevante descartar (ej: 'sin telarañas en envés', 'sin fructificaciones fúngicas', 'nervios verdes')"],
+  "hallazgos_negativos": ["string: qué NO se observa y es relevante descartar (ej: 'sin telarañas en envés')"],
   "diagnosticos_diferenciales": [
     {
-      "nombre": "string (diagnóstico alternativo considerado)",
-      "confianza": "number (0-1)",
-      "por_que_descartado": "string (evidencia que lo descarta o lo mantiene como posibilidad)"
+      "nombre": "string (otra causa posible que un técnico valoraría)",
+      "confianza": "number (0-1, indicador interno)",
+      "por_que_descartado": "string (evidencia que la hace menos probable, o por qué se mantiene como posibilidad)"
     }
   ],
-  "recomendacion": "string (acción concreta y práctica para el agricultor, en español claro)",
-  "requiere_experto": "boolean (true si la confianza es baja <0.5 o el caso es complejo/ambiguo)",
-  "razonamiento": "string (tu análisis paso a paso: qué ves, cómo lo interpretas, por qué descartas otras opciones)"
+  "datos_faltantes": ["string: 2-4 datos o fotos concretas que permitirían afinar la orientación (ej: foto del envés, análisis de suelo, régimen de riego)"],
+  "recomendacion": "string (próximos pasos PRUDENTES y generales para el agricultor: vigilancia, manejo cultural, qué observar, cuándo preocuparse. SIN productos, SIN dosis, SIN tratamientos químicos concretos: para eso se remite al técnico)",
+  "requiere_experto": "boolean (true si la confianza es baja <0.5, la imagen es deficiente o el caso es ambiguo)",
+  "razonamiento": "string (tu análisis paso a paso: qué ves, cómo lo interpretas, por qué unas hipótesis son más probables que otras)"
 }
 
 REGLAS CRÍTICAS:
-1. Analiza color, textura, patrón de manchas, forma de hoja/fruto, distribución de síntomas, necrosis, clorosis, deformaciones.
-2. Si la confianza de identificación < 0.5 O la confianza de diagnóstico < 0.5, pon "requiere_experto": true y en "recomendacion" indica que se tome una segunda foto (ej: envés de hoja, detalle de mancha, planta completa) o consulte a técnico.
-3. NO inventes diagnósticos. Si no ves síntomas claros, diagnostica "sano" con confianza baja y requiere_experto: true.
-4. Para "sintomas_observados", describe lo que VES específicamente (ej: "manchas circulares marrón oscuro con halo amarillo", "clorosis internerval en hojas nuevas", "pulgones en envés de hojas tiernas").
-5. "gravedad": leve = daño estético/sin impacto productivo; moderada = reducción de calidad/rendimiento; severa = riesgo de pérdida de cosecha o muerte de planta.
-6. Cultivos típicos zona: olivo, almendro, cítricos, hortícolas (tomate, pimiento, berenjena), vid, cereales.
-7. "hallazgos_negativos" debe incluir al menos 2-3 ausencias relevantes que apoyen tu diagnóstico.
-8. "diagnosticos_diferenciales" debe incluir al menos 1-2 alternativas con su evidencia de descarte.
-9. USA los ejemplos como guía de formato y nivel de detalle. Tu "razonamiento" debe mostrar tu proceso diagnóstico.`;
+1. Formula SIEMPRE hipótesis, nunca certezas. Una foto no confirma una enfermedad, plaga o carencia. Usa expresiones como "compatible con", "sugiere", "patrón típico de".
+2. NO recomiendes productos fitosanitarios concretos, marcas, dosis ni calendarios de tratamiento químico. Si el caso parece requerir tratamiento, indica que lo valore un técnico agronómico. Las acciones generales de vigilancia y manejo cultural sí son adecuadas.
+3. Si la confianza de identificación < 0.5 O la confianza de diagnóstico < 0.5, pon "requiere_experto": true y en "recomendacion" indica qué otra foto ayudaría (ej: envés de hoja, detalle de mancha, planta completa).
+4. NO inventes diagnósticos. Si no ves síntomas claros, usa tipo "sano" con confianza baja y requiere_experto: true, indicando que la foto podría no capturar el problema.
+5. Para "sintomas_observados", describe lo que VES específicamente (ej: "manchas circulares marrón oscuro con halo amarillo"), no interpretaciones.
+6. "gravedad" expresa el impacto potencial si la hipótesis se confirmara: leve = estético/sin impacto productivo; moderada = posible reducción de calidad/rendimiento; severa = posible riesgo de pérdida de cosecha o daño importante.
+7. Cultivos típicos de la zona: olivo, almendro, cítricos, vid, hortícolas (tomate, pimiento, berenjena), aguacate y otros subtropicales en la Costa, cereales.
+8. "hallazgos_negativos" debe incluir al menos 2-3 ausencias relevantes que apoyen tu hipótesis.
+9. "diagnosticos_diferenciales" debe incluir al menos 1-2 alternativas con su evidencia.
+10. "datos_faltantes" debe listar 2-4 elementos concretos y accionables para el agricultor.
+11. USA los ejemplos como guía de formato y nivel de detalle. Tu "razonamiento" debe mostrar tu proceso como hipótesis contrastada.`;
 
 // ============================================================================
 // CAPA 4 — PROMPT DE VERIFICACIÓN ADVERSARIAL
 // ============================================================================
 
-export const VERIFICATION_PROMPT = `Eres un revisor crítico de diagnósticos fitosanitarios. Se te proporcionan:
-1. Los hechos observados en la imagen (extraídos por otro evaluador)
-2. El diagnóstico propuesto
+export const VERIFICATION_PROMPT = `Eres un revisor crítico de orientaciones fitosanitarias. Se te proporcionan:
+1. Los hechos observados en la(s) imagen(es) (extraídos por otro evaluador)
+2. La hipótesis propuesta
 
-Tu trabajo: verificar que el diagnóstico es CONSISTENTE con los hechos observados.
+Tu trabajo: verificar que la hipótesis es CONSISTENTE con los hechos observados y que su redacción es prudente (hipótesis, no certeza; sin prescripciones de productos o dosis).
 
 Comprueba:
 - ¿Los síntomas declarados están realmente en los hechos observados?
-- ¿El diagnóstico propuesto explica TODOS los síntomas relevantes?
-- ¿Hay síntomas observados que el diagnóstico NO explica?
+- ¿La hipótesis explica TODOS los síntomas relevantes?
+- ¿Hay síntomas observados que la hipótesis NO explica?
 - ¿La confianza declarada es apropiada para la evidencia disponible?
-- ¿La recomendación es coherente con el diagnóstico y la gravedad?
-- ¿Los diagnósticos diferenciales descartados lo están con evidencia válida?
+- ¿La recomendación es prudente, general y coherente con la gravedad (sin productos ni dosis)?
+- ¿Las causas alternativas están valoradas con evidencia válida?
 
 ESQUEMA JSON:
 {
@@ -395,7 +440,7 @@ ESQUEMA JSON:
   "inconsistencias": ["string: cada inconsistencia encontrada"],
   "sintomas_no_explicados": ["string"],
   "confianza_ajustada": "number (0-1, tu estimación calibrada)",
-  "diagnostico_validado": "boolean (true solo si consistente y confianza_ajustada >= 0.5)"
+  "diagnostico_validado": "boolean (true solo si consistente, prudente y confianza_ajustada >= 0.5)"
 }
 
 Responde SOLO con el JSON.`;
@@ -405,27 +450,38 @@ Responde SOLO con el JSON.`;
 // ============================================================================
 
 export const RETRY_PROMPT = `La respuesta anterior tuvo baja confianza, inconsistencias o JSON inválido.
-Reanaliza la imagen siendo MÁS ESPECÍFICO en:
+Reanaliza la(s) imagen(es) siendo MÁS ESPECÍFICO en:
 - Descripción detallada de síntomas visuales exactos
 - Distinguir entre síntomas primarios y secundarios
-- Si es hoja: indica si ves envés, haz hincapié en plagas/ácaros
+- Si es hoja: indica si ves envés; si hay fotos del envés, prioriza plagas/ácaros
 - Si hay múltiples síntomas: prioriza el más evidente
 - Si la especie es incierta: indica "desconocida" y enfócate en síntomas
+- Formula la hipótesis principal como "compatible con..." y NO prescribas productos ni dosis
 - INCLUYE "razonamiento" paso a paso obligatorio
 - INCLUYE "hallazgos_negativos" con al menos 2-3 ausencias relevantes
 - INCLUYE "diagnosticos_diferenciales" con al menos 1-2 alternativas
+- INCLUYE "datos_faltantes" con 2-4 elementos accionables
 
 Devuelve SOLO el JSON válido según el esquema.`;
 
 // ============================================================================
-// CONTEXTO DEL USUARIO
+// CONTEXTO APORTADO POR EL USUARIO
 // ============================================================================
 
-export function conContextoPlanta(prompt: string, nombrePlanta?: string): string {
-  const nombre = nombrePlanta?.trim();
-  if (!nombre) return prompt;
+export function conContextoUsuario(prompt: string, contexto?: ContextoUsuario): string {
+  if (!contexto) return prompt;
+
+  const lineas: string[] = [];
+  if (contexto.cultivo) lineas.push(`- Cultivo indicado: ${contexto.cultivo}`);
+  if (contexto.variedad) lineas.push(`- Variedad o nombre de la planta: ${contexto.variedad}`);
+  if (contexto.municipio) lineas.push(`- Municipio o comarca: ${contexto.municipio}`);
+  if (contexto.sintoma) lineas.push(`- Síntoma observado por el agricultor: ${contexto.sintoma}`);
+  if (contexto.duracion) lineas.push(`- Desde cuándo ocurre: ${contexto.duracion}`);
+
+  if (lineas.length === 0) return prompt;
 
   return `${prompt}
 
-CONTEXTO APORTADO POR EL USUARIO: El agricultor indica que la planta fotografiada es "${nombre}". Úsalo como referencia para la identificación de especie y el diagnóstico. Si lo observado contradice claramente ese dato, indícalo en "sintomas_observados" o en la recomendación.`;
+CONTEXTO APORTADO POR EL AGRICULTOR (datos declarados, pueden contener errores; úsalos como orientación y señala en "sintomas_observados" o "razonamiento" si lo observado los contradice):
+${lineas.join("\n")}`;
 }
