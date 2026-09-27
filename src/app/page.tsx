@@ -11,9 +11,9 @@ import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
 
-const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
@@ -201,7 +201,7 @@ function HomeContent() {
           <p>
             <Link href="/historial" className="hover:underline">Historial</Link>
             {" · "}
-            <Link href="/contacto" className="text-tr-brand-green font-semibold hover:underline">Contacta con TecRural</Link>
+            <Link href="/contacto" className="text-tr-green-strong font-semibold hover:underline">Contacta con TecRural</Link>
           </p>
           <p className="mt-1">No sustituye asesoramiento técnico profesional</p>
         </footer>
@@ -224,7 +224,7 @@ function HomeContent() {
         </header>
 
         {error && (
-          <div className={`mb-6 p-4 border-l-4 border-tr-warning bg-tr-warning/5 text-tr-warning text-body ${cardStyles}`} role="alert">
+          <div className={`mb-6 p-4 border-l-4 border-tr-warning bg-tr-warning/5 text-tr-warning-text text-body ${cardStyles}`} role="alert">
             <div className="flex items-start gap-2">
               <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -274,7 +274,7 @@ function HomeContent() {
 
         {isLoading && (
           <div className="mt-6 text-center" role="status" aria-live="polite">
-            <div className="inline-flex items-center gap-2 text-tr-brand-green font-body font-medium">
+            <div className="inline-flex items-center gap-2 text-tr-green-strong font-body font-medium">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-tr-brand-green border-t-transparent" />
               Analizando la foto...
             </div>

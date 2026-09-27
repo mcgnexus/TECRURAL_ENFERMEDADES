@@ -42,13 +42,13 @@ const ORGANO_LABELS: Record<string, string> = {
 };
 
 const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
-const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
+const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
 const badgePurple = `${badgeBase} bg-purple-100 text-purple-800`;
 const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
-const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning`;
+const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning-text`;
 const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
 const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
-const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan`;
+const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
 
 const SEVERITY_CLASSES = {
   leve: badgeGreen,
@@ -56,8 +56,8 @@ const SEVERITY_CLASSES = {
   severa: badgeRed,
 };
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
-const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
@@ -134,7 +134,7 @@ async function HistorialContent() {
                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span className="text-[10px] text-tr-muted mt-1 px-1 text-center leading-tight">Sin foto guardada</span>
+                      <span className="text-caption text-tr-muted mt-1 px-1 text-center leading-tight">Sin foto guardada</span>
                     </div>
                   )}
                 </div>

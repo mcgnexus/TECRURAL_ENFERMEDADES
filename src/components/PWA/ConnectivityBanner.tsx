@@ -11,8 +11,8 @@ export function ConnectivityBanner() {
     <div
       className={`fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-caption font-body transition-all duration-300 ${
         isOnline
-          ? "bg-tr-brand-green text-white animate-slide-down"
-          : "bg-tr-warning text-white animate-slide-down"
+          ? "bg-tr-green-strong text-white animate-slide-down"
+          : "bg-tr-warning-text text-white animate-slide-down"
       }`}
       role="status"
       aria-live="polite"

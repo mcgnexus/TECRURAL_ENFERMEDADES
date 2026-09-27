@@ -5,6 +5,7 @@ formulario de solicitud de revisión. La aplicación no afirma por sí sola el c
 de la normativa de protección de datos: son necesarios estos contenidos y decisiones.
 
 ## 1. Identidad del responsable del tratamiento
+- Facilitado: correo de contacto `mcgnexus@gmail.com`.
 - Falta: razón social / nombre del responsable, NIF y domicilio de contacto
   (y del delegado de protección de datos si se designa).
 - Dónde haría falta: textos de los formularios (`LeadForm`), página de contacto y

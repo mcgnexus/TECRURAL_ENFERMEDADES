@@ -7,11 +7,11 @@ import type { EstadoLead, LeadFila } from "@/types/lead";
 
 const CLAVE_TOKEN = "tr-admin-token";
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
-const btnPrimary = `${btnBase} bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
-const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body focus:border-tr-brand-green focus-visible:outline-none focus-visible:ring-[var(--tr-focus)]";
+const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body focus:border-tr-brand-green ";
 
 const ESTADO_LABELS: Record<EstadoLead, string> = {
   nuevo: "Nuevo",
@@ -23,9 +23,9 @@ const ESTADO_LABELS: Record<EstadoLead, string> = {
 };
 
 const ESTADO_COLORES: Record<EstadoLead, string> = {
-  nuevo: "text-tr-cyan",
-  contactado: "text-tr-warning",
-  cualificado: "text-tr-brand-green",
+  nuevo: "text-tr-cyan-text",
+  contactado: "text-tr-warning-text",
+  cualificado: "text-tr-green-strong",
   presupuesto: "text-tr-forest",
   ganado: "text-green-700",
   perdido: "text-red-600",
@@ -159,7 +159,7 @@ export default function AdminPage() {
             </button>
           </div>
           {error && (
-            <p className="mt-3 text-small text-tr-warning" role="alert">{error}</p>
+            <p className="mt-3 text-small text-tr-warning-text" role="alert">{error}</p>
           )}
         </div>
 
@@ -199,14 +199,14 @@ export default function AdminPage() {
                     </td>
                     <td className="px-3 py-3">
                       <span className={`font-semibold ${
-                        lead.prioridad === "alta" ? "text-red-600" : lead.prioridad === "media" ? "text-tr-warning" : "text-tr-muted"
+                        lead.prioridad === "alta" ? "text-red-600" : lead.prioridad === "media" ? "text-tr-warning-text" : "text-tr-muted"
                       }`}>
                         {lead.prioridad}
                       </span>
                     </td>
                     <td className="px-3 py-3">
                       <span className="text-tr-ink font-medium">{lead.nombre}</span>
-                      <a href={`tel:${lead.telefono}`} className="block text-tr-brand-green hover:underline">{lead.telefono}</a>
+                      <a href={`tel:${lead.telefono}`} className="block text-tr-green-strong hover:underline">{lead.telefono}</a>
                     </td>
                     <td className="px-3 py-3 text-tr-muted">
                       {lead.canal_contacto === "whatsapp" ? "WhatsApp" : lead.canal_contacto === "llamada" ? "Llamada" : "—"}
@@ -222,7 +222,7 @@ export default function AdminPage() {
                     <td className="px-3 py-3 text-tr-muted">{lead.sintoma ?? "—"}</td>
                     <td className="px-3 py-3">
                       {lead.consentimiento_comercial ? (
-                        <span className="text-tr-brand-green font-semibold">Sí</span>
+                        <span className="text-tr-green-strong font-semibold">Sí</span>
                       ) : (
                         <span className="text-tr-muted">No</span>
                       )}

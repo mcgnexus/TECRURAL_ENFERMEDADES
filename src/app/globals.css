@@ -2,13 +2,17 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap");
 
 :root {
+  color-scheme: light; /* evita el oscurecimiento automático de controles bajo luz exterior */
+
   /* Marca */
   --tr-forest: #164B3B;
   --tr-brand-green: #208C46;
+  --tr-green-strong: #177A44; /* variante accesible de verde para texto/botones (contraste AA) */
   --tr-leaf-text: #4C7847;
   --tr-leaf: #54834C;
   --tr-lime: #D7E6A1;
   --tr-cyan: #02B2EB;
+  --tr-cyan-text: #006989; /* cian oscuro legible para texto sobre fondo claro */
 
   /* Interfaz */
   --tr-paper: #F6F7F1;
@@ -16,7 +20,8 @@
   --tr-ink: #1D2B25;
   --tr-muted: #66756C;
   --tr-line: #E3E8DE;
-  --tr-warning: #D69D52;
+  --tr-warning: #D69D52;         /* naranja de marca (decorativo/fondos) */
+  --tr-warning-text: #8A5A1E;    /* ámbar oscuro accesible para texto de aviso/error */
 
   /* Tipografía */
   --tr-font-heading: "Manrope", Arial, sans-serif;
@@ -31,6 +36,7 @@
   --tr-radius-section: 20px;
   --tr-content-width: 1160px;
   --tr-focus: 3px solid #4C7847;
+  --tr-touch-target: 44px;
   --tr-shadow-card: 0 8px 24px rgba(23, 62, 47, 0.08);
 }
 
@@ -38,10 +44,12 @@
   /* Colors - Marca */
   --color-tr-forest: var(--tr-forest);
   --color-tr-brand-green: var(--tr-brand-green);
+  --color-tr-green-strong: var(--tr-green-strong);
   --color-tr-leaf-text: var(--tr-leaf-text);
   --color-tr-leaf: var(--tr-leaf);
   --color-tr-lime: var(--tr-lime);
   --color-tr-cyan: var(--tr-cyan);
+  --color-tr-cyan-text: var(--tr-cyan-text);
 
   /* Colors - Interfaz */
   --color-tr-paper: var(--tr-paper);
@@ -50,6 +58,7 @@
   --color-tr-muted: var(--tr-muted);
   --color-tr-line: var(--tr-line);
   --color-tr-warning: var(--tr-warning);
+  --color-tr-warning-text: var(--tr-warning-text);
 
   /* Semantic aliases */
   --color-primary: var(--tr-brand-green);
@@ -94,6 +103,11 @@
     font-family: var(--tr-font-body);
     font-size: var(--tr-text-body);
     line-height: 1.6;
+    overflow-x: hidden; /* evita desplazamiento horizontal accidental en móvil */
+  }
+
+  button, [role="button"] {
+    touch-action: manipulation; /* elimina el retardo de doble toque en móvil */
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -109,10 +123,9 @@
   h4 { font-size: clamp(1.125rem, 2vw, 1.25rem); }
 
   :focus-visible {
-    outline: none;
-    ring: var(--tr-focus);
-    ring-offset: 2px;
-    ring-offset-color: var(--tr-surface);
+    outline: 3px solid var(--tr-leaf-text);
+    outline-offset: 2px;
+    border-radius: var(--tr-radius-control);
   }
 
   ::selection {

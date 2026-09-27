@@ -69,7 +69,7 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
         <div className="bg-tr-surface rounded-[var(--tr-radius-section)] border border-tr-line shadow-[var(--tr-shadow-card)] p-5">
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 bg-tr-brand-green/10 rounded-[var(--tr-radius-card)] flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-tr-brand-green" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="w-6 h-6 text-tr-green-strong" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
@@ -99,7 +99,7 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
       <div className="bg-tr-surface rounded-[var(--tr-radius-section)] border border-tr-line shadow-[var(--tr-shadow-card)] p-5">
         <div className="flex items-start gap-3">
           <div className="w-12 h-12 bg-tr-brand-green/10 rounded-[var(--tr-radius-card)] flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-tr-brand-green" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg className="w-6 h-6 text-tr-green-strong" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </div>
@@ -114,14 +114,14 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
           <button
             onClick={handleDismiss}
             type="button"
-            className="flex-1 bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
+            className="flex-1 bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
           >
             Ahora no
           </button>
           <button
             onClick={handleInstall}
             type="button"
-            className="flex-1 bg-tr-brand-green text-white hover:bg-tr-forest px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
+            className="flex-1 bg-tr-green-strong text-white hover:bg-tr-forest px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
           >
             Instalar
           </button>

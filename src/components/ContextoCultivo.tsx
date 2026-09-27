@@ -36,8 +36,8 @@ interface ContextoCultivoProps {
 }
 
 const labelCls = "block font-body font-semibold text-tr-forest text-small mb-1.5";
-const selectCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body focus:border-tr-brand-green focus:bg-tr-surface focus-visible:outline-none focus-visible:ring-[var(--tr-focus)] disabled:opacity-50";
-const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface focus-visible:outline-none focus-visible:ring-[var(--tr-focus)] disabled:opacity-50";
+const selectCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
+const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
 
 const VALOR_OTRO = "__otro__";
 const VALOR_NO_LO_SE = "__no_lo_se__";
@@ -162,7 +162,7 @@ export function ContextoCultivo({ valor, onChange, disabled = false }: ContextoC
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="ctx-duracion" className={labelCls}>
               Desde cuándo <span className="font-normal text-tr-muted">(opcional)</span>

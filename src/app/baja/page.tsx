@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const btnPrimary = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 bg-tr-brand-green text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
+const btnPrimary = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
-const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface focus-visible:outline-none focus-visible:ring-[var(--tr-focus)] disabled:opacity-50";
+const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
 
 export default function BajaPage() {
   const [telefono, setTelefono] = useState("");
@@ -56,7 +56,7 @@ export default function BajaPage() {
               </p>
 
               {estado === "error" && error && (
-                <div className="mb-4 p-3 border-l-4 border-tr-warning bg-tr-warning/5 text-tr-warning text-small rounded-[var(--tr-radius-control)]" role="alert">
+                <div className="mb-4 p-3 border-l-4 border-tr-warning bg-tr-warning/5 text-tr-warning-text text-small rounded-[var(--tr-radius-control)]" role="alert">
                   {error}
                 </div>
               )}
@@ -85,7 +85,7 @@ export default function BajaPage() {
         </div>
 
         <p className="mt-4 text-center text-caption text-tr-muted">
-          <Link href="/" className="text-tr-brand-green font-semibold hover:underline">
+          <Link href="/" className="text-tr-green-strong font-semibold hover:underline">
             Volver al diagnóstico
           </Link>
         </p>
