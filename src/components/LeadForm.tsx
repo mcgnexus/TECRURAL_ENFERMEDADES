@@ -75,6 +75,36 @@ export function LeadForm({
     return Object.keys(nuevos).length === 0;
   };
 
+  const esDirecto = origen === "contacto_directo";
+  // `hayFotos` es un booleano derivado, y TypeScript no puede estrechar el tipo
+  // a través de él. Se guarda la lista ya acotada para poder usarla sin
+  // comprobaciones repetidas.
+  const fotosAdjuntas = adjuntarFotos && adjuntarFotos.length > 0 ? adjuntarFotos : null;
+  const hayFotos = fotosAdjuntas !== null;
+
+  // Los textos dependen del origen porque el flujo no es el mismo. En contacto
+  // directo no hay diagnóstico ni fotos detrás: hablar de "las fotos del
+  // análisis" era prometerle al técnico algo que no existe y describirle al
+  // agricultor un envío que no ha hecho.
+  const introFormulario = esDirecto
+    ? "Cuéntanos tu caso y un técnico lo revisará contigo."
+    : "Con tus datos y las fotos del análisis, un técnico revisará este caso contigo.";
+
+  const encabezadoExito = esDirecto ? "Solicitud enviada" : "Solicitud de revisión enviada";
+
+  const cuerpoExito = esDirecto
+    ? "Hemos registrado tu caso. Un técnico de TecRural lo revisará y te contactará por el canal que has indicado (llamada o WhatsApp al número facilitado)."
+    : "Hemos registrado tu caso junto con la orientación y las fotos del análisis. Un técnico de TecRural lo revisará y te contactará por el canal que has indicado (llamada o WhatsApp al número facilitado).";
+
+  // En el consentimiento se enumeran los datos que de verdad se tratan. Incluir
+  // fotos cuando no se envían ninguna es impreciso, y este texto es el que
+  // sostiene el consentimiento: tiene que describir el tratamiento real.
+  const datosTratados = esDirecto
+    ? "contacto, cultivo y municipio que nos indicas"
+    : hayFotos
+    ? "contacto, cultivo, municipio y las fotos que envías"
+    : "contacto, cultivo, municipio y la orientación del análisis";
+
   const mensajeWhatsApp = (() => {
     const partes = ["Hola, he usado la app de diagnóstico de TecRural"];
     if (contexto?.especie) partes.push(`sobre ${contexto.especie}`);
@@ -130,9 +160,7 @@ export function LeadForm({
           web: form.web,
           contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
-          imagenes: adjuntarFotos && adjuntarFotos.length > 0
-            ? adjuntarFotos.slice(0, 3)
-            : undefined,
+          imagenes: fotosAdjuntas ? fotosAdjuntas.slice(0, 3) : undefined,
         }),
       });
 
@@ -160,12 +188,8 @@ export function LeadForm({
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
           <div>
-            <p className="font-heading font-semibold text-tr-forest">Solicitud enviada</p>
-            <p className="mt-1 text-body text-tr-muted">
-              Hemos registrado tu caso junto con la orientación y las fotos del análisis. Un
-              técnico de TecRural lo revisará y te contactará por el canal que has indicado
-              (llamada o WhatsApp al número facilitado).
-            </p>
+            <p className="font-heading font-semibold text-tr-forest">{encabezadoExito}</p>
+            <p className="mt-1 text-body text-tr-muted">{cuerpoExito}</p>
             <p className="mt-2 text-small text-tr-muted">
               No podemos comprometer un plazo concreto de respuesta; depende de la demanda del
               servicio.
@@ -192,16 +216,15 @@ export function LeadForm({
 
   return (
     <form onSubmit={handleSubmit} className={`p-5 ${cardStyles}`} noValidate>
-      <h3 className="font-heading font-semibold text-tr-forest">Solicitar revisión de TecRural</h3>
-      <p className="mt-1 text-small text-tr-muted">
-        Con tus datos y las fotos del análisis, un técnico revisará este caso contigo.
-      </p>
+      <h3 className="font-heading font-semibold text-tr-forest">
+        {esDirecto ? "Solicitar asesoramiento" : "Solicitar revisión de TecRural"}
+      </h3>
+      <p className="mt-1 text-small text-tr-muted">{introFormulario}</p>
 
-      {adjuntarFotos && adjuntarFotos.length > 0 && (
+      {fotosAdjuntas && (
         <p className="mt-3 p-3 bg-tr-paper border border-tr-line rounded-[var(--tr-radius-control)] text-caption text-tr-muted">
-          Al enviar, las {adjuntarFotos.length} foto{adjuntarFotos.length > 1 ? "s" : ""} del
-          análisis se compartirán con el técnico para la revisión. No se usan para ningún otro
-          fin.
+          Al enviar, {fotosAdjuntas.length === 1 ? "la foto del análisis se compartirá" : `las ${fotosAdjuntas.length} fotos del análisis se compartirán`} con
+          el técnico para la revisión. No se usan para ningún otro fin.
         </p>
       )}
 
@@ -377,7 +400,7 @@ export function LeadForm({
           <div className="flex-1">
             <label htmlFor={`lead-solicitud-${origen}`} className="text-caption text-tr-muted leading-relaxed">
               Confirmo que solicito que TecRural revise este caso y me responda al teléfono
-              indicado. Trataremos tus datos (contacto, cultivo, municipio y fotos que envíes)
+              indicado. Trataremos tus datos ({datosTratados})
               para gestionar esta solicitud y no los cederemos con fines publicitarios. *
             </label>
             {errores.solicitud && (

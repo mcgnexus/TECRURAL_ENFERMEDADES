@@ -5,7 +5,7 @@ import { LeadForm } from "@/components/LeadForm";
 export const metadata: Metadata = {
   title: "Contacto | TECRURAL Diagnóstico",
   description:
-    "Solicita asesoramiento agronómico para tus cultivos en el Altiplano de Granada y la Costa Tropical. Un técnico de TecRural te llamará.",
+    "Solicita asesoramiento agronómico para tus cultivos en el Altiplano de Granada y la Costa Tropical. Un técnico de TecRural te contactará por el canal que elijas.",
 };
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
@@ -20,7 +20,7 @@ export default function ContactoPage() {
           <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Contacta con TecRural</h1>
           <p className="text-tr-muted mt-2 text-body">
             Asesoramiento agronómico para cultivos del Altiplano de Granada y la Costa Tropical.
-            Cuéntanos tu caso y te llamamos.
+            Cuéntanos tu caso y te contactamos por el canal que elijas.
           </p>
         </header>
 
