@@ -29,7 +29,9 @@ function mensajeAmigable(err: unknown, status?: number): string {
     return "Sin conexión suficiente. Comprueba tu red y reintenta: no has perdido las fotos ni los datos.";
   }
   if (status === 429) {
-    return "Se ha alcanzado el límite de uso temporal. Espera un rato y vuelve a intentarlo.";
+    return err instanceof Error && err.message
+      ? err.message
+      : "Se ha alcanzado el límite de uso temporal. Espera un rato y vuelve a intentarlo.";
   }
   if (status === 400 || status === 413) {
     if (err instanceof Error && err.message) return err.message;

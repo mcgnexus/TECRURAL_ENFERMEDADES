@@ -4,14 +4,20 @@ import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
 import { initDatabase, guardarDiagnostico } from "@/lib/database";
 import { validarImagenServidor } from "@/lib/imagen";
 import { uidObligatorio } from "@/lib/identidad";
+import { consumirUso } from "@/lib/cuota";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-// El proveedor se elige automáticamente (recomendado: Gemini) y se registra
-// internamente en la respuesta y la BD para comparar coste y calidad.
 type Proveedor = "gemini" | "deepseek";
+
+/** Por qué se corta el fallback. Para no caer al segundo proveedor cuando el
+ * primer fallo no es del proveedor, sino que se acabaron las llamadas. */
+function esFalloDeProveedor(error: unknown): boolean {
+  const nombre = (error as { name?: string })?.name;
+  return nombre !== "PresupuestoAgotadoError";
+}
 
 async function analizarConProveedor(
   imagenes: ImagenAnalisis[],
@@ -191,13 +197,35 @@ export async function POST(request: NextRequest) {
     if (enves) imagenes.push(enves);
     if (planta) imagenes.push(planta);
 
-    // Proveedor automático (recomendado) con fallback interno al alternativo
+    // Cuota DESPUÉS de validar las fotos y ANTES de llamar al proveedor. Si se
+    // hiciera antes, un cuerpo de 4 MB sin imagen válida consumiría cuota sin
+    // coste detrás, y un agricultor con la foto mal hecha pagaría un uso que no
+    // le hemos analizado.
+    try {
+      await initDatabase();
+    } catch (error) {
+      console.warn("initDatabase falló; se continúa sin cuota:", error);
+    }
+    const cuota = await consumirUso("diag", usuarioId);
+    if (!cuota.permitido) {
+      console.warn(`Diagnóstico bloqueado por cuota: ${cuota.detalle}`);
+      return NextResponse.json(
+        { error: cuota.mensaje, cuota: { motivo: cuota.motivo } },
+        { status: cuota.motivo === "global" ? 503 : 429 }
+      );
+    }
+    const headers: Record<string, string> = { "X-Cuota-Restante": String(cuota.restantes) };
+
     let diagnostico: DiagnosticoResponse;
     let proveedorUsado: Proveedor = "gemini";
 
     try {
       diagnostico = await analizarConProveedor(imagenes, "gemini", contexto);
     } catch (error) {
+      // El fallback solo tiene sentido si el primer proveedor falló. Si el
+      // fallo es que se agotó el presupuesto de llamadas, arrancar la misma
+      // estructura completa en DeepSeek lo multiplicaría por dos.
+      if (!esFalloDeProveedor(error)) throw error;
       console.warn("Fallo gemini, intentando fallback a deepseek...", error);
       try {
         diagnostico = await analizarConProveedor(imagenes, "deepseek", contexto);
@@ -267,11 +295,19 @@ export async function POST(request: NextRequest) {
         coherente: validacion.valido,
         errores: validacion.errores,
       },
-    });
+      cuota: { restantes: cuota.restantes },
+    }, { headers });
   } catch (error) {
     console.error("Error en diagnóstico:", error);
 
     const message = error instanceof Error ? error.message : "Error interno del servidor";
+
+    if ((error as { name?: string })?.name === "PresupuestoAgotadoError") {
+      return NextResponse.json(
+        { error: "El análisis ha fallado varias veces seguidas. Inténtalo de nuevo en unos minutos." },
+        { status: 503 }
+      );
+    }
 
     if (message.includes("Falta la foto principal") || message.startsWith("La foto")) {
       return NextResponse.json({ error: message }, { status: 400 });

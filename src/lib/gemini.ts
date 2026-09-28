@@ -38,8 +38,50 @@ const MAX_TOKENS_OBSERVACION = 2048;
 const MAX_TOKENS_DIAGNOSTICO = 6144;
 const MAX_TOKENS_VERIFICACION = 2048;
 
-const ESPERA_REINTENTO_MS = [600, 1500, 3000];
+// Dos reintentos, no cuatro. La API devolvió 503 "high demand" varias veces
+// durante las pruebas y se recuperó en el siguiente intento; cuatro no
+// aportaban nada. Y el reintento no es gratis: cada intento es una llamada
+// completa con las imágenes, así que este número se multiplica por las fases.
+const ESPERA_REINTENTO_MS = [800, 2500];
 const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
+
+/**
+ * Presupuesto de llamadas por análisis.
+ *
+ * Antes, el peor caso teórico eran 56 llamadas a la IA desde una sola petición
+ * HTTP: cuatro intentos en cada una de hasta catorce llamadas, más el fallback
+ * completo al segundo proveedor con la misma estructura. Como una petición sin
+ * cuota puede repetirse en bucle, la factura crecía sola y sin que nadie
+ * hiciera nada.
+ *
+ * Ahora el reintento por fase consume presupuesto global, así que un análisis
+ * que va mal no puede multiplicar el gasto por 19. Dos decisiones: si se agota,
+ * se devuelve lo que haya en lugar de insistir, y el cuarto turno con
+ * retroalimentación solo se pide si sobra presupuesto. En el camino normal
+ * (tres fases, sin errores) el presupuesto no llega a tocarse ni de lejos:
+ * tres llamadas de tres.
+ */
+const PRESUPUESTO_LLAMADAS = 6;
+
+/** Contador de llamadas del análisis en curso. Vive por petición, no global. */
+class Presupuesto {
+  private usadas = 0;
+
+  constructor(private readonly maximo: number) {}
+
+  /** true si queda al menos una llamada libre. */
+  disponible(): boolean {
+    return this.usadas < this.maximo;
+  }
+
+  restantes(): number {
+    return Math.max(0, this.maximo - this.usadas);
+  }
+
+  consumir(): void {
+    this.usadas++;
+  }
+}
 
 function parteImagenes(imagenes: ImagenAnalisis[], conImagenes = true) {
   if (!conImagenes) return [];
@@ -67,13 +109,34 @@ interface LlamadaOpts {
    * multiplica el coste sin aportar información. */
   conImagenes?: boolean;
   etiqueta: string;
+  /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
+  presupuesto?: Presupuesto;
+}
+
+class PresupuestoAgotadoError extends Error {
+  constructor() {
+    super("Presupuesto de llamadas agotado");
+    this.name = "PresupuestoAgotadoError";
+  }
 }
 
 async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
   let ultimoError: unknown;
+  const presupuesto = opts.presupuesto;
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    // El presupuesto se comprueba antes de cada intento, no solo antes de la
+    // llamada: si una fase anterior lo ha agotado, esta no se hace aunque le
+    // queden reintentos propios.
+    if (presupuesto && !presupuesto.disponible()) {
+      console.warn(
+        `Presupuesto agotado en ${opts.etiqueta}; quedan ${presupuesto.restantes()} de ${PRESUPUESTO_LLAMADAS}`
+      );
+      break;
+    }
+
     try {
+      presupuesto?.consumir();
       const response = await ai.models.generateContent({
         model: MODELO,
         contents: [
@@ -111,7 +174,11 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
     }
   }
 
-  throw ultimoError instanceof Error ? ultimoError : new Error(`Fallo en ${opts.etiqueta}`);
+  // Si el fallo real ya está guardado, se propaga: el llamador decide si
+  // reintenta con lo poco que quede. Solo se inventa el error de presupuesto
+  // cuando no hubo ningún otro motivo de fallo.
+  if (ultimoError instanceof Error) throw ultimoError;
+  throw new PresupuestoAgotadoError();
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +327,8 @@ const VERIFICATION_SCHEMA = {
 // ---------------------------------------------------------------------------
 
 async function observarImagen(
-  imagenes: ImagenAnalisis[]
+  imagenes: ImagenAnalisis[],
+  presupuesto: Presupuesto
 ): Promise<Observacion> {
   return llamarConReintento<Observacion>({
     prompt: OBSERVATION_PROMPT,
@@ -268,6 +336,7 @@ async function observarImagen(
     maxOutputTokens: MAX_TOKENS_OBSERVACION,
     imagenes,
     etiqueta: "observación",
+    presupuesto,
   });
 }
 
@@ -304,7 +373,8 @@ export async function analizarImagen(
   isRetry = false,
   contexto?: ContextoUsuario,
   observacion?: Observacion,
-  retroalimentacion?: string
+  retroalimentacion?: string,
+  presupuesto?: Presupuesto
 ): Promise<DiagnosticoResponse> {
   const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
   const prompt = buildDiagnosisPrompt(
@@ -321,6 +391,7 @@ export async function analizarImagen(
     maxOutputTokens: MAX_TOKENS_DIAGNOSTICO,
     imagenes,
     etiqueta: "diagnóstico",
+    presupuesto,
   });
 }
 
@@ -330,7 +401,8 @@ export async function analizarImagen(
 
 async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
-  observacion: Observacion
+  observacion: Observacion,
+  presupuesto?: Presupuesto
 ): Promise<Verificacion> {
   const prompt = `${VERIFICATION_PROMPT}
 
@@ -347,6 +419,7 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     imagenes: [],
     conImagenes: false,
     etiqueta: "verificación",
+    presupuesto,
   });
 }
 
@@ -358,15 +431,18 @@ async function analizarConVerificacion(
   imagenes: ImagenAnalisis[],
   contexto: ContextoUsuario | undefined,
   observacion: Observacion,
-  isRetry: boolean
+  isRetry: boolean,
+  presupuesto: Presupuesto
 ): Promise<DiagnosticoResponse> {
   const diag = await analizarImagen(
     imagenes,
     isRetry,
     contexto,
-    observacion
+    observacion,
+    undefined,
+    presupuesto
   );
-  const verificacion = await verificarDiagnostico(diag, observacion);
+  const verificacion = await verificarDiagnostico(diag, observacion, presupuesto);
 
   // El cuarto turno solo aporta si la verificación aporta algo que corregir.
   // Antes se disparaba con "no validado", que es el caso habitual en fotos
@@ -375,16 +451,24 @@ async function analizarConVerificacion(
     verificacion.inconsistencias.length > 0 ||
     verificacion.sintomas_no_explicados.length > 0;
 
-  if (!verificacion.diagnostico_validado && !isRetry && hayFeedback) {
+  // Y solo si además queda presupuesto: son dos llamadas más, y en el peor caso
+  // eran justo las que disparaban el gasto.
+  if (
+    !verificacion.diagnostico_validado &&
+    !isRetry &&
+    hayFeedback &&
+    presupuesto.disponible()
+  ) {
     try {
       const diag2 = await analizarImagen(
         imagenes,
         true,
         contexto,
         observacion,
-        verificacion.inconsistencias.join("; ")
+        verificacion.inconsistencias.join("; "),
+        presupuesto
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion);
+      const ver2 = await verificarDiagnostico(diag2, observacion, presupuesto);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -411,13 +495,36 @@ export async function analizarConReintento(
   imagenes: ImagenAnalisis[],
   contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
+  // Un presupuesto por análisis, compartido por las tres fases y por el
+  // reintento general. Es lo que impide que un caso problemático multiplique el
+  // gasto: antes, el peor caso eran 56 llamadas desde una sola petición.
+  const presupuesto = new Presupuesto(PRESUPUESTO_LLAMADAS);
+
   // La observación se comparte entre ambos intentos: si falla el diagnóstico,
   // repetir la fase 1 añadiría ~4 s sin aportar nada nuevo.
-  const observacion = await observarImagen(imagenes);
+  const observacion = await observarImagen(imagenes, presupuesto);
   try {
-    return await analizarConVerificacion(imagenes, contexto, observacion, false);
+    return await analizarConVerificacion(
+      imagenes,
+      contexto,
+      observacion,
+      false,
+      presupuesto
+    );
   } catch (error) {
-    console.warn("Primer intento fallido, reintentando...", error);
-    return await analizarConVerificacion(imagenes, contexto, observacion, true);
+    // Si el fallo es que se acabaron las llamadas, reintentar no puede
+    // funcionar por definición. Se propaga para que la ruta decida.
+    if (error instanceof PresupuestoAgotadoError) throw error;
+    console.warn(
+      `Primer intento fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`,
+      error
+    );
+    return await analizarConVerificacion(
+      imagenes,
+      contexto,
+      observacion,
+      true,
+      presupuesto
+    );
   }
 }

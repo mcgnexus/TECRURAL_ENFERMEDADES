@@ -176,9 +176,35 @@ function contenidoMultimodal(
   ];
 }
 
-const ESPERA_REINTENTO_MS = [600, 1500, 3000];
+// Mismo criterio que en gemini.ts: dos reintentos y un presupuesto por
+// análisis. Este proveedor es el fallback, así que su presupuesto solo corre
+// si el primero ha fallado de verdad por una causa suya.
+const ESPERA_REINTENTO_MS = [800, 2500];
 const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
+const PRESUPUESTO_LLAMADAS = 6;
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Contador de llamadas del análisis en curso. Vive por petición, no global. */
+class Presupuesto {
+  private usadas = 0;
+  constructor(private readonly maximo: number) {}
+  disponible(): boolean {
+    return this.usadas < this.maximo;
+  }
+  restantes(): number {
+    return Math.max(0, this.maximo - this.usadas);
+  }
+  consumir(): void {
+    this.usadas++;
+  }
+}
+
+export class PresupuestoAgotadoError extends Error {
+  constructor() {
+    super("Presupuesto de llamadas agotado");
+    this.name = "PresupuestoAgotadoError";
+  }
+}
 
 /** Saturación o corte de red: transitorio, merece la pena reintentar. */
 function esReintentable(error: unknown): boolean {
@@ -197,14 +223,24 @@ interface LlamadaOpts {
    * multiplica el coste sin aportar información. */
   conImagenes?: boolean;
   etiqueta: string;
+  /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
+  presupuesto?: Presupuesto;
 }
 
 async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
   const client = getDeepSeek();
   let ultimoError: unknown;
+  const presupuesto = opts.presupuesto;
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    if (presupuesto && !presupuesto.disponible()) {
+      console.warn(
+        `Presupuesto agotado en ${opts.etiqueta}; quedan ${presupuesto.restantes()} de ${PRESUPUESTO_LLAMADAS}`
+      );
+      break;
+    }
     try {
+      presupuesto?.consumir();
       const response = await client.chat.completions.create({
         model: "deepseek-chat",
         messages: [
@@ -234,19 +270,24 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
     }
   }
 
-  throw ultimoError instanceof Error ? ultimoError : new Error(`Fallo en ${opts.etiqueta}`);
+  if (ultimoError instanceof Error) throw ultimoError;
+  throw new PresupuestoAgotadoError();
 }
 
 // ---------------------------------------------------------------------------
 // FASE 1 — OBSERVACIÓN
 // ---------------------------------------------------------------------------
 
-async function observarImagen(imagenes: ImagenAnalisis[]): Promise<Observacion> {
+async function observarImagen(
+  imagenes: ImagenAnalisis[],
+  presupuesto: Presupuesto
+): Promise<Observacion> {
   return llamarConReintento<Observacion>({
     prompt: buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA),
     maxTokens: 2048,
     imagenes,
     etiqueta: "observación DeepSeek",
+    presupuesto,
   });
 }
 
@@ -283,7 +324,8 @@ export async function analizarImagenDeepSeek(
   isRetry = false,
   contexto?: ContextoUsuario,
   observacion?: Observacion,
-  retroalimentacion?: string
+  retroalimentacion?: string,
+  presupuesto?: Presupuesto
 ): Promise<DiagnosticoResponse> {
   const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
   const prompt = buildDiagnosisPrompt(
@@ -298,6 +340,7 @@ export async function analizarImagenDeepSeek(
     maxTokens: 6144,
     imagenes,
     etiqueta: "diagnóstico DeepSeek",
+    presupuesto,
   });
 }
 
@@ -307,7 +350,8 @@ export async function analizarImagenDeepSeek(
 
 async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
-  observacion: Observacion
+  observacion: Observacion,
+  presupuesto?: Presupuesto
 ): Promise<Verificacion> {
   const prompt = `${VERIFICATION_PROMPT}
 
@@ -323,6 +367,7 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     imagenes: [],
     conImagenes: false,
     etiqueta: "verificación DeepSeek",
+    presupuesto,
   });
 }
 
@@ -334,31 +379,41 @@ async function analizarConVerificacion(
   imagenes: ImagenAnalisis[],
   contexto: ContextoUsuario | undefined,
   observacion: Observacion,
-  isRetry: boolean
+  isRetry: boolean,
+  presupuesto: Presupuesto
 ): Promise<DiagnosticoResponse> {
   const diag = await analizarImagenDeepSeek(
     imagenes,
     isRetry,
     contexto,
-    observacion
+    observacion,
+    undefined,
+    presupuesto
   );
-  const verificacion = await verificarDiagnostico(diag, observacion);
+  const verificacion = await verificarDiagnostico(diag, observacion, presupuesto);
 
-  // El cuarto turno solo aporta si la verificación aporta algo que corregir.
+  // El cuarto turno solo aporta si la verificación aporta algo que corregir y
+  // si queda presupuesto: son dos llamadas más.
   const hayFeedback =
     verificacion.inconsistencias.length > 0 ||
     verificacion.sintomas_no_explicados.length > 0;
 
-  if (!verificacion.diagnostico_validado && !isRetry && hayFeedback) {
+  if (
+    !verificacion.diagnostico_validado &&
+    !isRetry &&
+    hayFeedback &&
+    presupuesto.disponible()
+  ) {
     try {
       const diag2 = await analizarImagenDeepSeek(
         imagenes,
         true,
         contexto,
         observacion,
-        verificacion.inconsistencias.join("; ")
+        verificacion.inconsistencias.join("; "),
+        presupuesto
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion);
+      const ver2 = await verificarDiagnostico(diag2, observacion, presupuesto);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -385,11 +440,28 @@ export async function analizarConReintentoDeepSeek(
   imagenes: ImagenAnalisis[],
   contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
-  const observacion = await observarImagen(imagenes);
+  const presupuesto = new Presupuesto(PRESUPUESTO_LLAMADAS);
+  const observacion = await observarImagen(imagenes, presupuesto);
   try {
-    return await analizarConVerificacion(imagenes, contexto, observacion, false);
+    return await analizarConVerificacion(
+      imagenes,
+      contexto,
+      observacion,
+      false,
+      presupuesto
+    );
   } catch (error) {
-    console.warn("Primer intento DeepSeek fallido, reintentando...", error);
-    return await analizarConVerificacion(imagenes, contexto, observacion, true);
+    if (error instanceof PresupuestoAgotadoError) throw error;
+    console.warn(
+      `Primer intento DeepSeek fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`,
+      error
+    );
+    return await analizarConVerificacion(
+      imagenes,
+      contexto,
+      observacion,
+      true,
+      presupuesto
+    );
   }
 }

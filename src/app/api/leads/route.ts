@@ -4,6 +4,7 @@ import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarN
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
+import { consumirUsoPorClave, estadoCuotas } from "@/lib/cuota";
 import { validarDataUrlImagen } from "@/lib/imagen";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, PrioridadLead } from "@/types/lead";
@@ -75,23 +76,11 @@ const leadSchema = z.object({
   web: z.string().optional(),
 });
 
-// Rate limit sencillo en memoria (por instancia de servidor):
-// máximo 5 leads por IP y hora. Suficiente contra spam casual.
-const VENTANA_MS = 60 * 60 * 1000;
-const MAX_POR_VENTANA = 5;
-const peticiones = new Map<string, number[]>();
-
-function excedeLimite(ip: string): boolean {
-  const ahora = Date.now();
-  const previas = (peticiones.get(ip) ?? []).filter((t) => ahora - t < VENTANA_MS);
-  if (previas.length >= MAX_POR_VENTANA) {
-    peticiones.set(ip, previas);
-    return true;
-  }
-  previas.push(ahora);
-  peticiones.set(ip, previas);
-  return false;
-}
+// Límite de solicitudes por IP. Antes vivía en un Map del módulo, es decir en
+// la memoria de la instancia: con varias instancias activas, "5 por hora" se
+// convertían en 5 por instancia y el límite no protegía nada. Ahora el contador
+// está en la tabla `cuotas`, que es global y sobrevive al reciclaje.
+const MAX_LEADS_POR_IP_HORA = 5;
 
 function ipDePeticion(request: NextRequest): string {
   const fwd = request.headers.get("x-forwarded-for");
@@ -101,14 +90,9 @@ function ipDePeticion(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = ipDePeticion(request);
-    if (excedeLimite(ip)) {
-      return NextResponse.json(
-        { error: "Has enviado demasiadas solicitudes. Inténtalo de nuevo más tarde." },
-        { status: 429 }
-      );
-    }
-
+    // El cuerpo se lee antes del rate limit: si no, una petición de 8 MB con
+    // fotos se gastaría un uso del contador y luego se rechazaría por datos no
+    // válidos. Así solo consume cuota lo que realmente llega a guardarse.
     // Límite de tamaño del cuerpo (fotos adjuntas)
     const contentLength = Number(request.headers.get("content-length") ?? 0);
     if (contentLength > 9 * 1024 * 1024) {
@@ -146,6 +130,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await initDatabase();
+
+    // Cuota por IP, ahora en la tabla `cuotas` y por tanto global entre
+    // instancias. Va tras la validación del cuerpo: un envío con el teléfono
+    // mal formado no debe gastar un uso de un agricultor legítimo.
+    const ip = ipDePeticion(request);
+    const cuotaIp = await consumirUsoPorClave("lead", ip, MAX_LEADS_POR_IP_HORA);
+    if (!cuotaIp.permitido) {
+      return NextResponse.json(
+        { error: "Has enviado demasiadas solicitudes desde esta conexión. Inténtalo de nuevo más tarde." },
+        { status: 429 }
+      );
+    }
+
     const { prioridad, puntuacion } = calcularPrioridadLead(datos.contexto, datos.origen);
 
     // Aviso de prueba del canal, sin crear lead. ?test_notificacion=1 manda un
@@ -173,8 +171,6 @@ export async function POST(request: NextRequest) {
       await notificarLeadNuevo(prueba);
       return NextResponse.json({ success: true, aviso: "enviado" });
     }
-
-    await initDatabase();
 
     // Visitante desde la cookie httpOnly del proxy, nunca desde el cuerpo: si
     // no, el lead no se puede atribuir y la conversión por personas no es
@@ -264,8 +260,11 @@ export async function GET(request: NextRequest) {
     // servidor para que el panel no tenga que traer todos los leads y
     // agregarlos en el cliente.
     if (request.nextUrl.searchParams.get("metricas")) {
-      const metricas = await obtenerMetricasCaptacion();
-      return NextResponse.json({ metricas });
+      const [metricas, cuota] = await Promise.all([
+        obtenerMetricasCaptacion(),
+        estadoCuotas().then((c) => c[0] ?? null),
+      ]);
+      return NextResponse.json({ metricas, cuota });
     }
 
     const leads = await obtenerLeads({

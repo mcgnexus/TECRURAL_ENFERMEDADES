@@ -219,6 +219,24 @@ function aplicarMigraciones(): Promise<void> {
   await db`
     DELETE FROM diagnosticos WHERE usuario_id = 'usuario_demo'
   `;
+
+  // Migración 0006: cuotas de uso, en tabla y no en memoria.
+  await db`
+    CREATE TABLE IF NOT EXISTS cuotas (
+      clave TEXT PRIMARY KEY,
+      contador INTEGER NOT NULL DEFAULT 0,
+      limite INTEGER NOT NULL,
+      resets_en TIMESTAMPTZ NOT NULL,
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Una fila por ventana (visitante+día, y el total del día). Se consultan
+  // juntas para decidir en una sola vuelta de base de datos.
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuotas_resets
+    ON cuotas(resets_en)
+  `;
   })();
 }
 

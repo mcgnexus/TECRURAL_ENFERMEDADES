@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, LeadFila, MetricasCaptacion } from "@/types/lead";
+import type { CuotaGlobal } from "@/lib/cuota";
 
 const CLAVE_TOKEN = "tr-admin-token";
 
@@ -101,6 +102,7 @@ export default function AdminPage() {
   const [token, setToken] = useState("");
   const [leads, setLeads] = useState<LeadFila[]>([]);
   const [metricas, setMetricas] = useState<MetricasCaptacion | null>(null);
+  const [cuotas, setCuotas] = useState<CuotaGlobal | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
   const [filtroEstado, setFiltroEstado] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -143,6 +145,7 @@ export default function AdminPage() {
       if (resMetricas.ok) {
         const dMetricas = await resMetricas.json();
         setMetricas(dMetricas.metricas ?? null);
+        setCuotas(dMetricas.cuota ?? null);
       }
 
       try {
@@ -288,6 +291,13 @@ export default function AdminPage() {
                 valor={String(metricas.leadsSinResponder)}
                 detalle="en estado «nuevo»"
               />
+              {cuotas && (
+                <Tarjeta
+                  etiqueta="Consumo de IA hoy"
+                  valor={`${cuotas.consumidos} / ${cuotas.limite}`}
+                  detalle={`reinicia a las ${new Date(cuotas.resetsEn).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`}
+                />
+              )}
               <Tarjeta
                 etiqueta="Consentimiento comercial"
                 valor={pct(metricas.conversionComercial)}
