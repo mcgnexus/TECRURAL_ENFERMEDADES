@@ -1,5 +1,6 @@
 import { obtenerHistorial } from "@/lib/database";
 import { ORGANO_LABELS, TIPO_LABELS, GRAVEDAD_LABELS, nombreCorto, nivelSenal } from "@/lib/formato";
+import { uidDeVisitante } from "@/lib/identidad";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 import Link from "next/link";
 import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
@@ -9,11 +10,16 @@ export const metadata = {
   description: "Historial de diagnósticos fitosanitarios",
 };
 
-async function getHistorial(): Promise<DiagnosticoWithMeta[]> {
+/** El historial es por visitante: la cookie httpOnly la emite el proxy en la
+ * primera petición, así que aquí solo se lee. Sin ella no hay historial en vez
+ * de mostrar el de los demás. */
+async function getHistorial(): Promise<{ registros: DiagnosticoWithMeta[]; identificado: boolean }> {
+  const uid = await uidDeVisitante();
+  if (!uid) return { registros: [], identificado: false };
   try {
-    return await obtenerHistorial("usuario_demo", 50);
+    return { registros: await obtenerHistorial(uid, 50), identificado: true };
   } catch {
-    return [];
+    return { registros: [], identificado: true };
   }
 }
 
@@ -48,7 +54,7 @@ const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
 async function HistorialContent() {
-  const historial = await getHistorial();
+  const { registros: historial, identificado } = await getHistorial();
 
   return (
     <main className="min-h-screen bg-tr-paper py-8 px-4">
@@ -69,7 +75,11 @@ async function HistorialContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <h2 className="mt-4 font-heading font-semibold text-tr-forest text-xl">No hay diagnósticos aún</h2>
-            <p className="mt-2 text-tr-muted text-body">Realiza tu primer análisis para ver el historial aquí</p>
+            <p className="mt-2 text-tr-muted text-body">
+              {identificado
+                ? "Realiza tu primer análisis para ver el historial aquí"
+                : "No hemos podido identificar este dispositivo, así que no podemos mostrarte un historial. Haz un análisis y vuelve a entrar."}
+            </p>
             <Link href="/" className={`mt-6 ${btnPrimary} inline-flex`}>
               Hacer diagnóstico
             </Link>

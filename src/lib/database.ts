@@ -200,6 +200,18 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_leads_created_at
     ON leads(created_at DESC)
   `;
+
+  // Migración 0005: atribución de leads a un visitante, para poder medir
+  // conversión por personas y no por análisis.
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS usuario_id TEXT
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_leads_usuario
+    ON leads(usuario_id)
+  `;
   })();
 }
 
@@ -215,6 +227,8 @@ export async function initDatabase(): Promise<void> {
 }
 
 export interface NuevoLead {
+  /** UUID de visitante (cookie httpOnly del proxy). NULL si no se pudo leer. */
+  usuarioId?: string;
   nombre: string;
   telefono: string;
   municipio?: string;
@@ -245,13 +259,14 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
   const db = getSql();
   const [row] = await db`
     INSERT INTO leads (
-      diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+      usuario_id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
       mensaje, origen, canal_contacto, prioridad, puntuacion, contexto_diagnostico, ip,
       imagenes, consentimiento_comercial, consentimiento_comercial_fecha,
       consentimiento_texto_version, canal_comercial,
       origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term
     )
     VALUES (
+      ${lead.usuarioId ?? null},
       ${lead.diagnosticoId ?? null},
       ${lead.nombre},
       ${lead.telefono},
@@ -395,13 +410,23 @@ export async function obtenerLeads(
 // ============================================================================
 
 export interface MetricasCaptacion {
+  /** Visitantes distintos que han hecho al menos un diagnóstico. */
+  visitantes: number;
+  /** Análisis completados, con independencia de quién los pidiera. */
   diagnosticos: number;
+  /** Análisis por visitante. Alto = uso repetido, no más oportunidades. */
+  diagnosticosPorVisitante: number;
   leads: number;
+  /** Visitantes distintos que han dejado contacto. */
+  visitantesConLead: number;
+  /** Porcentaje de visitantes que han convertido. Es la cifra de negocio. */
   tasaConversion: number | null;
+  /** Leads por análisis. Complementario, no sustituye a la tasa anterior. */
+  leadsPorDiagnostico: number | null;
   porEstado: { estado: EstadoLead; total: number }[];
   porPrioridad: { prioridad: PrioridadLead; total: number }[];
   porOrigen: { origen: OrigenLead; total: number }[];
-  porDia: { dia: string; diagnosticos: number; leads: number }[];
+  porDia: { dia: string; visitantes: number; diagnosticos: number; leads: number }[];
   tiempoMedioRespuestaHoras: number | null;
   leadsSinResponder: number;
   conversionComercial: number;
@@ -411,10 +436,18 @@ export interface MetricasCaptacion {
 const DIAS_SERIE = 30;
 
 /**
- * Embudo y eficiencia. La tasa de conversión se define sobre diagnósticos
- * guardados: cada diagnóstico es un análisis completado por un agricultor, y
- * el lead es su conversión. El límite inferior es `usuario_demo`, que es el
- * identificador que usa la app; así el ratio es real y no una estimación.
+ * Embudo por personas, no por análisis.
+ *
+ * El denominador es el número de VISITANTES distintos, no el de análisis. Es
+ * la diferencia entre medir algo y medir ruido: un agricultor que sube ocho
+ * fotos en un minuto es un visitante que no vale ocho oportunidades
+ * comerciales. Por eso se distinguen:
+ *   - tasaConversion ......... visitantes con lead / visitantes (negocio)
+ *   - leadsPorDiagnostico .... total de leads / análisis (volumen)
+ *
+ * Los leads con usuario_id NULL (anteriores a la atribución) no cuentan como
+ * visitantes convertidos: sumarlos inflaría el numerador sin que exista el
+ * denominador correspondiente.
  */
 export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
   const db = getSql();
@@ -423,10 +456,12 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
   // temporal salía vacía. Con make_interval(days => 30) no hay ambigüedad.
   const rangoDias = DIAS_SERIE;
 
-  const [diagRows, leadRows, estadoRows, prioridadRows, origenRows, serieRows, respuestaRows, campanaRows] =
+  const [diagRows, visitantesRows, leadRows, leadUidRows, estadoRows, prioridadRows, origenRows, serieRows, respuestaRows, campanaRows] =
     await Promise.all([
-      db`SELECT COUNT(*)::int AS total FROM diagnosticos WHERE usuario_id = 'usuario_demo'`,
+      db`SELECT COUNT(*)::int AS total FROM diagnosticos`,
+      db`SELECT COUNT(DISTINCT usuario_id)::int AS total FROM diagnosticos WHERE usuario_id IS NOT NULL`,
       db`SELECT COUNT(*)::int AS total FROM leads`,
+      db`SELECT COUNT(DISTINCT usuario_id)::int AS total FROM leads WHERE usuario_id IS NOT NULL`,
       db`SELECT estado, COUNT(*)::int AS total FROM leads GROUP BY estado ORDER BY total DESC`,
       db`SELECT prioridad, COUNT(*)::int AS total FROM leads GROUP BY prioridad`,
       db`SELECT origen, COUNT(*)::int AS total FROM leads GROUP BY origen`,
@@ -439,8 +474,10 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
           ) AS dia
         ),
         d AS (
-          SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS total
-          FROM diagnosticos WHERE usuario_id = 'usuario_demo' GROUP BY 1
+          SELECT date_trunc('day', created_at) AS dia,
+                 COUNT(*)::int AS total,
+                 COUNT(DISTINCT usuario_id)::int AS visitantes
+          FROM diagnosticos WHERE usuario_id IS NOT NULL GROUP BY 1
         ),
         l AS (
           SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS total
@@ -448,6 +485,7 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
         )
         SELECT
           to_char(dias.dia, 'YYYY-MM-DD') AS dia,
+          COALESCE(d.visitantes, 0) AS visitantes,
           COALESCE(d.total, 0) AS diagnosticos,
           COALESCE(l.total, 0) AS leads
         FROM dias
@@ -470,7 +508,9 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
     ]);
 
   const diagnosticos = Number(diagRows[0]?.total ?? 0);
+  const visitantes = Number(visitantesRows[0]?.total ?? 0);
   const leads = Number(leadRows[0]?.total ?? 0);
+  const visitantesConLead = Number(leadUidRows[0]?.total ?? 0);
   const respondidos = Number(respuestaRows[0]?.respondidos ?? 0);
   const media = respuestaRows[0]?.media_horas;
   const conConsentimiento = await db`
@@ -478,9 +518,15 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
   `;
 
   return {
+    visitantes,
     diagnosticos,
+    diagnosticosPorVisitante: visitantes > 0 ? diagnosticos / visitantes : 0,
     leads,
-    tasaConversion: diagnosticos > 0 ? leads / diagnosticos : null,
+    visitantesConLead,
+    // Se limita a 1: con un solo visitante que analiza y contacta varias
+    // veces, el cociente puede pasar de 100 % y la tarjeta mentiría.
+    tasaConversion: visitantes > 0 ? Math.min(1, visitantesConLead / visitantes) : null,
+    leadsPorDiagnostico: diagnosticos > 0 ? leads / diagnosticos : null,
     porEstado: estadoRows.map((r) => ({ estado: r.estado as EstadoLead, total: Number(r.total) })),
     porPrioridad: prioridadRows.map((r) => ({
       prioridad: r.prioridad as PrioridadLead,
@@ -489,6 +535,7 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
     porOrigen: origenRows.map((r) => ({ origen: r.origen as OrigenLead, total: Number(r.total) })),
     porDia: serieRows.map((r) => ({
       dia: String(r.dia),
+      visitantes: Number(r.visitantes),
       diagnosticos: Number(r.diagnosticos),
       leads: Number(r.leads),
     })),

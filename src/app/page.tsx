@@ -71,7 +71,6 @@ function HomeContent() {
       formData.append("imagen", fotos.principal.file);
       if (fotos.enves) formData.append("imagen_enves", fotos.enves.file);
       if (fotos.planta_completa) formData.append("imagen_planta", fotos.planta_completa.file);
-      formData.append("usuario_id", "usuario_demo");
       formData.append("cultivo", resumen.cultivo);
       formData.append("municipio", resumen.municipio);
       formData.append("sintoma", resumen.sintoma);

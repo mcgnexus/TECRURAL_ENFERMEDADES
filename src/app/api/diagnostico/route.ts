@@ -3,6 +3,7 @@ import { analizarConReintento, type ImagenAnalisis } from "@/lib/gemini";
 import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
 import { initDatabase, guardarDiagnostico } from "@/lib/database";
 import { validarImagenServidor } from "@/lib/imagen";
+import { uidObligatorio } from "@/lib/identidad";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 
 export const runtime = "nodejs";
@@ -164,8 +165,12 @@ async function leerImagenValidada(
 
 export async function POST(request: NextRequest) {
   try {
+    // El identificador de visitante viene de la cookie httpOnly que emite el
+    // proxy, no del cuerpo de la petición: así no se puede atribuir el
+    // diagnóstico a otro visitante.
+    const usuarioId = await uidObligatorio();
+
     const formData = await request.formData();
-    const usuarioId = (formData.get("usuario_id") as string) || "anonimo";
     const nombrePlanta = ((formData.get("nombre_planta") as string) || "").trim() || undefined;
 
     // Contexto declarado por el agricultor (mejora la orientación, opcional)
@@ -227,21 +232,28 @@ export async function POST(request: NextRequest) {
     // Guardado best-effort SIN la foto: la imagen no se almacena de forma
     // permanente. Solo se guardarán las fotos si el usuario solicita una
     // revisión (se adjuntan al lead, informándole antes de enviar).
+    // Sin cookie de visitante el análisis se entrega igual, pero no se
+    // atribuye a nadie: es preferible perder una métrica que inventar un
+    // usuario compartido que falsee el embudo.
     let id: string | undefined;
-    try {
-      await initDatabase();
-      const saved = await guardarDiagnostico(
-        usuarioId,
-        "", // imagen no almacenada permanentemente
-        diagnostico,
-        nombrePlanta,
-        undefined,
-        contexto,
-        proveedorUsado
-      );
-      id = saved.id;
-    } catch (dbError) {
-      console.warn("BD no disponible; se devuelve el análisis sin persistir:", dbError);
+    if (!usuarioId) {
+      console.warn("Petición sin identificador de visitante; análisis no persistido");
+    } else {
+      try {
+        await initDatabase();
+        const saved = await guardarDiagnostico(
+          usuarioId,
+          "", // imagen no almacenada permanentemente
+          diagnostico,
+          nombrePlanta,
+          undefined,
+          contexto,
+          proveedorUsado
+        );
+        id = saved.id;
+      } catch (dbError) {
+        console.warn("BD no disponible; se devuelve el análisis sin persistir:", dbError);
+      }
     }
 
     return NextResponse.json({

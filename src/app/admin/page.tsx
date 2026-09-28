@@ -62,20 +62,20 @@ function Tarjeta({ etiqueta, valor, detalle }: { etiqueta: string; valor: string
   );
 }
 
-/** Barras apiladas de los últimos 30 días: diagnósticos frente a leads. */
+/** Barras apiladas de los últimos 30 días: visitantes y leads. */
 function SerieDiaria({ serie }: { serie: MetricasCaptacion["porDia"] }) {
   if (serie.length === 0) return null;
-  const max = Math.max(1, ...serie.map((d) => Math.max(d.diagnosticos, d.leads)));
+  const max = Math.max(1, ...serie.map((d) => Math.max(d.visitantes, d.leads)));
 
   return (
     <div>
-      <div className="flex items-end gap-[2px] h-24" role="img" aria-label="Diagnósticos y leads por día">
+      <div className="flex items-end gap-[2px] h-24" role="img" aria-label="Visitantes y leads por día">
         {serie.map((d) => (
-          <div key={d.dia} className="flex-1 flex flex-col justify-end gap-[1px] group relative">
+          <div key={d.dia} className="flex-1 flex flex-col justify-end gap-[1px]">
             <div
               className="bg-tr-lime rounded-t-[2px]"
-              style={{ height: `${(d.diagnosticos / max) * 100}%` }}
-              title={`${d.dia}: ${d.diagnosticos} diagnósticos`}
+              style={{ height: `${(d.visitantes / max) * 100}%` }}
+              title={`${d.dia}: ${d.visitantes} visitantes, ${d.diagnosticos} análisis`}
             />
             <div
               className="bg-tr-green-strong rounded-b-[2px]"
@@ -87,7 +87,7 @@ function SerieDiaria({ serie }: { serie: MetricasCaptacion["porDia"] }) {
       </div>
       <div className="flex gap-4 mt-2 text-caption text-tr-muted">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-tr-lime" /> Diagnósticos
+          <span className="w-2.5 h-2.5 rounded-sm bg-tr-lime" /> Visitantes
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-tr-green-strong" /> Leads
@@ -262,7 +262,21 @@ export default function AdminPage() {
               <Tarjeta
                 etiqueta="Tasa de conversión"
                 valor={pct(metricas.tasaConversion)}
-                detalle={`${metricas.leads} leads / ${metricas.diagnosticos} diagnósticos`}
+                detalle={`${metricas.visitantesConLead} de ${metricas.visitantes} visitantes dejaron contacto`}
+              />
+              <Tarjeta
+                etiqueta="Visitantes"
+                valor={String(metricas.visitantes)}
+                detalle={`${metricas.diagnosticos} análisis · ${metricas.diagnosticosPorVisitante.toFixed(1)} por visitante`}
+              />
+              <Tarjeta
+                etiqueta="Leads"
+                valor={String(metricas.leads)}
+                detalle={`${
+                  metricas.leadsPorDiagnostico === null
+                    ? "sin análisis registrados"
+                    : `${(metricas.leadsPorDiagnostico * 100).toFixed(0)} por cada 100 análisis`
+                }`}
               />
               <Tarjeta
                 etiqueta="Tiempo medio de respuesta"
@@ -280,6 +294,17 @@ export default function AdminPage() {
                 detalle="aceptan novedades por WhatsApp"
               />
             </div>
+
+            <p className={`${cardStyles} p-3 text-caption text-tr-muted leading-relaxed`}>
+              La tasa de conversión cuenta <strong>personas, no análisis</strong>: el
+              denominador son los visitantes distintos que han hecho al menos un
+              diagnóstico, y el numerador los que además han dejado el teléfono. Un
+              agricultor que sube seis fotos en un rato sigue siendo un visitante, no
+              seis oportunidades. El ratio se limita al 100 % por si alguien repite
+              contacto.               visitor se identifican con una cookie propia de 180 días,
+              sin registro ni cuenta: es anónimo, pero en un dispositivo compartido
+              acumula los análisis de quien lo use antes.
+            </p>
 
             <div className={`${cardStyles} p-4`}>
               <h2 className="font-heading font-semibold text-tr-forest text-small mb-3">

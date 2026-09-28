@@ -96,13 +96,17 @@ export interface LeadFila {
 }
 
 export interface MetricasCaptacion {
+  visitantes: number;
   diagnosticos: number;
+  diagnosticosPorVisitante: number;
   leads: number;
+  visitantesConLead: number;
   tasaConversion: number | null;
+  leadsPorDiagnostico: number | null;
   porEstado: { estado: EstadoLead; total: number }[];
   porPrioridad: { prioridad: PrioridadLead; total: number }[];
   porOrigen: { origen: OrigenLead; total: number }[];
-  porDia: { dia: string; diagnosticos: number; leads: number }[];
+  porDia: { dia: string; visitantes: number; diagnosticos: number; leads: number }[];
   tiempoMedioRespuestaHoras: number | null;
   leadsSinResponder: number;
   conversionComercial: number;

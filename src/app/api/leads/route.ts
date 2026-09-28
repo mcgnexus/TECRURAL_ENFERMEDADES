@@ -3,6 +3,7 @@ import { z } from "zod";
 import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
+import { uidDeVisitante } from "@/lib/identidad";
 import { validarDataUrlImagen } from "@/lib/imagen";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, PrioridadLead } from "@/types/lead";
@@ -175,7 +176,13 @@ export async function POST(request: NextRequest) {
 
     await initDatabase();
 
+    // Visitante desde la cookie httpOnly del proxy, nunca desde el cuerpo: si
+    // no, el lead no se puede atribuir y la conversión por personas no es
+    // medible.
+    const usuarioId = await uidDeVisitante();
+
     const guardado = await guardarLead({
+      usuarioId: usuarioId ?? undefined,
       nombre: datos.nombre || "No facilitado",
       telefono: datos.telefono,
       municipio: datos.municipio || datos.contexto?.municipio || undefined,
