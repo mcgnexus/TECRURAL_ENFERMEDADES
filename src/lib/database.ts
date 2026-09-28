@@ -212,6 +212,13 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_leads_usuario
     ON leads(usuario_id)
   `;
+
+  // Los diagnósticos de las pruebas de desarrollo usaban el identificador fijo
+  // "usuario_demo". No son visitantes reales y contarlos hundiría la tasa de
+  // conversión. Es idempotente: cuando no quedan, el DELETE no afecta a nadie.
+  await db`
+    DELETE FROM diagnosticos WHERE usuario_id = 'usuario_demo'
+  `;
   })();
 }
 
