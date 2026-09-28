@@ -46,7 +46,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "No disponible" }, { status: 404 });
     }
 
-    const parsed = feedbackSchema.safeParse(await request.json());
+    // El cuerpo se parsea con su propio try: un JSON malformado es un error
+    // DEL CLIENTE (400), no del servidor. Sin esto, `request.json()` lanzaba un
+    // SyntaxError que caía en el catch general y devolvía un 500, ensuciando el
+    // registro con un fallo que no lo era.
+    let cuerpo: unknown;
+    try {
+      cuerpo = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Cuerpo de la petición no válido" }, { status: 400 });
+    }
+
+    const parsed = feedbackSchema.safeParse(cuerpo);
     if (!parsed.success) {
       const primero = parsed.error.issues[0];
       return NextResponse.json(
