@@ -96,6 +96,72 @@ function mensaje(ambito: Ambito, motivo: "visitante" | "global"): string {
  * legítimos cuando la base de datos tiene un problema es peor que una cuota que
  * se pierde durante la incidencia.
  */
+/**
+ * Intenta consumir una unidad de una clave. Atómico.
+ *
+ * El CASE distingue los dos casos:
+ *   - ventana vencida  -> el contador vuelve a 1 (se renueva sola, sin tarea)
+ *   - ventana vigente  -> contador + 1
+ * y el WHERE es la condición de permiso: renovar siempre, incrementar solo si
+ * no está topado. Si la clave no cumple el WHERE, su fila no aparece en el
+ * RETURNING, y esa ausencia es la señal de "en el tope".
+ *
+ * Dos detalles que costaron sangre y conviene no deshacer:
+ *
+ * 1. El WHERE va con OR, no con AND. Con `resets_en <= NOW() AND contador <
+ *    limite` una fila recién insertada (resets_en en el futuro) nunca cumpliría
+ *    la primera condición y no se incrementaría nunca.
+ *
+ * 2. La tabla se califica con un ALIAS (`AS c`). Calificarla con el nombre real
+ *    (`cuotas.`) falla al insertar varias filas en una sentencia: Postgres da
+ *    "missing FROM-clause entry for table cuotas", porque con más de una fila
+ *    de VALUES la referencia al nombre no resuelve.
+ */
+async function intentarConsumir(
+  clave: string,
+  limite: number,
+  fin: Date
+): Promise<{ permitido: boolean; contador: number }> {
+  const filas = await getSql()`
+    INSERT INTO cuotas AS c (clave, contador, limite, resets_en)
+    VALUES (${clave}, 1, ${limite}, ${fin})
+    ON CONFLICT (clave) DO UPDATE
+      SET contador = CASE
+                        WHEN c.resets_en <= NOW() THEN 1
+                        ELSE c.contador + 1
+                      END,
+          limite = EXCLUDED.limite,
+          resets_en = EXCLUDED.resets_en,
+          actualizado_en = NOW()
+      WHERE c.resets_en <= NOW()
+         OR c.contador < c.limite
+    RETURNING contador, limite
+  `;
+
+  if (filas.length === 0) return { permitido: false, contador: 0 };
+  return { permitido: true, contador: Number(filas[0].contador) };
+}
+
+/**
+ * Devuelve una unidad consumida, para compensar un rechazo posterior.
+ *
+ * Solo se usa cuando el primer contador ya se consumió y el segundo rechaza:
+ * sin esta compensación, al visitante se le cobraría un uso por una petición
+ * que no se atendió. GREATEST(..., 0) evita que un contador quede negativo si
+ * algo va mal.
+ */
+async function devolverUnidad(clave: string): Promise<void> {
+  try {
+    await getSql()`
+      UPDATE cuotas SET contador = GREATEST(contador - 1, 0) WHERE clave = ${clave}
+    `;
+  } catch (error) {
+    // La compensación es best-effort: perder una unidad es mucho menos grave
+    // que propagar un error por ella.
+    console.warn("No se pudo devolver la unidad de cuota:", error);
+  }
+}
+
 export async function consumirUso(
   ambito: Ambito,
   uid: string | null
@@ -122,46 +188,18 @@ export async function consumirUso(
     const cVisita = claveVisitante(ambito, uid, ahora);
     const cGlobal = claveGlobal(ambito, ahora);
 
-    // Una sola sentencia para las dos claves. El CASE distingue los dos casos:
-    //   - ventana vencida  -> el contador vuelve a 1 (se renueva sola, sin tarea)
-    //   - ventana vigente  -> contador + 1
-    // y el WHERE es la condición de permiso: renovar siempre, incrementar solo
-    // si no está topado. Si una clave no cumple el WHERE, su fila no aparece en
-    // el RETURNING, y esa ausencia es justamente la señal de "en el tope".
+    // El contador del visitante va PRIMERO, y esto es lo que impide la denegación
+    // de servicio. Cuando los dos contadores se incrementaban en la misma
+    // sentencia, una petición rechazada por cuota de visitante consumía de todos
+    // modos una unidad del tope global: quien hubiera agotado su cuota podía
+    // seguir enviando peticiones y vaciar los 500 diarios globales, dejando sin
+    // servicio a todo el mundo. Comprobado contra la base de datos real: un solo
+    // rechazo dejaba el contador global en 1.
     //
-    // Dos detalles que costaron sangre y conviene no deshacer:
-    //
-    // 1. El WHERE va con OR, no con AND. Con `resets_en <= NOW() AND contador
-    //    < limite` una fila recién insertada (resets_en en el futuro) nunca
-    //    cumpliría la primera condición y no se incrementaría nunca.
-    //
-    // 2. La tabla se califica con un ALIAS (`AS c`). Calificarla con el nombre
-    //    real (`cuotas.`) falla al insertar varias filas en una sentencia:
-    //    Postgres da "missing FROM-clause entry for table cuotas", porque con
-    //    más de una fila de VALUES la referencia al nombre no resuelve.
-    const filas = await getSql()`
-      INSERT INTO cuotas AS c (clave, contador, limite, resets_en)
-      VALUES
-        (${cVisita}, 1, ${limites.porVisitante}, ${fin}),
-        (${cGlobal}, 1, ${limites.global}, ${fin})
-      ON CONFLICT (clave) DO UPDATE
-        SET contador = CASE
-                          WHEN c.resets_en <= NOW() THEN 1
-                          ELSE c.contador + 1
-                        END,
-            limite = EXCLUDED.limite,
-            resets_en = EXCLUDED.resets_en,
-            actualizado_en = NOW()
-        WHERE c.resets_en <= NOW()
-           OR c.contador < c.limite
-      RETURNING clave, contador, limite, resets_en
-    `;
-
-
-    const visita = filas.find((f) => f.clave === cVisita);
-    const global = filas.find((f) => f.clave === cGlobal);
-
-    if (filas.length === 0 || !visita) {
+    // Ahora, si el visitante ya está en el tope, se corta aquí y el contador
+    // global no se toca.
+    const visita = await intentarConsumir(cVisita, limites.porVisitante, fin);
+    if (!visita.permitido) {
       return {
         permitido: false,
         motivo: "visitante",
@@ -171,7 +209,11 @@ export async function consumirUso(
       };
     }
 
-    if (filas.length < 2 || !global) {
+    const global = await intentarConsumir(cGlobal, limites.global, fin);
+    if (!global.permitido) {
+      // El tope global bloquea a un visitante que sí tenía margen: se le
+      // devuelve la unidad para que no la pierda por una petición no atendida.
+      await devolverUnidad(cVisita);
       return {
         permitido: false,
         motivo: "global",
@@ -181,7 +223,7 @@ export async function consumirUso(
       };
     }
 
-    return { permitido: true, restantes: Number(visita.limite) - Number(visita.contador) };
+    return { permitido: true, restantes: limites.porVisitante - visita.contador };
   } catch (error) {
     console.error(
       "Fallo al comprobar la cuota; se permite el uso para no bloquear al usuario:",
@@ -209,27 +251,9 @@ export async function consumirUsoPorClave(
     const fin = new Date(ahora.getTime() + LIMITES[ambito].ventanaMs);
     const clave = `${ambito}:ip:${sufijo}:${dia(ahora)}`;
 
-    const filas = await getSql()`
-      INSERT INTO cuotas AS c (clave, contador, limite, resets_en)
-      VALUES (${clave}, 1, ${limitePorClave}, ${fin})
-      ON CONFLICT (clave) DO UPDATE
-        SET contador = CASE
-                          WHEN c.resets_en <= NOW() THEN 1
-                          ELSE c.contador + 1
-                        END,
-            limite = EXCLUDED.limite,
-            resets_en = EXCLUDED.resets_en,
-            actualizado_en = NOW()
-        WHERE c.resets_en <= NOW()
-           OR c.contador < c.limite
-      RETURNING contador, limite
-    `;
-
-    if (filas.length === 0) return { permitido: false, restantes: 0 };
-    return {
-      permitido: true,
-      restantes: Number(filas[0].limite) - Number(filas[0].contador),
-    };
+    const r = await intentarConsumir(clave, limitePorClave, fin);
+    if (!r.permitido) return { permitido: false, restantes: 0 };
+    return { permitido: true, restantes: limitePorClave - r.contador };
   } catch (error) {
     console.error("Fallo al comprobar la cuota por clave; se permite:", error);
     return { permitido: true, restantes: -1 };

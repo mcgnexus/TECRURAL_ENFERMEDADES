@@ -7,6 +7,7 @@ import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm }
 import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
+import { mensajeAmigable, errorDeRespuesta } from "@/lib/error-analisis";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
@@ -22,30 +23,6 @@ const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest 
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
-
-/** Traduce errores técnicos a mensajes claros para el agricultor. */
-function mensajeAmigable(err: unknown, status?: number): string {
-  if (err instanceof TypeError) {
-    return "Sin conexión suficiente. Comprueba tu red y reintenta: no has perdido las fotos ni los datos.";
-  }
-  if (status === 429) {
-    return err instanceof Error && err.message
-      ? err.message
-      : "Se ha alcanzado el límite de uso temporal. Espera un rato y vuelve a intentarlo.";
-  }
-  if (status === 400 || status === 413) {
-    if (err instanceof Error && err.message) return err.message;
-    return "Revisa la foto e inténtalo de nuevo.";
-  }
-  if (status === 502) {
-    if (err instanceof Error && err.message) return err.message;
-    return "No hemos podido interpretar bien esta foto. Repítela con más luz y el síntoma enfocado.";
-  }
-  if (status === 503) {
-    return "El servicio de análisis no está disponible ahora mismo. Inténtalo de nuevo en unos minutos.";
-  }
-  return "No hemos podido completar el análisis. Comprueba tu conexión e inténtalo de nuevo.";
-}
 
 function HomeContent() {
   const [vista, setVista] = useState<Vista>("portada");
@@ -111,11 +88,15 @@ function HomeContent() {
         body: formData,
       });
 
-      const data = await response.json();
-
+      // El cuerpo se lee UNA sola vez: un `Response` no se puede consumir dos
+      // veces. Y sin exigir que sea JSON, porque la plataforma responde texto
+      // plano en un 413 y un `response.json()` directo lanzaría un SyntaxError
+      // que se perdería como error genérico, sin estado ni mensaje útil.
       if (!response.ok) {
-        throw new Error(data.error || "Error en el análisis");
+        throw await errorDeRespuesta(response);
       }
+
+      const data = (await response.json()) as DiagnosticoWithMeta;
 
       setDiagnostico(data);
       setVista("resultado");
