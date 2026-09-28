@@ -321,11 +321,67 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
     RETURNING id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
               mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
               consentimiento_comercial, consentimiento_texto_version, canal_comercial,
-              baja_comercial, imagenes, origen_campana, utm_source, utm_medium, utm_campaign,
+              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
+              origen_campana, utm_source, utm_medium, utm_campaign,
               utm_content, utm_term, primera_response_at, notas, created_at
   `;
 
   return mapearLead(row);
+}
+
+/**
+ * Fotos de un lead concreto, una a una.
+ *
+ * El listado NUNCA trae las imágenes, solo jsonb_array_length. Y no es
+ * descuido: con hasta 3 fotos de WebP por lead, devolverlas en el listado
+ * multiplicaría por varios megas cada respuesta de /admin, que con 100 leads
+ * son cientos de megabytes de fotos que el técnico no va a mirar. Por eso van
+ * aparte, bajo demanda.
+ *
+ * Se pide una por índice (`indice`) en lugar de todas juntas para no arrastrar
+ * 3 fotos cuando solo se quiere ver una, y para que un `<img>` del panel
+ * pueda apuntar directamente a una URL.
+ */
+export async function obtenerFotoLead(
+  leadId: string,
+  indice: number
+): Promise<{ dataUrl: string; mimeType: string } | null> {
+  const db = getSql();
+  // El índice llega como parámetro ligado, y el operador -> de JSONB exige un
+  // entero: sin el ::int explícito, Postgres no sabe si interpretarlo como
+  // posición o como clave de objeto, y devuelve null en lugar de la foto.
+  const i = Math.trunc(indice);
+  const rows = await db`
+    SELECT imagenes -> ${i}::int AS foto
+    FROM leads
+    WHERE id = ${leadId} AND jsonb_array_length(imagenes) > ${i}::int
+  `;
+
+  const foto = rows[0]?.foto;
+  if (typeof foto !== "string" || foto.length === 0) return null;
+
+  // El data URL viene ya con su cabecera ("data:image/webp;base64,...") porque
+  // es lo que se validó al guardar. Se separa el tipo para poder fijar la
+  // cabecera Content-Type de la respuesta: si no, el navegador la descargaría
+  // como un fichero en lugar de mostrarla.
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,/.exec(foto);
+  if (!match) {
+    console.warn(`Foto del lead ${leadId} (índice ${indice}) con formato inesperado`);
+    return null;
+  }
+
+  return { dataUrl: foto, mimeType: match[1] };
+}
+
+/** Número de fotos de un lead, para validar el índice antes de pedirla. */
+export async function contarFotosLead(leadId: string): Promise<number> {
+  const db = getSql();
+  const rows = await db`
+    SELECT jsonb_array_length(imagenes) AS total
+    FROM leads
+    WHERE id = ${leadId}
+  `;
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function actualizarEstadoLead(id: string, estado: string): Promise<boolean> {

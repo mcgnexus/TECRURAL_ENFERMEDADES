@@ -32,7 +32,7 @@ PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y l
   - Gestionar la solicitud de revisión: implícito al enviar (confirmado con casilla obligatoria).
   - Comunicaciones comerciales: opcional, desmarcado; se guardan estado, fecha, versión del texto (`TEXTO_COMERCIAL_VERSION`, actualmente `v1-2026-09`) y canal (`whatsapp`).
 - **Baja:** página `/baja` + `POST /api/baja` marcan `baja_comercial=true` y anulan el consentimiento comercial del teléfono indicado.
-- **Gestión comercial:** `/admin` es una herramienta interna ligera para listar y cambiar el estado de los leads. Pide el `ADMIN_TOKEN` (se guarda solo en la sesión de la pestaña, nunca en el código ni en el frontend empaquetado). Las fotos adjuntas a la revisión se descargan desde el lead para consulta.
+- **Gestión comercial:** `/admin` es una herramienta interna ligera para listar y cambiar el estado de los leads. Pide el `ADMIN_TOKEN` (se guarda solo en la sesión de la pestaña, nunca en el código ni en el frontend empaquetado). Las fotos adjuntas a la revisión se ven desde el propio panel: columna **Fotos**, con miniaturas que abren a tamaño completo. Se sirven por `GET /api/leads/fotos?lead=<id>&indice=<n>`, protegida con `x-admin-token` y con `Cache-Control: no-store` para que no acaben en caché ni en CDN. El listado nunca incluye las imágenes, solo su número: con hasta 3 fotos de WebP por lead, traerlas en cada respuesta serían cientos de megas que el técnico no va a mirar.
 - **Cualificación en servidor** (`src/lib/leads.ts`): gravedad, `requiere_experto` y hectáreas → prioridad alta/media/baja. Umbrales ajustables.
 - **WhatsApp:** solo con `NEXT_PUBLIC_TECRURAL_WHATSAPP` configurada. Nunca hardcodeado.
 
@@ -42,7 +42,7 @@ Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política 
 
 ## Migraciones
 
-`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`.
+`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`.
 
 ## Variables de entorno
 
