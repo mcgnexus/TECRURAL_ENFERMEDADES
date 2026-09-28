@@ -1,4 +1,5 @@
-import { neon, NeonQueryFunction } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
+import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { DiagnosticoResponse, DiagnosticoWithMeta, ContextoUsuario } from "@/types/diagnostico";
 import type {
   ContextoDiagnosticoLead,
@@ -181,6 +182,24 @@ function aplicarMigraciones(): Promise<void> {
     ALTER TABLE leads
     ADD COLUMN IF NOT EXISTS utm_term TEXT
   `;
+
+  // Migración 0004: métricas de captación. Sin marca de tiempo del primer
+  // contacto no se puede medir el tiempo de respuesta, que es la única forma
+  // de saber si el embudo funciona.
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS primera_response_at TIMESTAMPTZ
+  `;
+
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS notas TEXT
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_leads_created_at
+    ON leads(created_at DESC)
+  `;
   })();
 }
 
@@ -263,7 +282,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
               mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
               consentimiento_comercial, consentimiento_texto_version, canal_comercial,
               baja_comercial, imagenes, origen_campana, utm_source, utm_medium, utm_campaign,
-              utm_content, utm_term, created_at
+              utm_content, utm_term, primera_response_at, notas, created_at
   `;
 
   return mapearLead(row);
@@ -273,9 +292,23 @@ export async function actualizarEstadoLead(id: string, estado: string): Promise<
   const db = getSql();
   const rows = await db`
     UPDATE leads
-    SET estado = ${estado}
+    SET estado = ${estado},
+        primera_response_at = CASE
+          WHEN estado = 'nuevo' AND ${estado} <> 'nuevo' AND primera_response_at IS NULL
+          THEN NOW()
+          ELSE primera_response_at
+        END
     WHERE id = ${id}
     RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+/** Anota el lead con una nota interna del técnico. */
+export async function guardarNotaLead(id: string, notas: string): Promise<boolean> {
+  const db = getSql();
+  const rows = await db`
+    UPDATE leads SET notas = ${notas} WHERE id = ${id} RETURNING id
   `;
   return rows.length > 0;
 }
@@ -305,7 +338,7 @@ export async function obtenerLeads(
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
-             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, created_at
+             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
       WHERE estado = ${filtros.estado} AND prioridad = ${filtros.prioridad}
       ORDER BY puntuacion DESC, created_at DESC
@@ -320,7 +353,7 @@ export async function obtenerLeads(
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
-             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, created_at
+             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
       WHERE estado = ${filtros.estado}
       ORDER BY puntuacion DESC, created_at DESC
@@ -335,7 +368,7 @@ export async function obtenerLeads(
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
-             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, created_at
+             origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
       WHERE prioridad = ${filtros.prioridad}
       ORDER BY puntuacion DESC, created_at DESC
@@ -346,9 +379,10 @@ export async function obtenerLeads(
 
   const rows = await db`
     SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, hectareas,
-             mensaje, origen, prioridad, puntuacion, estado, contexto_diagnostico,
-             consentimiento_comercial, consentimiento_texto_version, canal_comercial,
-             baja_comercial, jsonb_array_length(imagenes) AS num_imagenes, created_at
+           mensaje, origen, prioridad, puntuacion, estado, contexto_diagnostico,
+           consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+           baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
+           primera_response_at, notas, created_at
     FROM leads
     ORDER BY puntuacion DESC, created_at DESC
     LIMIT ${limit}
@@ -356,8 +390,118 @@ export async function obtenerLeads(
   return rows.map(mapearLead);
 }
 
-type LeadRow = Record<string, unknown>;
+// ============================================================================
+// MÉTRICAS DE CAPTACIÓN
+// ============================================================================
 
+export interface MetricasCaptacion {
+  diagnosticos: number;
+  leads: number;
+  tasaConversion: number | null;
+  porEstado: { estado: EstadoLead; total: number }[];
+  porPrioridad: { prioridad: PrioridadLead; total: number }[];
+  porOrigen: { origen: OrigenLead; total: number }[];
+  porDia: { dia: string; diagnosticos: number; leads: number }[];
+  tiempoMedioRespuestaHoras: number | null;
+  leadsSinResponder: number;
+  conversionComercial: number;
+  porCampana: { campana: string; total: number }[];
+}
+
+const DIAS_SERIE = 30;
+
+/**
+ * Embudo y eficiencia. La tasa de conversión se define sobre diagnósticos
+ * guardados: cada diagnóstico es un análisis completado por un agricultor, y
+ * el lead es su conversión. El límite inferior es `usuario_demo`, que es el
+ * identificador que usa la app; así el ratio es real y no una estimación.
+ */
+export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
+  const db = getSql();
+  // Ojo: make_interval y no `NOW() - '-30 days'::interval`. Ese literal es un
+  // intervalo NEGATIVO, así que restarlo suma días hacia el futuro y la serie
+  // temporal salía vacía. Con make_interval(days => 30) no hay ambigüedad.
+  const rangoDias = DIAS_SERIE;
+
+  const [diagRows, leadRows, estadoRows, prioridadRows, origenRows, serieRows, respuestaRows, campanaRows] =
+    await Promise.all([
+      db`SELECT COUNT(*)::int AS total FROM diagnosticos WHERE usuario_id = 'usuario_demo'`,
+      db`SELECT COUNT(*)::int AS total FROM leads`,
+      db`SELECT estado, COUNT(*)::int AS total FROM leads GROUP BY estado ORDER BY total DESC`,
+      db`SELECT prioridad, COUNT(*)::int AS total FROM leads GROUP BY prioridad`,
+      db`SELECT origen, COUNT(*)::int AS total FROM leads GROUP BY origen`,
+      db`
+        WITH dias AS (
+          SELECT generate_series(
+            date_trunc('day', NOW() - make_interval(days => ${rangoDias}::int)),
+            date_trunc('day', NOW()),
+            interval '1 day'
+          ) AS dia
+        ),
+        d AS (
+          SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS total
+          FROM diagnosticos WHERE usuario_id = 'usuario_demo' GROUP BY 1
+        ),
+        l AS (
+          SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS total
+          FROM leads GROUP BY 1
+        )
+        SELECT
+          to_char(dias.dia, 'YYYY-MM-DD') AS dia,
+          COALESCE(d.total, 0) AS diagnosticos,
+          COALESCE(l.total, 0) AS leads
+        FROM dias
+        LEFT JOIN d ON d.dia = dias.dia
+        LEFT JOIN l ON l.dia = dias.dia
+        ORDER BY dias.dia ASC
+      `,
+      db`
+        SELECT
+          COUNT(*)::int AS respondidos,
+          AVG(EXTRACT(EPOCH FROM (primera_response_at - created_at)) / 3600) AS media_horas
+        FROM leads
+        WHERE primera_response_at IS NOT NULL
+      `,
+      db`
+        SELECT COALESCE(utm_campaign, origen_campana) AS campana, COUNT(*)::int AS total
+        FROM leads
+        GROUP BY 1 ORDER BY total DESC
+      `,
+    ]);
+
+  const diagnosticos = Number(diagRows[0]?.total ?? 0);
+  const leads = Number(leadRows[0]?.total ?? 0);
+  const respondidos = Number(respuestaRows[0]?.respondidos ?? 0);
+  const media = respuestaRows[0]?.media_horas;
+  const conConsentimiento = await db`
+    SELECT COUNT(*)::int AS total FROM leads WHERE consentimiento_comercial = TRUE
+  `;
+
+  return {
+    diagnosticos,
+    leads,
+    tasaConversion: diagnosticos > 0 ? leads / diagnosticos : null,
+    porEstado: estadoRows.map((r) => ({ estado: r.estado as EstadoLead, total: Number(r.total) })),
+    porPrioridad: prioridadRows.map((r) => ({
+      prioridad: r.prioridad as PrioridadLead,
+      total: Number(r.total),
+    })),
+    porOrigen: origenRows.map((r) => ({ origen: r.origen as OrigenLead, total: Number(r.total) })),
+    porDia: serieRows.map((r) => ({
+      dia: String(r.dia),
+      diagnosticos: Number(r.diagnosticos),
+      leads: Number(r.leads),
+    })),
+    tiempoMedioRespuestaHoras: media != null ? Number(media) : null,
+    leadsSinResponder: leads - respondidos,
+    conversionComercial: leads > 0 ? Number(conConsentimiento[0]?.total ?? 0) / leads : 0,
+    porCampana: campanaRows
+      .filter((r) => r.campana)
+      .map((r) => ({ campana: String(r.campana), total: Number(r.total) })),
+  };
+}
+
+type LeadRow = Record<string, unknown>;
 function mapearLead(row: LeadRow): LeadFila {
   return {
     id: row.id as string,
@@ -386,6 +530,8 @@ function mapearLead(row: LeadRow): LeadFila {
     utm_campaign: (row.utm_campaign as string | null) ?? null,
     utm_content: (row.utm_content as string | null) ?? null,
     utm_term: (row.utm_term as string | null) ?? null,
+    primera_response_at: (row.primera_response_at as Date | string | null)?.toString() ?? null,
+    notas: (row.notas as string | null) ?? null,
     created_at: (row.created_at as Date | string).toString(),
   };
 }

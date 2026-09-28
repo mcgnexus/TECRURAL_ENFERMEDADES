@@ -89,5 +89,22 @@ export interface LeadFila {
   utm_campaign: string | null;
   utm_content: string | null;
   utm_term: string | null;
+  /** Instante en que el lead salió de "nuevo" por primera vez. */
+  primera_response_at: string | null;
+  notas: string | null;
   created_at: string;
+}
+
+export interface MetricasCaptacion {
+  diagnosticos: number;
+  leads: number;
+  tasaConversion: number | null;
+  porEstado: { estado: EstadoLead; total: number }[];
+  porPrioridad: { prioridad: PrioridadLead; total: number }[];
+  porOrigen: { origen: OrigenLead; total: number }[];
+  porDia: { dia: string; diagnosticos: number; leads: number }[];
+  tiempoMedioRespuestaHoras: number | null;
+  leadsSinResponder: number;
+  conversionComercial: number;
+  porCampana: { campana: string; total: number }[];
 }

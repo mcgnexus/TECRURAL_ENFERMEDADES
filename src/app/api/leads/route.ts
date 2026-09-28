@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead } from "@/lib/database";
+import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
+import { notificarLeadNuevo } from "@/lib/notificar";
 import { validarDataUrlImagen } from "@/lib/imagen";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, PrioridadLead } from "@/types/lead";
@@ -38,7 +39,9 @@ const leadSchema = z.object({
     .transform((t) => t.replace(/[\s().-]/g, "")),
   municipio: z.string().trim().max(80).optional(),
   cultivo: z.string().trim().max(80).optional(),
-  sintoma: z.string().trim().max(120).optional(),
+  sintoma: z.string().trim().max(200).optional(),
+  // La superficie se acepta y se guarda, pero no puntúa: el pequeño
+  // agricultor no suele conocerla en hectáreas. Ver src/lib/leads.ts.
   hectareas: z.number().min(0).max(100000).optional(),
   mensaje: z.string().trim().max(1000).optional(),
   diagnostico_id: z.string().regex(UUID_REGEX, "diagnostico_id no válido").optional(),
@@ -142,7 +145,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { prioridad, puntuacion } = calcularPrioridadLead(datos.contexto, datos.hectareas);
+    const { prioridad, puntuacion } = calcularPrioridadLead(datos.contexto, datos.origen);
+
+    // Aviso de prueba del canal, sin crear lead. ?test_notificacion=1 manda un
+    // mensaje de ejemplo al destino configurado para comprobar que Telegram o
+    // el webhook están bien puestos. No toca la base de datos.
+    if (request.nextUrl.searchParams.get("test_notificacion")) {
+      const prueba = {
+        ...datos,
+        nombre: datos.nombre || "Prueba de canal",
+        telefono: datos.telefono,
+        prioridad,
+        puntuacion,
+        fotos: 0,
+        created_at: new Date().toISOString(),
+        contexto_diagnostico: datos.contexto ?? null,
+        num_imagenes: 0,
+        consentimiento_comercial: datos.consentimiento_comercial ?? false,
+        consentimiento_texto_version: null,
+        canal_comercial: null,
+        baja_comercial: false,
+        utm_campaign: datos.utm?.campaign ?? null,
+        utm_source: datos.utm?.source ?? null,
+      } as unknown as Parameters<typeof notificarLeadNuevo>[0];
+
+      await notificarLeadNuevo(prueba);
+      return NextResponse.json({ success: true, aviso: "enviado" });
+    }
 
     await initDatabase();
 
@@ -172,6 +201,17 @@ export async function POST(request: NextRequest) {
       imagenes: datos.imagenes,
       ip,
     });
+
+    // Aviso al técnico. Va DESPUÉS del guardado y no se espera: el usuario
+    // recibe su confirmación sin depender del webhook. La consulta de métricas
+    // va dentro porque tampoco debe retrasar la respuesta.
+    void (async () => {
+      try {
+        await notificarLeadNuevo(guardado, await obtenerMetricasCaptacion());
+      } catch (error) {
+        console.warn("Aviso de lead nuevo no completado:", error);
+      }
+    })();
 
     return NextResponse.json({
       success: true,
@@ -213,6 +253,14 @@ export async function GET(request: NextRequest) {
     const prioridad = request.nextUrl.searchParams.get("prioridad") as PrioridadLead | null;
     const limit = Number(request.nextUrl.searchParams.get("limit")) || 100;
 
+    // ?metricas=1 devuelve el embudo en lugar del listado. Se calcula en el
+    // servidor para que el panel no tenga que traer todos los leads y
+    // agregarlos en el cliente.
+    if (request.nextUrl.searchParams.get("metricas")) {
+      const metricas = await obtenerMetricasCaptacion();
+      return NextResponse.json({ metricas });
+    }
+
     const leads = await obtenerLeads({
       estado: estado ?? undefined,
       prioridad: prioridad ?? undefined,
@@ -229,6 +277,7 @@ export async function GET(request: NextRequest) {
 const patchSchema = z.object({
   id: z.string().regex(UUID_REGEX, "id no válido"),
   estado: z.enum(ESTADOS_LEAD, { message: "Estado comercial no válido" }),
+  notas: z.string().trim().max(2000).optional(),
 });
 
 export async function PATCH(request: NextRequest) {
@@ -252,10 +301,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     await initDatabase();
-    const actualizado = await actualizarEstadoLead(parsed.data.id, parsed.data.estado);
-
-    if (!actualizado) {
-      return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+    if (parsed.data.notas !== undefined) {
+      const anotado = await guardarNotaLead(parsed.data.id, parsed.data.notas);
+      if (!anotado) {
+        return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+      }
+    }
+    if (parsed.data.estado) {
+      const actualizado = await actualizarEstadoLead(parsed.data.id, parsed.data.estado);
+      if (!actualizado) {
+        return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+      }
     }
 
     return NextResponse.json({ success: true });

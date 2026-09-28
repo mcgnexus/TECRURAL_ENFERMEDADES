@@ -1,5 +1,5 @@
 import { obtenerHistorial } from "@/lib/database";
-import { ORGANO_LABELS, TIPO_LABELS, GRAVEDAD_LABELS, nombreCorto, porcentajeConfianza } from "@/lib/formato";
+import { ORGANO_LABELS, TIPO_LABELS, GRAVEDAD_LABELS, nombreCorto, nivelSenal } from "@/lib/formato";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 import Link from "next/link";
 import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
@@ -104,7 +104,7 @@ async function HistorialContent() {
                         {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}
                       </span>
                       <span className={badgeConfianza}>
-                        Seguridad {porcentajeConfianza(item.diagnostico.confianza)} %
+                        {nivelSenal(item.diagnostico.confianza).label}
                       </span>
                       <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
                         Impacto: {GRAVEDAD_LABELS[item.diagnostico.gravedad] || item.diagnostico.gravedad}

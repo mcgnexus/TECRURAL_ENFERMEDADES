@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ESTADOS_LEAD } from "@/types/lead";
-import type { EstadoLead, LeadFila } from "@/types/lead";
+import type { EstadoLead, LeadFila, MetricasCaptacion } from "@/types/lead";
 
 const CLAVE_TOKEN = "tr-admin-token";
 
@@ -41,9 +41,67 @@ function formatFecha(iso: string): string {
   });
 }
 
+function pct(valor: number | null): string {
+  return valor === null ? "—" : `${(valor * 100).toFixed(1)} %`;
+}
+
+function horasLegibles(horas: number | null): string {
+  if (horas === null) return "—";
+  if (horas < 1) return `${Math.round(horas * 60)} min`;
+  if (horas < 48) return `${horas.toFixed(1)} h`;
+  return `${(horas / 24).toFixed(1)} días`;
+}
+
+function Tarjeta({ etiqueta, valor, detalle }: { etiqueta: string; valor: string; detalle?: string }) {
+  return (
+    <div className={`flex-1 min-w-[150px] ${cardStyles} p-4`}>
+      <p className="text-caption uppercase tracking-wide text-tr-muted">{etiqueta}</p>
+      <p className="font-heading font-bold text-2xl text-tr-forest mt-1">{valor}</p>
+      {detalle && <p className="text-caption text-tr-muted mt-0.5">{detalle}</p>}
+    </div>
+  );
+}
+
+/** Barras apiladas de los últimos 30 días: diagnósticos frente a leads. */
+function SerieDiaria({ serie }: { serie: MetricasCaptacion["porDia"] }) {
+  if (serie.length === 0) return null;
+  const max = Math.max(1, ...serie.map((d) => Math.max(d.diagnosticos, d.leads)));
+
+  return (
+    <div>
+      <div className="flex items-end gap-[2px] h-24" role="img" aria-label="Diagnósticos y leads por día">
+        {serie.map((d) => (
+          <div key={d.dia} className="flex-1 flex flex-col justify-end gap-[1px] group relative">
+            <div
+              className="bg-tr-lime rounded-t-[2px]"
+              style={{ height: `${(d.diagnosticos / max) * 100}%` }}
+              title={`${d.dia}: ${d.diagnosticos} diagnósticos`}
+            />
+            <div
+              className="bg-tr-green-strong rounded-b-[2px]"
+              style={{ height: `${(d.leads / max) * 100}%` }}
+              title={`${d.dia}: ${d.leads} leads`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-4 mt-2 text-caption text-tr-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-tr-lime" /> Diagnósticos
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-tr-green-strong" /> Leads
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [token, setToken] = useState("");
   const [leads, setLeads] = useState<LeadFila[]>([]);
+  const [metricas, setMetricas] = useState<MetricasCaptacion | null>(null);
+  const [notas, setNotas] = useState<Record<string, string>>({});
   const [filtroEstado, setFiltroEstado] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +131,20 @@ export default function AdminPage() {
         throw new Error(data.error || "No se pudo cargar");
       }
       setLeads(data.leads ?? []);
+      setNotas(
+        Object.fromEntries((data.leads ?? []).map((l: LeadFila) => [l.id, l.notas ?? ""]))
+      );
+
+      // Las métricas van en su propia petición: no dependen del filtro por
+      // estado, que es para trabajar la cola, no para medir el embudo.
+      const resMetricas = await fetch("/api/leads?metricas=1", {
+        headers: { "x-admin-token": t },
+      });
+      if (resMetricas.ok) {
+        const dMetricas = await resMetricas.json();
+        setMetricas(dMetricas.metricas ?? null);
+      }
+
       try {
         sessionStorage.setItem(CLAVE_TOKEN, t);
       } catch {
@@ -98,6 +170,27 @@ export default function AdminPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo actualizar");
       setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, estado: estado as EstadoLead } : l)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setActualizando(null);
+    }
+  };
+
+  const guardarNotas = async (id: string) => {
+    if (!token) return;
+    setActualizando(id);
+    setError(null);
+    try {
+      const response = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({ id, notas: notas[id] ?? "" }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "No se pudo guardar la nota");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -163,6 +256,105 @@ export default function AdminPage() {
           )}
         </div>
 
+        {metricas && (
+          <div className="mb-5 space-y-4">
+            <div className="flex flex-wrap gap-3">
+              <Tarjeta
+                etiqueta="Tasa de conversión"
+                valor={pct(metricas.tasaConversion)}
+                detalle={`${metricas.leads} leads / ${metricas.diagnosticos} diagnósticos`}
+              />
+              <Tarjeta
+                etiqueta="Tiempo medio de respuesta"
+                valor={horasLegibles(metricas.tiempoMedioRespuestaHoras)}
+                detalle="desde la entrada del lead"
+              />
+              <Tarjeta
+                etiqueta="Sin responder"
+                valor={String(metricas.leadsSinResponder)}
+                detalle="en estado «nuevo»"
+              />
+              <Tarjeta
+                etiqueta="Consentimiento comercial"
+                valor={pct(metricas.conversionComercial)}
+                detalle="aceptan novedades por WhatsApp"
+              />
+            </div>
+
+            <div className={`${cardStyles} p-4`}>
+              <h2 className="font-heading font-semibold text-tr-forest text-small mb-3">
+                Últimos 30 días
+              </h2>
+              <SerieDiaria serie={metricas.porDia} />
+            </div>
+
+            <div className="flex flex-wrap gap-5">
+              <div className={`${cardStyles} p-4 flex-1 min-w-[220px]`}>
+                <h3 className="font-heading font-semibold text-tr-forest text-small mb-2">
+                  Reparto por estado
+                </h3>
+                {metricas.porEstado.length === 0 && (
+                  <p className="text-caption text-tr-muted">Sin leads todavía.</p>
+                )}
+                {metricas.porEstado.map((e) => (
+                  <p key={e.estado} className="text-small flex justify-between">
+                    <span className={ESTADO_COLORES[e.estado]}>
+                      {ESTADO_LABELS[e.estado] ?? e.estado}
+                    </span>
+                    <span className="text-tr-muted font-semibold">{e.total}</span>
+                  </p>
+                ))}
+              </div>
+
+              <div className={`${cardStyles} p-4 flex-1 min-w-[220px]`}>
+                <h3 className="font-heading font-semibold text-tr-forest text-small mb-2">
+                  Origen del lead
+                </h3>
+                {metricas.porOrigen.length === 0 && (
+                  <p className="text-caption text-tr-muted">Sin datos.</p>
+                )}
+                {metricas.porOrigen.map((o) => (
+                  <p key={o.origen} className="text-small flex justify-between">
+                    <span className="text-tr-muted">
+                      {o.origen === "post_diagnostico" ? "Tras diagnóstico" : "Contacto directo"}
+                    </span>
+                    <span className="text-tr-muted font-semibold">{o.total}</span>
+                  </p>
+                ))}
+                {metricas.porPrioridad.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-tr-line">
+                    <p className="text-caption text-tr-muted mb-1">Prioridad</p>
+                    {metricas.porPrioridad.map((p) => (
+                      <p key={p.prioridad} className="text-small flex justify-between">
+                        <span className="text-tr-muted capitalize">{p.prioridad}</span>
+                        <span className="text-tr-muted font-semibold">{p.total}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className={`${cardStyles} p-4 flex-1 min-w-[220px]`}>
+                <h3 className="font-heading font-semibold text-tr-forest text-small mb-2">
+                  Campañas
+                </h3>
+                {metricas.porCampana.length === 0 && (
+                  <p className="text-caption text-tr-muted">
+                    Ninguna lead trae UTM. Añade utm_source y utm_campaign al enlace para
+                    atribuirlas.
+                  </p>
+                )}
+                {metricas.porCampana.map((c) => (
+                  <p key={c.campana} className="text-small flex justify-between">
+                    <span className="text-tr-muted truncate">{c.campana}</span>
+                    <span className="text-tr-muted font-semibold">{c.total}</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {leads.length > 0 && (
           <div className={`${cardStyles} overflow-x-auto`}>
             <table className="w-full text-small">
@@ -179,6 +371,8 @@ export default function AdminPage() {
                   <th className="px-3 py-2">Síntoma</th>
                   <th className="px-3 py-2">Comercial</th>
                   <th className="px-3 py-2">Campaña</th>
+                  <th className="px-3 py-2">Respuesta</th>
+                  <th className="px-3 py-2">Notas</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +430,30 @@ export default function AdminPage() {
                     <td className="px-3 py-3 text-tr-muted">
                       {lead.utm_campaign ?? lead.origen_campana ?? "—"}
                       {lead.utm_source && <span className="block text-caption">src: {lead.utm_source}</span>}
+                    </td>
+                    <td className="px-3 py-3">
+                      {lead.primera_response_at ? (
+                        <span className="text-caption text-tr-muted">
+                          {horasLegibles(
+                            (new Date(lead.primera_response_at).getTime() - new Date(lead.created_at).getTime()) /
+                              3600000
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-caption text-tr-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 min-w-[220px]">
+                      <textarea
+                        rows={2}
+                        value={notas[lead.id] ?? ""}
+                        onChange={(e) => setNotas((n) => ({ ...n, [lead.id]: e.target.value }))}
+                        onBlur={() => guardarNotas(lead.id)}
+                        disabled={actualizando === lead.id}
+                        className="w-full px-2 py-1 border border-tr-line rounded-[var(--tr-radius-control)] bg-tr-paper text-tr-ink text-small resize-none"
+                        placeholder="Nota interna"
+                        aria-label={`Notas internas del lead ${lead.id}`}
+                      />
                     </td>
                   </tr>
                 ))}

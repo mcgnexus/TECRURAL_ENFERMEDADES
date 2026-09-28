@@ -13,7 +13,7 @@ import {
   TIPO_LABELS,
   GRAVEDAD_LABELS,
   nombreCorto,
-  porcentajeConfianza,
+  nivelSenal,
 } from "@/lib/formato";
 
 interface ResultsProps {
@@ -42,13 +42,13 @@ const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
-/** Nivel cualitativo de la confianza. El porcentaje acompaña siempre a la
- * etiqueta para que el agricultor pueda valorar de un vistazo el grado de
- * seguridad, sin tomarlo como una certeza. */
-function nivelSenal(conf: number): { label: string; badge: string; ayuda: string } {
-  if (conf >= 0.7) return { label: "Señales claras", badge: badgeGreen, ayuda: "La foto muestra señales consistentes con esta hipótesis." };
-  if (conf >= 0.4) return { label: "Indicios moderados", badge: badgeYellow, ayuda: "Hay indicios, pero harían falta más datos o fotos para afinar." };
-  return { label: "Señales poco claras", badge: badgeRed, ayuda: "La foto no aporta suficiente evidencia: tómala como orientación muy preliminar." };
+/** Para las causas descartadas el interes es el contrario: cuanto mas alta la
+ * confianza del diferencial, mas probable parecia y mas motivos hay para
+ * mencionarla. Se invierte la escala para que el texto signifique algo. */
+function etiquetaDiferencial(conf: number): string {
+  if (conf < 0.25) return "muy descartada";
+  if (conf < 0.5) return "poco probable";
+  return "aún posible";
 }
 
 /** Subrayado de resalte para los puntos clave que el agricultor debe leer. */
@@ -106,6 +106,8 @@ export function Results({
   const mostrarCTA = debeOfrecerRevision(contexto);
   const esSano = diag.tipo === "sano";
   const nivel = nivelSenal(diag.confianza);
+  const nivelBadge =
+    diag.confianza >= 0.7 ? badgeGreen : diag.confianza >= 0.4 ? badgeYellow : badgeRed;
 
   const enviarFeedback = async (feedback: string) => {
     if (!diagnostico.id || !feedback) return;
@@ -144,7 +146,7 @@ export function Results({
     `Observado: ${diag.sintomas_observados.slice(0, 2).join("; ") || "sin síntomas claros en la foto"}.`,
     esSano
       ? "Resultado: sin síntomas claros en esta foto."
-      : `Diagnóstico más probable: ${diag.nombre} (seguridad ${porcentajeConfianza(diag.confianza)} %, impacto potencial ${GRAVEDAD_LABELS[diag.gravedad] || diag.gravedad}).`,
+      : `Diagnóstico más probable: ${diag.nombre} (nivel de certeza: ${nivel.label.toLowerCase()}, impacto potencial ${GRAVEDAD_LABELS[diag.gravedad] || diag.gravedad}).`,
     recomendacion ? `Pasos prudentes: ${recomendacion}` : "",
     "Orientación generada automáticamente a partir de una foto; no sustituye una inspección técnica.",
   ].filter(Boolean).join("\n");
@@ -224,7 +226,7 @@ export function Results({
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className={badgeSecondary}>{TIPO_LABELS[diag.tipo] || diag.tipo}</span>
-          <span className={nivel.badge}>Seguridad: {porcentajeConfianza(diag.confianza)} %</span>
+          <span className={nivelBadge}>Nivel de certeza: {nivel.label}</span>
           <span
             className={
               diag.gravedad === "leve" ? badgeGreen : diag.gravedad === "moderada" ? badgeYellow : badgeRed
@@ -268,8 +270,8 @@ export function Results({
                 <li key={i} className="text-body text-tr-muted">
                   <div className="flex flex-wrap items-baseline gap-2">
                     {clave(nombreCorto(d.nombre))}
-                    <span className="text-caption font-semibold text-tr-muted">
-                      {porcentajeConfianza(d.confianza)} %
+                    <span className="text-caption text-tr-muted">
+                      {etiquetaDiferencial(d.confianza)}
                     </span>
                   </div>
                   {d.por_que_descartado && <p className="mt-0.5">{d.por_que_descartado}</p>}
@@ -398,10 +400,10 @@ export function Results({
           <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación se genera
           automáticamente a partir de tu foto y puede contener errores. Es una hipótesis inicial,
           no un diagnóstico definitivo, y no sustituye una inspección profesional ni una
-          prescripción de tratamientos. El porcentaje de seguridad indica el grado de coincidencia
-          con los síntomas de la foto, no una certeza. Tu foto se envía a un servicio de IA externo
-          para el análisis y no se guarda, salvo que solicites una revisión (en ese caso se comparte
-          con el técnico, informándote antes).
+          prescripción de tratamientos. El nivel de certeza describe cuánto encajan los síntomas
+          de la foto con la causa propuesta, no la probabilidad de que sea correcta. Tu foto se
+          envía a un servicio de IA externo para el análisis y no se guarda, salvo que solicites
+          una revisión (en ese caso se comparte con el técnico, informándote antes).
         </p>
       </div>
 

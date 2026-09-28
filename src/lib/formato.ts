@@ -24,10 +24,19 @@ export const ORGANO_LABELS: Record<string, string> = {
   planta_completa: "Planta completa",
 };
 
-/** Porcentaje redondeado y acotado a 0-100 para mostrar junto al nivel. */
-export function porcentajeConfianza(confianza: number | undefined): number {
-  if (typeof confianza !== "number" || !Number.isFinite(confianza)) return 0;
-  return Math.max(0, Math.min(100, Math.round(confianza * 100)));
+/** Etiquetas por tramo de confianza. Es la unica representacion de la
+ * confianza que ve el agricultor: la confianza del modelo no esta calibrada
+ * contra casos confirmados por un tecnico, asi que un porcentaje daria una
+ * precision que no existe. */
+export const NIVELES_SENAL = [
+  { minimo: 0.7, label: "Señales claras", ayuda: "La foto muestra señales consistentes con esta hipótesis." },
+  { minimo: 0.4, label: "Indicios moderados", ayuda: "Hay indicios, pero harían falta más datos o fotos para afinar." },
+  { minimo: 0, label: "Señales poco claras", ayuda: "La foto no aporta suficiente evidencia: tómala como orientación muy preliminar." },
+] as const;
+
+export function nivelSenal(confianza: number | undefined) {
+  const valor = typeof confianza === "number" && Number.isFinite(confianza) ? confianza : 0;
+  return NIVELES_SENAL.find((n) => valor >= n.minimo) ?? NIVELES_SENAL[NIVELES_SENAL.length - 1];
 }
 
 /** Prefijos divulgativos que el modelo añade al nombre del diagnóstico. */

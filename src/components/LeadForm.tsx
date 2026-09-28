@@ -50,6 +50,7 @@ export function LeadForm({
     telefono: "",
     municipio: prefill?.municipio ?? "",
     cultivo: prefill?.cultivo ?? "",
+    sintoma: "",
     canalContacto: "llamada",
     mensaje: mensajeInicial,
     solicitudRespuesta: false,
@@ -77,10 +78,29 @@ export function LeadForm({
   const mensajeWhatsApp = (() => {
     const partes = ["Hola, he usado la app de diagnóstico de TecRural"];
     if (contexto?.especie) partes.push(`sobre ${contexto.especie}`);
+    else if (form.cultivo.trim()) partes.push(`sobre ${form.cultivo.trim()}`);
     if (contexto?.gravedad && contexto.gravedad !== "leve") partes.push(`con un problema de gravedad ${contexto.gravedad}`);
     partes.push("y me gustaría que revisaran mi caso.");
     return partes.join(" ");
   })();
+
+  /**
+   * El contexto que se envía al servidor. Tras un diagnóstico ya viene montado
+   * con especie, gravedad y tipo. Sin diagnóstico (página de contacto) hay que
+   * construirlo con lo que la persona escribe, porque si se envía vacío el
+   * servidor no tiene con qué cualificar el lead y lo deja siempre en "baja".
+   */
+  const contextoFinal: ContextoDiagnosticoLead | undefined = (() => {
+    if (contexto) return contexto;
+    const propio: ContextoDiagnosticoLead = {};
+    if (form.municipio.trim()) propio.municipio = form.municipio.trim();
+    if (form.cultivo.trim()) propio.cultivo = form.cultivo.trim();
+    const sintoma = form.sintoma.trim();
+    if (sintoma) propio.sintoma = sintoma;
+    return Object.keys(propio).length > 0 ? propio : undefined;
+  })();
+
+  const sintomaFinal = prefill?.sintoma || contexto?.sintoma || form.sintoma.trim() || undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +120,7 @@ export function LeadForm({
           telefono: form.telefono.trim(),
           municipio: form.municipio.trim() || undefined,
           cultivo: form.cultivo.trim() || undefined,
-          sintoma: prefill?.sintoma || contexto?.sintoma || undefined,
+          sintoma: sintomaFinal,
           mensaje: form.mensaje.trim() || undefined,
           diagnostico_id: diagnosticoId,
           origen,
@@ -108,9 +128,7 @@ export function LeadForm({
           solicitud_respuesta: form.solicitudRespuesta,
           consentimiento_comercial: form.consentimientoComercial,
           web: form.web,
-          contexto: contexto?.especie || contexto?.gravedad || contexto?.tipo || contexto?.requiere_experto !== undefined
-            ? contexto
-            : undefined,
+          contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
           imagenes: adjuntarFotos && adjuntarFotos.length > 0
             ? adjuntarFotos.slice(0, 3)
@@ -291,6 +309,26 @@ export function LeadForm({
             <option value="whatsapp">WhatsApp</option>
           </select>
         </div>
+
+        {/* Sin diagnóstico detrás (página de contacto) el técnico no sabe qué
+            le pasa al cultivo. Este campo sustituye a las hectáreas: es lo que
+            el pequeño agricultor sí sabe describir. */}
+        {!contexto?.sintoma && !prefill?.sintoma && (
+          <div>
+            <label htmlFor={`lead-sintoma-${origen}`} className={labelCls}>
+              ¿Qué has observado en el cultivo? <span className="font-normal text-tr-muted">(opcional)</span>
+            </label>
+            <textarea
+              id={`lead-sintoma-${origen}`}
+              rows={2}
+              value={form.sintoma}
+              onChange={(e) => set("sintoma", e.target.value)}
+              disabled={estado === "enviando"}
+              className={`${inputCls} resize-none`}
+              placeholder="Por ejemplo: hojas con manchas marrones desde hace dos semanas"
+            />
+          </div>
+        )}
 
         <div>
           <label htmlFor={`lead-mensaje-${origen}`} className={labelCls}>
