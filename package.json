@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev --webpack",
+    "prebuild": "node scripts/comprobar-esquema-sin-borrados.mjs",
     "build": "node node_modules/next/dist/bin/next build",
-    "start": "node node_modules/next/dist/bin/next start"
+    "start": "node node_modules/next/dist/bin/next start",
+    "comprobar:esquema": "node scripts/comprobar-esquema-sin-borrados.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
