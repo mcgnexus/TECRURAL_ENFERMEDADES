@@ -38,6 +38,40 @@ function sanitizarSintomas(sintomas: string[]): string[] {
     .slice(0, 8);
 }
 
+/** Normaliza el nombre del diagnóstico al formato "Compatible con X" para que la
+ * vista pueda mostrarlo de un vistazo, con o sin el prefijo que devuelve el modelo. */
+function normalizarNombreDiagnostico(nombre: string): string {
+  const limpio = nombre.trim().replace(/\s+/g, " ").replace(/[.\s]+$/, "");
+  if (!limpio) return "Compatible con un problema no identificado.";
+  if (/^compatible con\b/i.test(limpio)) {
+    return `Compatible con ${limpio.replace(/^compatible con\s*/i, "")}.`;
+  }
+  return `Compatible con ${limpio}.`;
+}
+
+/** Normaliza cada texto visible: espacio simple, mayúscula inicial y punto final. */
+function normalizarTextoVisible(texto: string): string {
+  const limpio = texto.trim().replace(/\s+/g, " ");
+  if (!limpio) return limpio;
+  const conPunto = /[.!?…]$/.test(limpio) ? limpio : `${limpio}.`;
+  return conPunto.charAt(0).toUpperCase() + conPunto.slice(1);
+}
+
+function normalizarTextoPaciente(diagnostico: DiagnosticoResponse): void {
+  const d = diagnostico.diagnostico;
+  d.nombre = normalizarNombreDiagnostico(d.nombre);
+  d.sintomas_observados = d.sintomas_observados.map(normalizarTextoVisible);
+  if (diagnostico.diagnosticos_diferenciales) {
+    for (const dif of diagnostico.diagnosticos_diferenciales) {
+      dif.nombre = normalizarNombreDiagnostico(dif.nombre);
+      if (dif.por_que_descartado) dif.por_que_descartado = normalizarTextoVisible(dif.por_que_descartado);
+    }
+  }
+  if (diagnostico.datos_faltantes) {
+    diagnostico.datos_faltantes = diagnostico.datos_faltantes.map(normalizarTextoVisible);
+  }
+}
+
 function validarCoherencia(diagnostico: DiagnosticoResponse): { valido: boolean; errores: string[] } {
   const errores: string[] = [];
 
@@ -98,7 +132,7 @@ function notaCalidadImagen(diagnostico: DiagnosticoResponse): string {
   if (calidad.encuadre === "insuficiente") problemas.push("encuadre insuficiente");
 
   if (problemas.length === 0) return "";
-  return ` ⚠ Calidad de imagen: ${problemas.join(", ")}. Una foto más clara permitiría afinar mejor la orientación.`;
+  return ` Calidad de la foto: ${problemas.join(", ")}. Una foto más clara permitiría afinar mejor la orientación.`;
 }
 
 interface ImagenValidada extends ImagenAnalisis {
@@ -170,17 +204,20 @@ export async function POST(request: NextRequest) {
     }
 
     diagnostico.diagnostico.sintomas_observados = sanitizarSintomas(diagnostico.diagnostico.sintomas_observados);
+    normalizarTextoPaciente(diagnostico);
 
     const notaCalidad = notaCalidadImagen(diagnostico);
     if (notaCalidad) {
-      diagnostico.recomendacion = `${diagnostico.recomendacion}${notaCalidad}`;
+      diagnostico.recomendacion = `${diagnostico.recomendacion.trim()} ${notaCalidad}`;
     }
 
     const validacion = validarCoherencia(diagnostico);
     if (!validacion.valido) {
+      // El detalle técnico se queda en el log: al agricultor solo se le da
+      // un aviso comprensible, sin jerga interna ni nombres de campos.
       console.warn("Validación de coherencia fallida:", validacion.errores);
       diagnostico.requiere_experto = true;
-      diagnostico.recomendacion = `${diagnostico.recomendacion} ⚠ La revisión automática detectó inconsistencias (${validacion.errores.join("; ")}). Conviene que un técnico confirme esta orientación.`;
+      diagnostico.recomendacion = `${diagnostico.recomendacion.trim()} La revisión automática detectó datos que no encajan del todo, por lo que conviene que un técnico confirme esta orientación.`;
     }
 
     if (requiereExpertoPorValidacion(diagnostico)) {

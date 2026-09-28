@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { CameraCapture, type FotosEstado } from "@/components/CameraCapture";
+import { CameraCapture, type FotosEstado, type FotoCapturada } from "@/components/CameraCapture";
 import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
 import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
@@ -10,6 +10,11 @@ import { trackEvento } from "@/lib/analitica";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
+
+/** Data URL completo (con su mimeType real, WebP o JPEG) de una foto capturada. */
+function dataUrlFoto(foto: FotoCapturada): string {
+  return `data:${foto.mimeType};base64,${foto.base64}`;
+}
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
 
@@ -87,7 +92,6 @@ function HomeContent() {
       setDiagnostico(data);
       setVista("resultado");
       trackEvento("analisis_completado", {
-        proveedor: data.proveedor_usado,
         gravedad: data.diagnostico?.gravedad,
         tipo: data.diagnostico?.tipo,
         requiere_experto: data.requiere_experto,
@@ -125,17 +129,17 @@ function HomeContent() {
           <header className="mb-8 text-center">
             <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Orientación inicial</h1>
             <p className="text-tr-muted mt-1 text-body">
-              Hipótesis de trabajo a partir de tu foto · No es un diagnóstico definitivo
+              Orientación a partir de tu foto · No es un diagnóstico definitivo
             </p>
           </header>
 
           <Results
             diagnostico={diagnostico}
-            imagenPreview={`data:${fotos.principal.mimeType};base64,${fotos.principal.base64}`}
-            fotosBase64={[
-              fotos.principal.base64,
-              ...(fotos.enves ? [fotos.enves.base64] : []),
-              ...(fotos.planta_completa ? [fotos.planta_completa.base64] : []),
+            imagenPreview={dataUrlFoto(fotos.principal)}
+            fotosDataUrl={[
+              dataUrlFoto(fotos.principal),
+              ...(fotos.enves ? [dataUrlFoto(fotos.enves)] : []),
+              ...(fotos.planta_completa ? [dataUrlFoto(fotos.planta_completa)] : []),
             ]}
             contextoUsuario={resumenContexto(contexto)}
             onRetry={handleReiniciar}
@@ -267,7 +271,7 @@ function HomeContent() {
               Analizar foto
             </button>
             <p className="mt-2 text-caption text-tr-muted text-center">
-              El sistema elige automáticamente el modelo de IA más adecuado para tu foto.
+              El análisis tarda unos 10-20 segundos. Necesitas conexión; la foto no se guarda.
             </p>
           </div>
         )}
@@ -279,7 +283,7 @@ function HomeContent() {
               Analizando la foto...
             </div>
             <p className="text-small text-tr-muted mt-1">
-              Puede tardar unos segundos. Mantén esta pantalla abierta.
+              Suele tardar entre 10 y 20 segundos. Mantén esta pantalla abierta.
             </p>
           </div>
         )}

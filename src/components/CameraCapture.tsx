@@ -60,15 +60,32 @@ const SLOTS: { id: SlotFoto; label: string; descripcion: string; icon: string; o
   },
 ];
 
-// Compresión única para todos los modelos: JPEG re-codificado (elimina EXIF),
-// tamaño y resolución suficientes para distinguir manchas y síntomas pequeños.
+// Compresión única: WebP re-codificado (elimina metadatos EXIF) y tamaño y
+// resolución suficientes para distinguir manchas y síntomas pequeños. WebP
+// pesa bastante menos que JPEG a igual calidad, lo que importa en móvil con
+// cobertura limitada. Si el navegador no soporta WebP se recurre a JPEG.
 const COMPRESSION_OPTS = {
-  maxSizeMB: 0.8,
+  maxSizeMB: 0.6,
   maxWidthOrHeight: 1024,
   useWebWorker: true,
-  quality: 0.72,
+  quality: 0.75,
+  fileType: "image/webp" as const,
+  initialQuality: 0.8,
+};
+
+const COMPRESSION_OPTS_FALLBACK = {
+  ...COMPRESSION_OPTS,
   fileType: "image/jpeg" as const,
 };
+
+/** Algunos navegadores no pueden codificar a WebP; se detecta por el tipo devuelto. */
+function webpSoportado(): boolean {
+  if (typeof document === "undefined") return false;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  return canvas.toDataURL("image/webp").startsWith("data:image/webp");
+}
 
 export function CameraCapture({
   onFotosChange,
@@ -107,12 +124,17 @@ export function CameraCapture({
 
       setIsProcessing(true);
       try {
-        // La re-codificación a JPEG elimina los metadatos EXIF (ubicación, hora, dispositivo)
-        const compressed = await imageCompression(file, COMPRESSION_OPTS);
+        // La re-codificación elimina los metadatos EXIF (ubicación, hora, dispositivo)
+        const opts = webpSoportado() ? COMPRESSION_OPTS : COMPRESSION_OPTS_FALLBACK;
+        let compressed = await imageCompression(file, opts);
+        if (opts.fileType === "image/webp" && compressed.type !== "image/webp") {
+          compressed = await imageCompression(file, COMPRESSION_OPTS_FALLBACK);
+        }
+        const mimeType = compressed.type === "image/webp" ? "image/webp" : "image/jpeg";
         const base64 = await imageCompression.getDataUrlFromFile(compressed);
         fijarFoto(slot, {
           base64: base64.split(",")[1],
-          mimeType: "image/jpeg",
+          mimeType,
           file: compressed,
         });
       } catch (err) {
@@ -278,7 +300,7 @@ export function CameraCapture({
       />
 
       <p className="mt-3 text-caption text-tr-muted text-center">
-        Fotos optimizadas para envío móvil (~1024px, JPEG). Se envían al proveedor de IA para el
+        Fotos optimizadas para envío móvil (unos 1024 px, comprimidas). Se envían al servicio de
         análisis y no se guardan, salvo que solicites una revisión de TecRural.
       </p>
     </div>

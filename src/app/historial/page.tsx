@@ -1,4 +1,5 @@
 import { obtenerHistorial } from "@/lib/database";
+import { ORGANO_LABELS, TIPO_LABELS, GRAVEDAD_LABELS, nombreCorto, porcentajeConfianza } from "@/lib/formato";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 import Link from "next/link";
 import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
@@ -26,21 +27,6 @@ function formatDate(dateString: string): string {
   });
 }
 
-const TIPO_LABELS: Record<string, string> = {
-  enfermedad: "Enfermedad",
-  deficiencia_nutricional: "Deficiencia",
-  plaga: "Plaga",
-  sano: "Sano",
-};
-
-const ORGANO_LABELS: Record<string, string> = {
-  hoja: "Hoja",
-  flor: "Flor",
-  fruto: "Fruto",
-  tallo: "Tallo",
-  planta_completa: "Planta completa",
-};
-
 const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
 const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
 const badgePurple = `${badgeBase} bg-purple-100 text-purple-800`;
@@ -48,7 +34,7 @@ const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
 const badgeYellow = `${badgeBase} bg-tr-warning/15 text-tr-warning-text`;
 const badgeRed = `${badgeBase} bg-red-100 text-red-800`;
 const badgeSecondary = `${badgeBase} bg-tr-paper text-tr-ink border border-tr-line`;
-const badgeModel = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
+const badgeConfianza = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
 
 const SEVERITY_CLASSES = {
   leve: badgeGreen,
@@ -97,7 +83,12 @@ async function HistorialContent() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <p className="font-heading font-bold text-lg text-tr-forest underline decoration-tr-lime decoration-4 underline-offset-4">
+                      {item.diagnostico.tipo === "sano"
+                        ? "Sin síntomas claros"
+                        : nombreCorto(item.diagnostico.nombre)}
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap my-2">
                       <span className={badgeBlue}>
                         {ORGANO_LABELS[item.organo_detectado] || item.organo_detectado}
                       </span>
@@ -109,14 +100,15 @@ async function HistorialContent() {
                           Indicada: {item.nombre_planta}
                         </span>
                       )}
-                      <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
-                        {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}: {item.diagnostico.nombre}
+                      <span className={badgeSecondary}>
+                        {TIPO_LABELS[item.diagnostico.tipo] || item.diagnostico.tipo}
                       </span>
-                      {item.proveedor_usado && (
-                        <span className={badgeModel}>
-                          {item.proveedor_usado === "gemini" ? "Gemini 2.5 Flash" : "DeepSeek Chat"}
-                        </span>
-                      )}
+                      <span className={badgeConfianza}>
+                        Seguridad {porcentajeConfianza(item.diagnostico.confianza)} %
+                      </span>
+                      <span className={SEVERITY_CLASSES[item.diagnostico.gravedad as keyof typeof SEVERITY_CLASSES] || badgeSecondary}>
+                        Impacto: {GRAVEDAD_LABELS[item.diagnostico.gravedad] || item.diagnostico.gravedad}
+                      </span>
                     </div>
                     <p className="text-body text-tr-ink line-clamp-2">{item.recomendacion}</p>
                     <p className="mt-2 text-caption text-tr-muted">

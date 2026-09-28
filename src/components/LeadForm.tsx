@@ -21,7 +21,7 @@ interface LeadFormProps {
     sintoma?: string;
   };
   mensajeInicial?: string;
-  /** Indica que hay fotos del análisis que se adjuntarán a la revisión */
+  /** Fotos del análisis como data URL completo (WebP o JPEG) para adjuntar a la revisión */
   adjuntarFotos?: string[];
 }
 
@@ -113,7 +113,7 @@ export function LeadForm({
             : undefined,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
           imagenes: adjuntarFotos && adjuntarFotos.length > 0
-            ? adjuntarFotos.slice(0, 3).map((b64) => `data:image/jpeg;base64,${b64}`)
+            ? adjuntarFotos.slice(0, 3)
             : undefined,
         }),
       });

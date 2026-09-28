@@ -8,31 +8,23 @@ import { LeadForm } from "@/components/LeadForm";
 import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
 import { trackEvento } from "@/lib/analitica";
 import type { ContextoDiagnosticoLead } from "@/types/lead";
+import {
+  ORGANO_LABELS,
+  TIPO_LABELS,
+  GRAVEDAD_LABELS,
+  nombreCorto,
+  porcentajeConfianza,
+} from "@/lib/formato";
 
 interface ResultsProps {
   diagnostico: DiagnosticoWithMeta;
   imagenPreview: string;
-  /** Fotos comprimidas (base64 sin cabecera) para adjuntar a la revisión */
-  fotosBase64?: string[];
+  /** Fotos comprimidas como data URL completo (WebP o JPEG) para adjuntar a la revisión */
+  fotosDataUrl?: string[];
   contextoUsuario?: ContextoUsuario;
   onRetry: () => void;
   isLoading?: boolean;
 }
-
-const TIPO_LABELS: Record<string, string> = {
-  enfermedad: "Enfermedad",
-  deficiencia_nutricional: "Deficiencia nutricional",
-  plaga: "Plaga",
-  sano: "Sin síntomas claros",
-};
-
-const ORGANO_LABELS: Record<string, string> = {
-  hoja: "Hoja",
-  flor: "Flor",
-  fruto: "Fruto",
-  tallo: "Tallo",
-  planta_completa: "Planta completa",
-};
 
 const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
 
@@ -50,12 +42,22 @@ const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
-/** Nivel cualitativo: no mostramos porcentajes porque la confianza del modelo
- * no es una medida calibrada. Los valores numéricos se siguen usando internamente. */
+/** Nivel cualitativo de la confianza. El porcentaje acompaña siempre a la
+ * etiqueta para que el agricultor pueda valorar de un vistazo el grado de
+ * seguridad, sin tomarlo como una certeza. */
 function nivelSenal(conf: number): { label: string; badge: string; ayuda: string } {
   if (conf >= 0.7) return { label: "Señales claras", badge: badgeGreen, ayuda: "La foto muestra señales consistentes con esta hipótesis." };
   if (conf >= 0.4) return { label: "Indicios moderados", badge: badgeYellow, ayuda: "Hay indicios, pero harían falta más datos o fotos para afinar." };
   return { label: "Señales poco claras", badge: badgeRed, ayuda: "La foto no aporta suficiente evidencia: tómala como orientación muy preliminar." };
+}
+
+/** Subrayado de resalte para los puntos clave que el agricultor debe leer. */
+function clave(texto: string) {
+  return (
+    <span className="font-semibold text-tr-ink underline decoration-tr-lime decoration-2 underline-offset-4">
+      {texto}
+    </span>
+  );
 }
 
 function seccion(titulo: string, children: React.ReactNode) {
@@ -70,7 +72,7 @@ function seccion(titulo: string, children: React.ReactNode) {
 export function Results({
   diagnostico,
   imagenPreview,
-  fotosBase64,
+  fotosDataUrl,
   contextoUsuario,
   onRetry,
   isLoading = false,
@@ -140,9 +142,11 @@ export function Results({
   const textoCompartir = [
     `Orientación inicial TecRural — ${especie_identificada}`,
     `Observado: ${diag.sintomas_observados.slice(0, 2).join("; ") || "sin síntomas claros en la foto"}.`,
-    `Hipótesis: ${diag.nombre} (impacto potencial ${diag.gravedad}).`,
+    esSano
+      ? "Resultado: sin síntomas claros en esta foto."
+      : `Diagnóstico más probable: ${diag.nombre} (seguridad ${porcentajeConfianza(diag.confianza)} %, impacto potencial ${GRAVEDAD_LABELS[diag.gravedad] || diag.gravedad}).`,
     recomendacion ? `Pasos prudentes: ${recomendacion}` : "",
-    "Orientación generada con IA a partir de una foto; no sustituye una inspección técnica.",
+    "Orientación generada automáticamente a partir de una foto; no sustituye una inspección técnica.",
   ].filter(Boolean).join("\n");
 
   const compartir = async () => {
@@ -198,12 +202,38 @@ export function Results({
             Indicada: {diagnostico.nombre_planta}
           </span>
         )}
-        <span className={nivel.badge}>Fiabilidad: {nivel.label}</span>
-        {diagnostico.proveedor_usado && (
-          <span className={badgeSecondary}>
-            Análisis: {diagnostico.proveedor_usado === "gemini" ? "Gemini" : "DeepSeek"}
-          </span>
+      </div>
+
+      {/* Resumen destacado: lo primero que el agricultor necesita leer */}
+      <div
+        className={`p-5 ${cardStyles} border-l-4 ${
+          esSano ? "border-tr-brand-green" : diag.gravedad === "severa" ? "border-red-500" : "border-tr-warning"
+        } bg-tr-surface`}
+        aria-label="Resumen del diagnóstico"
+      >
+        <p className="text-caption font-semibold uppercase tracking-wide text-tr-muted">
+          {esSano ? "Resultado" : "Diagnóstico más probable"}
+        </p>
+        <p className="mt-1 font-heading font-bold text-2xl text-tr-forest underline decoration-tr-lime decoration-4 underline-offset-4">
+          {esSano ? "Sin síntomas claros" : nombreCorto(diag.nombre)}
+        </p>
+        {!esSano && diag.nombre.trim() !== nombreCorto(diag.nombre).trim() && (
+          <p className="mt-2 text-body text-tr-ink">
+            {clave("Lo que sugiere la foto:")} {diag.nombre}
+          </p>
         )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={badgeSecondary}>{TIPO_LABELS[diag.tipo] || diag.tipo}</span>
+          <span className={nivel.badge}>Seguridad: {porcentajeConfianza(diag.confianza)} %</span>
+          <span
+            className={
+              diag.gravedad === "leve" ? badgeGreen : diag.gravedad === "moderada" ? badgeYellow : badgeRed
+            }
+          >
+            Impacto potencial: {GRAVEDAD_LABELS[diag.gravedad] || diag.gravedad}
+          </span>
+        </div>
+        <p className="mt-2 text-caption text-tr-muted">{nivel.ayuda}</p>
       </div>
 
       {seccion("1. Qué se observa en la foto", (
@@ -224,44 +254,33 @@ export function Results({
         )
       ))}
 
-      {seccion("2. Posibles causas (hipótesis, no certezas)", (
+      {seccion("2. Otras posibilidades", (
         <div>
-          {!esSano && (
-            <div className="mb-3">
-              <p className="text-body text-tr-ink">
-                <span className="font-semibold">Hipótesis principal:</span> {diag.nombre}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span className={badgeSecondary}>{TIPO_LABELS[diag.tipo] || diag.tipo}</span>
-                <span className={nivel.badge}>{nivel.label}</span>
-                <span className={diag.gravedad === "leve" ? badgeGreen : diag.gravedad === "moderada" ? badgeYellow : badgeRed}>
-                  Impacto potencial: {diag.gravedad}
-                </span>
-              </div>
-              <p className="mt-2 text-caption text-tr-muted">{nivel.ayuda}</p>
-            </div>
-          )}
           {esSano && (
-            <p className="text-body text-tr-ink mb-3">
+            <p className="text-body text-tr-ink">
               En esta foto el cultivo no muestra señales claras de problema. Es una observación
               puntual: sigue atento por si aparecen síntomas.
             </p>
           )}
-          {diagnosticos_diferenciales && diagnosticos_diferenciales.length > 0 && (
-            <div>
-              <p className="font-body font-semibold text-tr-forest text-small">Otras posibilidades que valoraría un técnico</p>
-              <ul className="mt-2 space-y-2" role="list">
-                {diagnosticos_diferenciales.map((d, i) => (
-                  <li key={i} className="text-body text-tr-muted flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-tr-line mt-2 flex-shrink-0" />
-                    <span>
-                      <span className="text-tr-ink">{d.nombre}</span>
-                      {d.por_que_descartado ? ` — ${d.por_que_descartado}` : ""}
+          {!esSano && (
+            <ul className="space-y-3" role="list">
+              {(diagnosticos_diferenciales ?? []).map((d, i) => (
+                <li key={i} className="text-body text-tr-muted">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    {clave(nombreCorto(d.nombre))}
+                    <span className="text-caption font-semibold text-tr-muted">
+                      {porcentajeConfianza(d.confianza)} %
                     </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                  </div>
+                  {d.por_que_descartado && <p className="mt-0.5">{d.por_que_descartado}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {diagnosticos_diferenciales && diagnosticos_diferenciales.length === 0 && (
+            <p className="text-body text-tr-muted">
+              No se han identificado otras causas alternativas a partir de esta foto.
+            </p>
           )}
         </div>
       ))}
@@ -283,14 +302,19 @@ export function Results({
 
       {estado_madurez.aplica && (
         <div className={`${cardStyles} p-5`}>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h3 className="font-heading font-semibold text-tr-forest">Estado de madurez (estimación)</h3>
             <span className={badgeSecondary}>{estado_madurez.estado}</span>
           </div>
           <p className="text-small text-tr-muted">
-            {estado_madurez.dias_estimados_cosecha > 0
-              ? `~${estado_madurez.dias_estimados_cosecha} días estimados para cosecha (orientativo)`
-              : "Cosecha inminente o no estimable"}
+            {estado_madurez.dias_estimados_cosecha > 0 ? (
+              <>
+                {clave(`~${estado_madurez.dias_estimados_cosecha} días`)} estimados para la cosecha
+                (orientativo).
+              </>
+            ) : (
+              "Cosecha inminente o no estimable."
+            )}
           </p>
         </div>
       )}
@@ -304,8 +328,8 @@ export function Results({
             <div>
               <p className="font-heading font-semibold text-tr-forest">Cuándo conviene una revisión técnica</p>
               <p className="mt-1 text-body text-tr-muted">
-                En este caso, la IA no tiene suficiente evidencia para orientarte con seguridad:
-                conviene más fotos o la comprobación de un técnico agronómico.
+                En este caso, la fotografía no aporta evidencia suficiente: conviene añadir más
+                fotos o que un técnico agronómico lo compruebe.
               </p>
             </div>
           </div>
@@ -349,7 +373,7 @@ export function Results({
                   sintoma: contextoUsuario?.sintoma,
                 }}
                 mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
-                adjuntarFotos={fotosBase64}
+                adjuntarFotos={fotosDataUrl}
               />
             </div>
           )}
@@ -361,7 +385,7 @@ export function Results({
           <p className="text-small text-tr-muted">
             {esSano
               ? "El cultivo se ve bien en esta foto. Vigílalo y repite el análisis si notas cambios."
-              : "Daño leve: vigila la evolución y repite el análisis en unos días."}{" "}
+              : "Vigila la evolución y repite el análisis en unos días."}{" "}
             <Link href="/contacto" className="text-tr-green-strong font-semibold hover:underline">
               ¿Dudas? Contacta con TecRural
             </Link>
@@ -371,12 +395,13 @@ export function Results({
 
       <div className={`${cardStyles} p-4 bg-tr-paper`}>
         <p className="text-caption text-tr-muted leading-relaxed">
-          <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación la genera
-          una IA a partir de tu foto y puede contener errores. Es una hipótesis inicial, no un
-          diagnóstico definitivo, y no sustituye una inspección profesional ni una prescripción
-          de tratamientos. Tu foto se envió al proveedor de IA para el análisis y no se guarda,
-          salvo que solicites una revisión (entonces se comparte con el técnico, informándote
-          antes).
+          <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación se genera
+          automáticamente a partir de tu foto y puede contener errores. Es una hipótesis inicial,
+          no un diagnóstico definitivo, y no sustituye una inspección profesional ni una
+          prescripción de tratamientos. El porcentaje de seguridad indica el grado de coincidencia
+          con los síntomas de la foto, no una certeza. Tu foto se envía a un servicio de IA externo
+          para el análisis y no se guarda, salvo que solicites una revisión (en ese caso se comparte
+          con el técnico, informándote antes).
         </p>
       </div>
 
