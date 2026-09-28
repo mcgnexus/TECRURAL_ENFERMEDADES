@@ -905,16 +905,31 @@ export async function guardarDiagnostico(
   };
 }
 
+/**
+ * Guarda la valoración del usuario sobre un diagnóstico.
+ *
+ * El filtro por `usuario_id` es lo que limita la escritura al diagnóstico del
+ * propio visitante. Antes se actualizaba solo por `id`, así que cualquiera que
+ * conociera un identificador podía sobrescribir la valoración de otro.
+ *
+ * Devuelve si se actualizó alguna fila. Un `false` significa que el diagnóstico
+ * no existe O que es de otro visitante, y el llamador no debe distinguir esos
+ * dos casos: hacerlo permitiría sondear qué identificadores existen.
+ */
 export async function actualizarFeedback(
   diagnosticoId: string,
-  feedback: string
-): Promise<void> {
+  feedback: string,
+  usuarioId: string
+): Promise<boolean> {
   const db = getSql();
-  await db`
-    UPDATE diagnosticos 
+  const filas = await db`
+    UPDATE diagnosticos
     SET feedback_usuario = ${feedback}
     WHERE id = ${diagnosticoId}
+      AND usuario_id = ${usuarioId}
+    RETURNING id
   `;
+  return filas.length > 0;
 }
 
 export async function obtenerHistorial(usuarioId: string, limit = 50): Promise<DiagnosticoWithMeta[]> {
