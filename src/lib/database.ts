@@ -10,6 +10,12 @@ import type {
 
 let sql: NeonQueryFunction<false, false> | null = null;
 
+/** El DDL idempotente se ejecuta una sola vez por instancia. Medido: las 24
+ * sentencias costaban ~1,3 s en cada petición, incluidos los análisis, donde el
+ * usuario está esperando el resultado. En un entorno serverless la instancia
+ * se recicla, pero entonces las tablas ya existen y el coste es cero. */
+let initPromesa: Promise<void> | null = null;
+
 function getSql() {
   if (!sql) {
     const url = process.env.DATABASE_URL;
@@ -21,8 +27,9 @@ function getSql() {
   return sql;
 }
 
-export async function initDatabase() {
+function aplicarMigraciones(): Promise<void> {
   const db = getSql();
+  return (async () => {
   await db`
     CREATE TABLE IF NOT EXISTS diagnosticos (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -174,6 +181,18 @@ export async function initDatabase() {
     ALTER TABLE leads
     ADD COLUMN IF NOT EXISTS utm_term TEXT
   `;
+  })();
+}
+
+export async function initDatabase(): Promise<void> {
+  if (!initPromesa) {
+    initPromesa = aplicarMigraciones().catch((error) => {
+      // Se permite reintentar en la siguiente petición si falló.
+      initPromesa = null;
+      throw error;
+    });
+  }
+  return initPromesa;
 }
 
 export interface NuevoLead {

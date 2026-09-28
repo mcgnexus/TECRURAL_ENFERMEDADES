@@ -162,15 +162,79 @@ ${JSON.stringify(schema, null, 2)}`;
 
 function contenidoMultimodal(
   texto: string,
-  imagenes: ImagenAnalisis[]
+  imagenes: ImagenAnalisis[],
+  conImagenes = true
 ): Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> {
   return [
     { type: "text", text: texto },
-    ...imagenes.map((img) => ({
-      type: "image_url" as const,
-      image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
-    })),
+    ...(conImagenes
+      ? imagenes.map((img) => ({
+          type: "image_url" as const,
+          image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+        }))
+      : []),
   ];
+}
+
+const ESPERA_REINTENTO_MS = [600, 1500, 3000];
+const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Saturación o corte de red: transitorio, merece la pena reintentar. */
+function esReintentable(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (status === 429 || status === 500 || status === 502 || status === 503) return true;
+  return /rate limit|overloaded|timeout|ECONN|fetch failed|socket/i.test(
+    String((error as { message?: string })?.message ?? "")
+  );
+}
+
+interface LlamadaOpts {
+  prompt: string;
+  maxTokens: number;
+  imagenes: ImagenAnalisis[];
+  /** La verificación solo razona sobre texto ya extraído: reenviar la imagen
+   * multiplica el coste sin aportar información. */
+  conImagenes?: boolean;
+  etiqueta: string;
+}
+
+async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
+  const client = getDeepSeek();
+  let ultimoError: unknown;
+
+  for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    try {
+      const response = await client.chat.completions.create({
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "user",
+            content: contenidoMultimodal(opts.prompt, opts.imagenes, opts.conImagenes !== false),
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: opts.maxTokens,
+      });
+
+      const text = response.choices[0]?.message?.content;
+      if (!text) throw new Error(`Respuesta vacía de DeepSeek (${opts.etiqueta})`);
+
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`JSON inválido en ${opts.etiqueta}: ${text.substring(0, 200)}`);
+      }
+    } catch (error) {
+      ultimoError = error;
+      const esJson = /JSON inválido/.test(String((error as Error)?.message ?? ""));
+      if (esJson || !esReintentable(error) || intento === MAX_INTENTOS) break;
+      await dormir(ESPERA_REINTENTO_MS[intento - 1]);
+    }
+  }
+
+  throw ultimoError instanceof Error ? ultimoError : new Error(`Fallo en ${opts.etiqueta}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,30 +242,12 @@ function contenidoMultimodal(
 // ---------------------------------------------------------------------------
 
 async function observarImagen(imagenes: ImagenAnalisis[]): Promise<Observacion> {
-  const client = getDeepSeek();
-  const prompt = buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA);
-
-  const response = await client.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      {
-        role: "user",
-        content: contenidoMultimodal(prompt, imagenes),
-      },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 2048,
+  return llamarConReintento<Observacion>({
+    prompt: buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA),
+    maxTokens: 2048,
+    imagenes,
+    etiqueta: "observación DeepSeek",
   });
-
-  const text = response.choices[0]?.message?.content;
-  if (!text) throw new Error("Respuesta vacía de DeepSeek (observación)");
-
-  try {
-    return JSON.parse(text) as Observacion;
-  } catch {
-    throw new Error(`JSON inválido en observación DeepSeek: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -247,30 +293,12 @@ export async function analizarImagenDeepSeek(
     contexto,
     retroalimentacion
   );
-  const fullPrompt = buildPromptWithSchema(prompt, RESPONSE_SCHEMA);
-  const client = getDeepSeek();
-
-  const response = await client.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      {
-        role: "user",
-        content: contenidoMultimodal(fullPrompt, imagenes),
-      },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 4096,
+  return llamarConReintento<DiagnosticoResponse>({
+    prompt: buildPromptWithSchema(prompt, RESPONSE_SCHEMA),
+    maxTokens: 6144,
+    imagenes,
+    etiqueta: "diagnóstico DeepSeek",
   });
-
-  const text = response.choices[0]?.message?.content;
-  if (!text) throw new Error("Respuesta vacía de DeepSeek");
-
-  try {
-    return JSON.parse(text) as DiagnosticoResponse;
-  } catch {
-    throw new Error(`JSON inválido de DeepSeek: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +306,6 @@ export async function analizarImagenDeepSeek(
 // ---------------------------------------------------------------------------
 
 async function verificarDiagnostico(
-  imagenes: ImagenAnalisis[],
   diagnostico: DiagnosticoResponse,
   observacion: Observacion
 ): Promise<Verificacion> {
@@ -290,30 +317,13 @@ ${JSON.stringify(observacion, null, 2)}
 HIPÓTESIS PROPUESTA:
 ${JSON.stringify(diagnostico, null, 2)}`;
 
-  const fullPrompt = buildPromptWithSchema(prompt, VERIFICATION_SCHEMA);
-  const client = getDeepSeek();
-
-  const response = await client.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      {
-        role: "user",
-        content: contenidoMultimodal(fullPrompt, imagenes),
-      },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 2048,
+  return llamarConReintento<Verificacion>({
+    prompt: buildPromptWithSchema(prompt, VERIFICATION_SCHEMA),
+    maxTokens: 2048,
+    imagenes: [],
+    conImagenes: false,
+    etiqueta: "verificación DeepSeek",
   });
-
-  const text = response.choices[0]?.message?.content;
-  if (!text) throw new Error("Respuesta vacía de DeepSeek (verificación)");
-
-  try {
-    return JSON.parse(text) as Verificacion;
-  } catch {
-    throw new Error(`JSON inválido en verificación DeepSeek: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -332,13 +342,14 @@ async function analizarConVerificacion(
     contexto,
     observacion
   );
-  const verificacion = await verificarDiagnostico(
-    imagenes,
-    diag,
-    observacion
-  );
+  const verificacion = await verificarDiagnostico(diag, observacion);
 
-  if (!verificacion.diagnostico_validado && !isRetry) {
+  // El cuarto turno solo aporta si la verificación aporta algo que corregir.
+  const hayFeedback =
+    verificacion.inconsistencias.length > 0 ||
+    verificacion.sintomas_no_explicados.length > 0;
+
+  if (!verificacion.diagnostico_validado && !isRetry && hayFeedback) {
     try {
       const diag2 = await analizarImagenDeepSeek(
         imagenes,
@@ -347,11 +358,7 @@ async function analizarConVerificacion(
         observacion,
         verificacion.inconsistencias.join("; ")
       );
-      const ver2 = await verificarDiagnostico(
-        imagenes,
-        diag2,
-        observacion
-      );
+      const ver2 = await verificarDiagnostico(diag2, observacion);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;

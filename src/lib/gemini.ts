@@ -20,8 +20,98 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
 });
 
-function partesImagen(imagenes: ImagenAnalisis[]) {
+const MODELO = "gemini-2.5-flash";
+
+/**
+ * Razonamiento desactivado a propósito. El modelo piensa ~1.900 tokens por
+ * llamada (medido: 11,5 s de media en la fase de observación frente a 2,4 s
+ * sin pensar) y, al consumir el presupuesto de maxOutputTokens, dejaba el JSON
+ * truncado e inválido en varias llamadas. Aquí el razonamiento ya está
+ * estructurado en fases separadas, así que el thinking no aporta.
+ */
+const CONFIG_BASE = {
+  thinkingConfig: { thinkingBudget: 0 },
+} as const;
+
+/** El esquema deja tokens para el JSON aunque el thinking esté desactivado. */
+const MAX_TOKENS_OBSERVACION = 2048;
+const MAX_TOKENS_DIAGNOSTICO = 6144;
+const MAX_TOKENS_VERIFICACION = 2048;
+
+const ESPERA_REINTENTO_MS = [600, 1500, 3000];
+const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
+
+function parteImagenes(imagenes: ImagenAnalisis[], conImagenes = true) {
+  if (!conImagenes) return [];
   return imagenes.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } }));
+}
+
+/** Un 503 por saturación del modelo es transitorio: reintentar es más rápido
+ * que caer al proveedor alternativo, que repetiría las tres fases. */
+function esReintentable(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (status === 503 || status === 429 || status === 500 || status === 502) return true;
+  return /overloaded|high demand|UNAVAILABLE|RESOURCE_EXHAUSTED|fetch failed|timeout|ECONN/i.test(
+    String((error as { message?: string })?.message ?? "")
+  );
+}
+
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface LlamadaOpts {
+  prompt: string;
+  schema: object;
+  maxOutputTokens: number;
+  imagenes: ImagenAnalisis[];
+  /** La verificación solo razona sobre texto ya extraído: reenviar la imagen
+   * multiplica el coste sin aportar información. */
+  conImagenes?: boolean;
+  etiqueta: string;
+}
+
+async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
+  let ultimoError: unknown;
+
+  for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: MODELO,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: opts.prompt },
+              ...parteImagenes(opts.imagenes, opts.conImagenes !== false),
+            ],
+          },
+        ],
+        config: {
+          ...CONFIG_BASE,
+          responseMimeType: "application/json",
+          responseSchema: opts.schema,
+          temperature: 0.1,
+          maxOutputTokens: opts.maxOutputTokens,
+        },
+      });
+
+      const text = response.text;
+      if (!text) throw new Error(`Respuesta vacía de Gemini (${opts.etiqueta})`);
+
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`JSON inválido en ${opts.etiqueta}: ${text.substring(0, 200)}`);
+      }
+    } catch (error) {
+      ultimoError = error;
+      // Un JSON truncado no mejora reintentando: es un problema de formato.
+      const esJson = /JSON inválido/.test(String((error as Error)?.message ?? ""));
+      if (esJson || !esReintentable(error) || intento === MAX_INTENTOS) break;
+      await dormir(ESPERA_REINTENTO_MS[intento - 1]);
+    }
+  }
+
+  throw ultimoError instanceof Error ? ultimoError : new Error(`Fallo en ${opts.etiqueta}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,33 +262,13 @@ const VERIFICATION_SCHEMA = {
 async function observarImagen(
   imagenes: ImagenAnalisis[]
 ): Promise<Observacion> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: OBSERVATION_PROMPT },
-          ...partesImagen(imagenes),
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: OBSERVATION_SCHEMA,
-      temperature: 0.1,
-      maxOutputTokens: 2048,
-    },
+  return llamarConReintento<Observacion>({
+    prompt: OBSERVATION_PROMPT,
+    schema: OBSERVATION_SCHEMA,
+    maxOutputTokens: MAX_TOKENS_OBSERVACION,
+    imagenes,
+    etiqueta: "observación",
   });
-
-  const text = response.text;
-  if (!text) throw new Error("Respuesta vacía de Gemini (observación)");
-
-  try {
-    return JSON.parse(text) as Observacion;
-  } catch {
-    throw new Error(`JSON inválido en observación: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -245,33 +315,13 @@ export async function analizarImagen(
     retroalimentacion
   );
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: prompt },
-          ...partesImagen(imagenes),
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0.1,
-      maxOutputTokens: 4096,
-    },
+  return llamarConReintento<DiagnosticoResponse>({
+    prompt,
+    schema: RESPONSE_SCHEMA,
+    maxOutputTokens: MAX_TOKENS_DIAGNOSTICO,
+    imagenes,
+    etiqueta: "diagnóstico",
   });
-
-  const text = response.text;
-  if (!text) throw new Error("Respuesta vacía de Gemini");
-
-  try {
-    return JSON.parse(text) as DiagnosticoResponse;
-  } catch {
-    throw new Error(`JSON inválido de Gemini: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +329,6 @@ export async function analizarImagen(
 // ---------------------------------------------------------------------------
 
 async function verificarDiagnostico(
-  imagenes: ImagenAnalisis[],
   diagnostico: DiagnosticoResponse,
   observacion: Observacion
 ): Promise<Verificacion> {
@@ -291,33 +340,14 @@ ${JSON.stringify(observacion, null, 2)}
 HIPÓTESIS PROPUESTA:
 ${JSON.stringify(diagnostico, null, 2)}`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: prompt },
-          ...partesImagen(imagenes),
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: VERIFICATION_SCHEMA,
-      temperature: 0.1,
-      maxOutputTokens: 2048,
-    },
+  return llamarConReintento<Verificacion>({
+    prompt,
+    schema: VERIFICATION_SCHEMA,
+    maxOutputTokens: MAX_TOKENS_VERIFICACION,
+    imagenes: [],
+    conImagenes: false,
+    etiqueta: "verificación",
   });
-
-  const text = response.text;
-  if (!text) throw new Error("Respuesta vacía de Gemini (verificación)");
-
-  try {
-    return JSON.parse(text) as Verificacion;
-  } catch {
-    throw new Error(`JSON inválido en verificación: ${text.substring(0, 200)}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,13 +366,16 @@ async function analizarConVerificacion(
     contexto,
     observacion
   );
-  const verificacion = await verificarDiagnostico(
-    imagenes,
-    diag,
-    observacion
-  );
+  const verificacion = await verificarDiagnostico(diag, observacion);
 
-  if (!verificacion.diagnostico_validado && !isRetry) {
+  // El cuarto turno solo aporta si la verificación aporta algo que corregir.
+  // Antes se disparaba con "no validado", que es el caso habitual en fotos
+  // difíciles y convertía cada análisis en 5 llamadas (~35 s en lugar de ~13 s).
+  const hayFeedback =
+    verificacion.inconsistencias.length > 0 ||
+    verificacion.sintomas_no_explicados.length > 0;
+
+  if (!verificacion.diagnostico_validado && !isRetry && hayFeedback) {
     try {
       const diag2 = await analizarImagen(
         imagenes,
@@ -351,11 +384,7 @@ async function analizarConVerificacion(
         observacion,
         verificacion.inconsistencias.join("; ")
       );
-      const ver2 = await verificarDiagnostico(
-        imagenes,
-        diag2,
-        observacion
-      );
+      const ver2 = await verificarDiagnostico(diag2, observacion);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -382,6 +411,8 @@ export async function analizarConReintento(
   imagenes: ImagenAnalisis[],
   contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
+  // La observación se comparte entre ambos intentos: si falla el diagnóstico,
+  // repetir la fase 1 añadiría ~4 s sin aportar nada nuevo.
   const observacion = await observarImagen(imagenes);
   try {
     return await analizarConVerificacion(imagenes, contexto, observacion, false);
