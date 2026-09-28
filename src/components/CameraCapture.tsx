@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import imageCompression from "browser-image-compression";
 import { TIPOS_ACEPTADOS_FRONTEND, MAX_BYTES_IMAGEN } from "@/lib/imagen";
+import { trackEvento } from "@/lib/analitica";
 
 type Proveedor = "gemini" | "deepseek";
 
@@ -136,6 +137,14 @@ export function CameraCapture({
           base64: base64.split(",")[1],
           mimeType,
           file: compressed,
+        });
+        // Paso 2 del embudo: el agricultor ya tiene foto, que es el punto en
+        // el que la mayoría abandona. Se registraba en el tipo y en el README
+        // desde hacía tiempo, pero ninguna llamada lo emitía.
+        trackEvento("captura_realizada", {
+          origen: file.type.startsWith("image/") ? "archivo" : "desconocido",
+          kb: Math.round(compressed.size / 1024),
+          formato: mimeType === "image/webp" ? "webp" : "jpeg",
         });
       } catch (err) {
         console.error("Error procesando imagen:", err);

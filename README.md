@@ -42,7 +42,7 @@ Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política 
 
 ## Migraciones
 
-`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`.
+`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`, `0007_embudo.sql`.
 
 ## Variables de entorno
 
@@ -50,7 +50,9 @@ Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (servid
 
 ## Analítica de conversión
 
-`src/lib/analitica.ts` emite eventos del embudo (`captura_realizada`, `analisis_iniciado/completado/error`, `resultado_visto`, `cta_revision_abierto`, `lead_enviado`, `whatsapp_click`). Se reenvían a GA4 si `NEXT_PUBLIC_GA_ID` está definida y quedan en `localStorage` (`tr-eventos`). Métrica principal: **coste por lead cualificado**, no formularios brutos.
+`src/lib/analitica.ts` emite los eventos del embudo: `portada_vista` → `captura_realizada` → `analisis_iniciado` → `analisis_completado` → `resultado_visto` → `cta_revision_abierto` → `lead_enviado` (más `analisis_error`, `lead_error` y `whatsapp_click`). Se reenvían a GA4 si `NEXT_PUBLIC_GA_ID` está definida, quedan en `localStorage` (`tr-eventos`, solo depuración, nunca sale del dispositivo) y se persisten en la tabla `eventos` vía `POST /api/eventos`, que es la fuente que usa el panel.
+
+**Embudo medido por visitas, no por análisis.** La tasa de conversión usa como denominador las visitas únicas a la portada (`portada_vista`), no los diagnósticos: si no, las visitas que se marchan sin analizar no cuentan en ninguna parte y la tasa queda inflada. Cada paso se cuenta por personas, con un índice único en `(visitor_id, evento, día)`: seis análisis del mismo agricultor en un día son un visitante, no seis oportunidades. Los eventos van en first party, así que el embudo se cuenta aunque no se acepten cookies de terceros, y sin datos personales (ni IP, ni user agent, ni ubicación: solo un UUID aleatorio por dispositivo). Métrica principal: **coste por lead cualificado**, no formularios brutos.
 
 ## Desarrollo
 

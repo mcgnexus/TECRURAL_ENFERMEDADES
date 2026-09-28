@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, LeadFila, MetricasCaptacion } from "@/types/lead";
 import type { CuotaGlobal } from "@/lib/cuota";
+import type { MetricasEmbudo } from "@/lib/database";
 
 const CLAVE_TOKEN = "tr-admin-token";
 
@@ -156,6 +157,85 @@ function FotosLead({ leadId, total, token }: { leadId: string; total: number; to
   );
 }
 
+/** Embudo paso a paso, con el abandono entre pasos. */
+function EmbudoPanel({ embudo }: { embudo: MetricasEmbudo }) {
+  const etiquetas: Record<string, string> = {
+    portada_vista: "Llegan a la portada",
+    captura_realizada: "Cargan una foto",
+    analisis_iniciado: "Pulsan analizar",
+    analisis_completado: "Reciben el análisis",
+    resultado_visto: "Ven el resultado",
+    cta_revision_abierto: "Abren el formulario",
+    lead_enviado: "Envían el contacto",
+  };
+
+  if (embudo.visitas === 0) {
+    return (
+      <div className={`${cardStyles} p-5`}>
+        <h2 className="font-heading font-semibold text-tr-forest text-small mb-2">
+          Embudo de captación
+        </h2>
+        <p className="text-caption text-tr-muted">
+          Todavía no hay visitas registradas. El contador empieza a llenarse en cuanto
+          entre alguien por la portada.
+        </p>
+      </div>
+    );
+  }
+
+  const max = Math.max(...embudo.pasos.map((p) => p.visitantes), 1);
+
+  return (
+    <div className={`${cardStyles} p-4`}>
+      <h2 className="font-heading font-semibold text-tr-forest text-small mb-1">
+        Embudo de captación
+      </h2>
+      <p className="text-caption text-tr-muted mb-3">
+        Visitantes únicos por paso, últimos {embudo.dias} días.
+      </p>
+
+      <ol className="space-y-2">
+        {embudo.pasos.map((p, i) => {
+          const previo = i > 0 ? embudo.pasos[i - 1].visitantes : 0;
+          const abandono =
+            i > 0 && previo > 0
+              ? Math.round((1 - p.visitantes / previo) * 100)
+              : null;
+          return (
+            <li key={p.evento}>
+              <div className="flex items-baseline justify-between gap-2 text-small">
+                <span className="text-tr-muted">
+                  {etiquetas[p.evento] ?? p.evento}
+                </span>
+                <span className="font-semibold text-tr-ink">
+                  {p.visitantes}
+                  {abandono !== null && abandono > 0 && (
+                    <span className="ml-2 text-caption font-normal text-tr-warning-text">
+                      −{abandono} % aquí
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="mt-1 h-2.5 bg-tr-paper rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    i === 0
+                      ? "bg-tr-cyan"
+                      : p.visitantes === 0
+                      ? "bg-tr-line"
+                      : "bg-tr-brand-green"
+                  }`}
+                  style={{ width: `${(p.visitantes / max) * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function Tarjeta({ etiqueta, valor, detalle }: { etiqueta: string; valor: string; detalle?: string }) {
   return (
     <div className={`flex-1 min-w-[150px] ${cardStyles} p-4`}>
@@ -206,6 +286,7 @@ export default function AdminPage() {
   const [leads, setLeads] = useState<LeadFila[]>([]);
   const [metricas, setMetricas] = useState<MetricasCaptacion | null>(null);
   const [cuotas, setCuotas] = useState<CuotaGlobal | null>(null);
+  const [embudo, setEmbudo] = useState<MetricasEmbudo | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
   const [filtroEstado, setFiltroEstado] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -249,6 +330,7 @@ export default function AdminPage() {
         const dMetricas = await resMetricas.json();
         setMetricas(dMetricas.metricas ?? null);
         setCuotas(dMetricas.cuota ?? null);
+        setEmbudo(dMetricas.embudo ?? null);
       }
 
       try {
@@ -362,18 +444,23 @@ export default function AdminPage() {
           )}
         </div>
 
-        {metricas && (
+        {metricas && embudo && (
           <div className="mb-5 space-y-4">
             <div className="flex flex-wrap gap-3">
               <Tarjeta
-                etiqueta="Tasa de conversión"
-                valor={pct(metricas.tasaConversion)}
-                detalle={`${metricas.visitantesConLead} de ${metricas.visitantes} visitantes dejaron contacto`}
+                etiqueta="Visitas a la portada"
+                valor={String(embudo.visitas)}
+                detalle={`últimos ${embudo.dias} días`}
               />
               <Tarjeta
-                etiqueta="Visitantes"
-                valor={String(metricas.visitantes)}
-                detalle={`${metricas.diagnosticos} análisis · ${metricas.diagnosticosPorVisitante.toFixed(1)} por visitante`}
+                etiqueta="Diagnósticos"
+                valor={String(metricas.diagnosticos)}
+                detalle={`${metricas.visitantes} visitantes distintos con análisis`}
+              />
+              <Tarjeta
+                etiqueta="Visita → lead"
+                valor={pct(embudo.tasaConversion)}
+                detalle={`de ${embudo.visitas} visitas a la portada`}
               />
               <Tarjeta
                 etiqueta="Leads"
@@ -409,15 +496,18 @@ export default function AdminPage() {
             </div>
 
             <p className={`${cardStyles} p-3 text-caption text-tr-muted leading-relaxed`}>
-              La tasa de conversión cuenta <strong>personas, no análisis</strong>: el
-              denominador son los visitantes distintos que han hecho al menos un
-              diagnóstico, y el numerador los que además han dejado el teléfono. Un
-              agricultor que sube seis fotos en un rato sigue siendo un visitante, no
-              seis oportunidades. El ratio se limita al 100 % por si alguien repite
-              contacto.               visitor se identifican con una cookie propia de 180 días,
-              sin registro ni cuenta: es anónimo, pero en un dispositivo compartido
-              acumula los análisis de quien lo use antes.
+              La conversión se mide sobre <strong>visitas a la portada</strong>, no sobre
+              análisis. Antes el denominador eran los diagnósticos, así que las visitas que
+              llegaban y se marchaban sin analizar no contaban en ninguna parte y la tasa
+              podía exagerarse. Cada paso se cuenta por personas: un agricultor que sube
+              seis fotos en un rato sigue siendo un visitante, no seis oportunidades. Los
+              visitantes se identifican con una cookie propia de 180 días, sin registro ni
+              cuenta: es anónimo, pero en un dispositivo compartido acumula lo de quien lo
+              use antes. Se cuentan igualmente aunque el agricultor no acepte cookies de
+              terceros, porque van en first party.
             </p>
+
+            <EmbudoPanel embudo={embudo} />
 
             <div className={`${cardStyles} p-4`}>
               <h2 className="font-heading font-semibold text-tr-forest text-small mb-3">

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { CameraCapture, type FotosEstado, type FotoCapturada } from "@/components/CameraCapture";
 import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
 import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
-import { trackEvento } from "@/lib/analitica";
+import { trackEvento, volcarEventos } from "@/lib/analitica";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
@@ -58,6 +58,33 @@ function HomeContent() {
 
   const handleFotosChange = useCallback((nuevas: FotosEstado) => {
     setFotos(nuevas);
+  }, []);
+
+  // Llegada a la portada. Es el paso 1 del embudo y el denominador de la tasa
+  // de conversión: sin él no se pueden contar las visitas que se van sin
+  // analizar, que eran justo las que se escapaban de la métrica anterior.
+  // Se dispara una vez por montaje, al volver de "resultado" no vuelve a
+  // contar porque el componente no se desmonta.
+  useEffect(() => {
+    if (vista === "portada") {
+      trackEvento("portada_vista", { tiene_historial: fotos.principal !== null });
+    }
+    // Solo al montar: depende de `vista` intentionally, pero recontar en cada
+    // cambio de vista inflaría el embudo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al ocultar la pestaña o cerrar, se vuelca lo pendiente. Sin esto se perderían
+  // los últimos eventos, que son precisamente los del final del embudo.
+  useEffect(() => {
+    const alOcultar = () => {
+      if (document.visibilityState === "hidden") void volcarEventos();
+    };
+    document.addEventListener("visibilitychange", alOcultar);
+    window.addEventListener("pagehide", () => void volcarEventos());
+    return () => {
+      document.removeEventListener("visibilitychange", alOcultar);
+    };
   }, []);
 
   const handleAnalizar = useCallback(async () => {

@@ -237,6 +237,41 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_cuotas_resets
     ON cuotas(resets_en)
   `;
+
+  // Migración 0007: embudo de captación.
+  await db`
+    CREATE TABLE IF NOT EXISTS eventos (
+      id BIGSERIAL PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      evento TEXT NOT NULL,
+      params JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Una fila por visitante y evento y día: el embudo se mide por personas, y
+  // repetir el mismo paso 20 veces en un día es ruido, no 20 oportunidades.
+  //
+  // La columna calculada lleva IMMUTABLE porque Postgres exige que las
+  // funciones de un índice sean deterministas, y created_at tiene NOW() por
+  // defecto, que es estable. Si se hiciera con date_trunc('day', created_at)
+  // directamente en la expresión del índice, Postgres lo rechaza con
+  // "functions in index expression must be marked IMMUTABLE".
+  await db`
+    ALTER TABLE eventos
+    ADD COLUMN IF NOT EXISTS dia DATE
+      GENERATED ALWAYS AS ((created_at AT TIME ZONE 'UTC')::date) STORED
+  `;
+
+  await db`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_eventos_unico
+    ON eventos(visitor_id, evento, dia)
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_eventos_created
+    ON eventos(created_at DESC)
+  `;
   })();
 }
 
@@ -382,6 +417,181 @@ export async function contarFotosLead(leadId: string): Promise<number> {
     WHERE id = ${leadId}
   `;
   return Number(rows[0]?.total ?? 0);
+}
+
+// ============================================================================
+// EMBUDO DE CAPTACIÓN
+// ============================================================================
+
+/**
+ * Registra un paso del embudo.
+ *
+ * Idempotente por diseño: hay un índice único en (visitor_id, evento, día), así
+ * que un ON CONFLICT DO NOTHING descarta la repetición. El embudo se mide por
+ * personas, no por acciones: un agricultor que pulsa "analizar" seis veces en
+ * un día sigue siendo un visitante, y contar las seis inflaría el embudo.
+ *
+ * Sin datos personales: ni IP, ni user agent, ni nombre, ni teléfono. Solo el
+ * UUID aleatorio de la cookie httpOnly.
+ */
+export async function registrarEvento(
+  visitorId: string,
+  evento: string,
+  params?: Record<string, unknown>
+): Promise<void> {
+  const db = getSql();
+  await db`
+    INSERT INTO eventos (visitor_id, evento, params)
+    VALUES (${visitorId}, ${evento}, ${params ? JSON.stringify(params) : null})
+    ON CONFLICT (visitor_id, evento, dia) DO NOTHING
+  `;
+}
+
+export interface EmbudoPaso {
+  evento: string;
+  visitantes: number;
+}
+
+export interface MetricasEmbudo {
+  /** Pasos con su número de visitantes únicos, en orden de embudo. */
+  pasos: EmbudoPaso[];
+  /** Visitantes que llegaron a la portada en la ventana. */
+  visitas: number;
+  /** Visitas -> lead. El denominador son las visitas, no los diagnósticos. */
+  tasaConversion: number | null;
+  /** Visitas -> lead de contacto directo. */
+  tasaContactoDirecto: number | null;
+  /** Visitas -> algún lead. */
+  tasaGlobal: number | null;
+  /** Descuento de cada paso respecto al anterior, en porcentaje. */
+  abandonos: { desde: string; hasta: string; porcentaje: number }[];
+  porDia: { dia: string; visitas: number; leads: number }[];
+  dias: number;
+}
+
+const DIAS_EMBUDO = 30;
+
+const ORDEN_EMBUDO = [
+  "portada_vista",
+  "captura_realizada",
+  "analisis_iniciado",
+  "analisis_completado",
+  "resultado_visto",
+  "cta_revision_abierto",
+  "lead_enviado",
+];
+
+/**
+ * Embudo real de captación.
+ *
+ * El denominador de la conversión son las VISITAS a la portada, no los
+ * diagnósticos. Antes se dividía leads entre análisis, lo que dejaba fuera
+ * justo a las visitas perdidas y podía exagerar la tasa. Ahora:
+ *
+ *   - tasaContactoDirecto = leads de contacto directo / visitas
+ *   - tasaGlobal .......... cualquier lead / visitas
+ *
+ * Y se separan porque un lead de contacto directo no tiene por qué tener un
+ * diagnóstico detrás: sumarlos todos sobre un denominador de diagnósticos
+ * era inconsistente.
+ */
+export async function obtenerMetricasEmbudo(
+  dias: number = DIAS_EMBUDO
+): Promise<MetricasEmbudo> {
+  const db = getSql();
+  const rango = Math.min(Math.max(Math.trunc(dias), 1), 365);
+
+  const [eventosRows, leadRows, serieRows] = await Promise.all([
+    db`
+      SELECT evento, COUNT(DISTINCT visitor_id)::int AS visitantes
+      FROM eventos
+      WHERE evento = ANY(${ORDEN_EMBUDO})
+        AND created_at >= NOW() - make_interval(days => ${rango}::int)
+      GROUP BY evento
+    `,
+    db`
+      SELECT origen, COUNT(DISTINCT usuario_id)::int AS visitantes
+      FROM leads
+      WHERE usuario_id IS NOT NULL
+        AND created_at >= NOW() - make_interval(days => ${rango}::int)
+      GROUP BY origen
+    `,
+    db`
+      WITH dias AS (
+        SELECT generate_series(
+          date_trunc('day', NOW() - make_interval(days => ${rango}::int)),
+          date_trunc('day', NOW()),
+          interval '1 day'
+        ) AS dia
+      ),
+      v AS (
+        SELECT date_trunc('day', created_at) AS dia, COUNT(DISTINCT visitor_id)::int AS total
+        FROM eventos
+        WHERE evento = 'portada_vista'
+          AND created_at >= NOW() - make_interval(days => ${rango}::int)
+        GROUP BY 1
+      ),
+      l AS (
+        SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS total
+        FROM leads
+        WHERE created_at >= NOW() - make_interval(days => ${rango}::int)
+        GROUP BY 1
+      )
+      SELECT
+        to_char(dias.dia, 'YYYY-MM-DD') AS dia,
+        COALESCE(v.total, 0) AS visitas,
+        COALESCE(l.total, 0) AS leads
+      FROM dias
+      LEFT JOIN v ON v.dia = dias.dia
+      LEFT JOIN l ON l.dia = dias.dia
+      ORDER BY dias.dia ASC
+    `,
+  ]);
+
+  const porEvento = new Map<string, number>();
+  for (const r of eventosRows) porEvento.set(String(r.evento), Number(r.visitantes));
+
+  const pasos: EmbudoPaso[] = ORDEN_EMBUDO.map((evento) => ({
+    evento,
+    visitantes: porEvento.get(evento) ?? 0,
+  }));
+
+  const visitas = porEvento.get("portada_vista") ?? 0;
+  const leadDirecto = Number(
+    leadRows.find((r) => r.origen === "contacto_directo")?.visitantes ?? 0
+  );
+  const leadPost = Number(
+    leadRows.find((r) => r.origen === "post_diagnostico")?.visitantes ?? 0
+  );
+  const leadsTotales = leadDirecto + leadPost;
+
+  const abandonos: MetricasEmbudo["abandonos"] = [];
+  for (let i = 0; i < pasos.length - 1; i++) {
+    const desde_ = pasos[i];
+    const hasta = pasos[i + 1];
+    if (desde_.visitantes === 0) continue;
+    const porcentaje = Math.round(
+      (1 - hasta.visitantes / desde_.visitantes) * 100
+    );
+    if (porcentaje > 0) {
+      abandonos.push({ desde: desde_.evento, hasta: hasta.evento, porcentaje });
+    }
+  }
+
+  return {
+    pasos,
+    visitas,
+    tasaConversion: visitas > 0 ? Math.min(1, leadsTotales / visitas) : null,
+    tasaContactoDirecto: visitas > 0 ? Math.min(1, leadDirecto / visitas) : null,
+    tasaGlobal: visitas > 0 ? Math.min(1, leadsTotales / visitas) : null,
+    abandonos,
+    porDia: serieRows.map((r) => ({
+      dia: String(r.dia),
+      visitas: Number(r.visitas),
+      leads: Number(r.leads),
+    })),
+    dias: rango,
+  };
 }
 
 export async function actualizarEstadoLead(id: string, estado: string): Promise<boolean> {

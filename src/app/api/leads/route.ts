@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion } from "@/lib/database";
+import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
@@ -260,11 +260,12 @@ export async function GET(request: NextRequest) {
     // servidor para que el panel no tenga que traer todos los leads y
     // agregarlos en el cliente.
     if (request.nextUrl.searchParams.get("metricas")) {
-      const [metricas, cuota] = await Promise.all([
+      const [metricas, cuota, embudo] = await Promise.all([
         obtenerMetricasCaptacion(),
         estadoCuotas().then((c) => c[0] ?? null),
+        obtenerMetricasEmbudo(),
       ]);
-      return NextResponse.json({ metricas, cuota });
+      return NextResponse.json({ metricas, cuota, embudo });
     }
 
     const leads = await obtenerLeads({
