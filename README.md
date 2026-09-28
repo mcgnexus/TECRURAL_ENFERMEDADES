@@ -42,7 +42,7 @@ Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política 
 
 ## Migraciones
 
-`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`, `0007_embudo.sql`.
+`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). **Nunca borra filas**: es solo esquema. Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`, `0007_embudo.sql`. Las operaciones puntuales sobre datos, que exigen decisión humana, están en `db/one-off/`.
 
 ## Variables de entorno
 

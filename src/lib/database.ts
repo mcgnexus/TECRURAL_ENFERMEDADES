@@ -213,12 +213,19 @@ function aplicarMigraciones(): Promise<void> {
     ON leads(usuario_id)
   `;
 
-  // Los diagnósticos de las pruebas de desarrollo usaban el identificador fijo
-  // "usuario_demo". No son visitantes reales y contarlos hundiría la tasa de
-  // conversión. Es idempotente: cuando no quedan, el DELETE no afecta a nadie.
-  await db`
-    DELETE FROM diagnosticos WHERE usuario_id = 'usuario_demo'
-  `;
+  // Aquí se ejecutaba un DELETE de los diagnósticos de prueba con
+  // usuario_id = 'usuario_demo'. Se ha quitado a propósito y no debe volver:
+  //
+  //   - Era una operación DESTRUCTIVA dentro de la inicialización, y la
+  //     inicialización corre desde las peticiones. Un borrado de datos no puede
+  //     depender de que alguien haga una petición.
+  //   - No hay forma de que esos registros vuelvan: el identificador de
+  //     visitante lo emite el proxy como UUID y el cuerpo de la petición ya no
+  //     se acepta, así que 'usuario_demo' no puede crearse de nuevo.
+  //
+  // La limpieza puntual, con su previsualización, vive en
+  // db/one-off/limpiar-usuario-demo.mjs. Este método solo crea y altera
+  // esquema; nunca borra filas.
 
   // Migración 0006: cuotas de uso, en tabla y no en memoria.
   await db`
