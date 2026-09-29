@@ -7,6 +7,8 @@
     "prebuild": "node scripts/comprobar-esquema-sin-borrados.mjs",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "comprobar:esquema": "node scripts/comprobar-esquema-sin-borrados.mjs"
   },
   "dependencies": {
@@ -27,6 +29,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

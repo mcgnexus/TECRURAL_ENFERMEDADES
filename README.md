@@ -54,6 +54,30 @@ Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (servid
 
 **Embudo medido por visitas, no por análisis.** La tasa de conversión usa como denominador las visitas únicas a la portada (`portada_vista`), no los diagnósticos: si no, las visitas que se marchan sin analizar no cuentan en ninguna parte y la tasa queda inflada. Cada paso se cuenta por personas, con un índice único en `(visitor_id, evento, día)`: seis análisis del mismo agricultor en un día son un visitante, no seis oportunidades. Los eventos van en first party, así que el embudo se cuenta aunque no se acepten cookies de terceros, y sin datos personales (ni IP, ni user agent, ni ubicación: solo un UUID aleatorio por dispositivo). Métrica principal: **coste por lead cualificado**, no formularios brutos.
 
+## Pruebas
+
+```bash
+npm test                    # suite completa
+npm run test:watch          # en modo vigilancia
+npm run comprobar:esquema   # solo el guard de esquema (también corre en prebuild)
+```
+
+54 pruebas en cuatro ficheros. Tres de ellas son puras y siempre se ejecutan:
+
+- `src/lib/error-analisis.test.ts` — traducción de errores HTTP a mensajes para el agricultor.
+- `src/lib/textos-lead.test.ts` — textos condicionales del formulario según el origen.
+- `scripts/comprobar-esquema-sin-borrados.test.ts` — el guard que impide que `aplicarMigraciones()` toque datos, probado lanzándolo como proceso porque lo que importa es su código de salida.
+
+La cuarta, `src/lib/cuota.test.ts`, toca Postgres de verdad: lo que verifica es el comportamiento del SQL —que el contador sea atómico con peticiones simultáneas, que la ventana se renueve sola y que un rechazo no consuma el tope global—, y eso no se puede simular con un doble sin dejar de probar lo que importa. Necesita una base aparte:
+
+```bash
+TEST_DATABASE_URL="postgres://.../neondb?..." npm test
+```
+
+Sin esa variable **se salta y lo dice**, no falla. Lo natural es una rama de Neon, que se crea desde la consola en un par de clics.
+
+Si no hay base aparte y quieres ejecutarlas igualmente, existe `PERMITIR_TESTS_EN_PRODUCCION=1`. Solo tocan la tabla `cuotas`: no borran leads, diagnósticos ni eventos, pero **reinician los contadores de cuota del día**. Está desactivado por defecto a propósito.
+
 ## Desarrollo
 
 ```bash
