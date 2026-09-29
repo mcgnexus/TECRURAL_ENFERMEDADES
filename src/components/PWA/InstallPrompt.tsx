@@ -114,14 +114,14 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
           <button
             onClick={handleDismiss}
             type="button"
-            className="flex-1 bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
+            className="flex-1 bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold"
           >
             Ahora no
           </button>
           <button
             onClick={handleInstall}
             type="button"
-            className="flex-1 bg-tr-green-strong text-white hover:bg-tr-forest px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)]"
+            className="flex-1 bg-tr-green-strong text-white hover:bg-tr-forest px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold"
           >
             Instalar
           </button>

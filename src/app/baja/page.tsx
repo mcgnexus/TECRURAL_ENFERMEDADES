@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const btnPrimary = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
+const btnPrimary = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
 
@@ -36,7 +36,7 @@ export default function BajaPage() {
     <main className="min-h-screen bg-tr-paper flex items-center justify-center py-8 px-4">
       <div className="max-w-md w-full">
         <div className={`p-6 ${cardStyles}`}>
-          <h1 className="font-heading font-bold text-tr-forest text-2xl mb-3">Baja de comunicaciones</h1>
+          <h1 className="font-heading font-bold text-tr-forest mb-3">Baja de comunicaciones</h1>
 
           {estado === "ok" ? (
             <div>
@@ -86,7 +86,7 @@ export default function BajaPage() {
 
         <p className="mt-4 text-center text-caption text-tr-muted">
           <Link href="/" className="text-tr-green-strong font-semibold hover:underline">
-            Volver al diagnóstico
+            Volver al inicio
           </Link>
         </p>
       </div>

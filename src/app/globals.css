@@ -84,6 +84,32 @@
 
   /* Shadows */
   --shadow-card: var(--tr-shadow-card);
+
+  /* Animaciones. El namespace --animate-* es lo que registra las utilidades
+     `animate-slide-up` / `animate-slide-down`; sin esta entrada las clases se
+     usan en los componentes pero no generan nada. */
+  --animate-slide-up: slide-up 300ms ease-out;
+  --animate-slide-down: slide-down 300ms ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(1rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 @layer base {
@@ -117,7 +143,10 @@
     line-height: 1.2;
   }
 
-  h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+  /* Todos los <h1> viven en columnas de max-w-md / max-w-2xl, así que el
+     techo de 2.5rem (40px) solo se alcanzaba si la página lo pisaba con
+     utilidades. Este es el valor único: las páginas no llevan tamaño. */
+  h1 { font-size: clamp(1.5rem, 3.5vw, 1.875rem); }
   h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
   h3 { font-size: clamp(1.25rem, 2.5vw, 1.5rem); }
   h4 { font-size: clamp(1.125rem, 2vw, 1.25rem); }
@@ -136,6 +165,19 @@
   input[type="file"]::file-selector-button {
     font-family: var(--tr-font-body);
     font-weight: 600;
+  }
+
+  /* El análisis tarda 10-20 s y el indicador de "sin conexión" late de forma
+     indefinida: sin esto, el movimiento no se puede desactivar. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

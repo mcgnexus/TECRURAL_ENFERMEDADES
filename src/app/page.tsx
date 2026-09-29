@@ -17,7 +17,7 @@ function dataUrlFoto(foto: FotoCapturada): string {
   return `data:${foto.mimeType};base64,${foto.base64}`;
 }
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
 
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
@@ -136,7 +136,7 @@ function HomeContent() {
       <main className="min-h-screen bg-tr-paper py-8 px-4">
         <div className="max-w-md mx-auto">
           <header className="mb-8 text-center">
-            <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Orientación inicial</h1>
+            <h1 className="font-heading font-bold text-tr-forest">Orientación inicial</h1>
             <p className="text-tr-muted mt-1 text-body">
               Orientación a partir de tu foto · No es un diagnóstico definitivo
             </p>
@@ -166,13 +166,18 @@ function HomeContent() {
   if (vista === "portada") {
     return (
       <main className="min-h-screen bg-tr-paper flex flex-col">
-        <div className="flex-1 flex items-center justify-center py-10 px-4">
-          <div className="max-w-md w-full">
+        {/* Sin `items-center`: con el titular centrado a media altura, un viewport
+            bajo (móvil con barra del navegador, landscape) desbordaba por arriba y
+            el `h1` quedaba inalcanzable. `my-auto` en el hijo hace lo mismo
+            cuando sobra espacio y colapsa a flex-start cuando no, dejando todo el
+            desborde por abajo y por tanto accesible al scroll. */}
+        <div className="flex-1 flex justify-center py-10 px-4">
+          <div className="max-w-md w-full my-auto">
             <div className="text-center mb-8">
-              <h1 className="font-heading font-bold text-tr-forest text-3xl sm:text-4xl leading-tight">
+              <h1 className="font-heading font-bold text-tr-forest text-balance">
                 ¿Has observado algo extraño en tus plantas?
               </h1>
-              <p className="text-tr-muted mt-4 text-body leading-relaxed">
+              <p className="text-tr-muted mt-4 text-body leading-relaxed text-pretty">
                 Sube una foto para recibir una orientación inicial sobre los síntomas de tu
                 cultivo. Disponible para agricultores del Altiplano y la Costa Tropical de
                 Granada.
@@ -182,7 +187,7 @@ function HomeContent() {
             <button
               onClick={() => setVista("captura")}
               type="button"
-              className={`${btnPrimary} w-full py-4 text-lg`}
+              className={`${btnPrimary} w-full py-4`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -194,15 +199,15 @@ function HomeContent() {
             <div className={`mt-8 p-5 ${cardStyles}`}>
               <ul className="text-small text-tr-muted space-y-3" role="list">
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
                   La herramienta ofrece una <span className="text-tr-ink font-semibold">orientación inicial</span>, no un diagnóstico definitivo.
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
                   Una <span className="text-tr-ink font-semibold">fotografía clara</span> mejora el análisis.
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
                   Después de ver el resultado, podrás solicitar una <span className="text-tr-ink font-semibold">revisión de TecRural</span> si lo necesitas.
                 </li>
               </ul>
@@ -210,7 +215,7 @@ function HomeContent() {
           </div>
         </div>
 
-        <footer className="pb-6 text-center text-caption text-tr-muted px-4">
+        <footer className="pb-6 text-center text-small text-tr-muted px-4">
           <p>
             <Link href="/historial" className="hover:underline">Historial</Link>
             {" · "}
@@ -230,7 +235,7 @@ function HomeContent() {
     <main className="min-h-screen bg-tr-paper py-8 px-4">
       <div className="max-w-md mx-auto">
         <header className="mb-6 text-center">
-          <h1 className="font-heading font-bold text-tr-forest text-2xl sm:text-3xl">Analizar una planta</h1>
+          <h1 className="font-heading font-bold text-tr-forest">Analizar una planta</h1>
           <p className="text-tr-muted mt-1 text-body">
             Cuéntanos qué ves y sube una foto del síntoma
           </p>
@@ -246,7 +251,7 @@ function HomeContent() {
                 {error}
                 <button
                   onClick={() => setError(null)}
-                  className="ml-2 underline hover:no-underline text-sm font-medium"
+                  className="ml-2 underline hover:no-underline text-small font-medium"
                 >
                   Descartar
                 </button>
@@ -272,7 +277,7 @@ function HomeContent() {
               onClick={handleAnalizar}
               disabled={isLoading}
               type="button"
-              className={`${btnPrimary} w-full py-3 text-lg`}
+              className={`${btnPrimary} w-full py-3`}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -301,7 +306,7 @@ function HomeContent() {
           <button
             onClick={() => setVista("portada")}
             type="button"
-            className="text-caption text-tr-muted hover:text-tr-ink hover:underline"
+            className="text-small text-tr-muted hover:text-tr-ink hover:underline"
             disabled={isLoading}
           >
             ← Volver al inicio

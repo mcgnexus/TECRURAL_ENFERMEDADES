@@ -9,7 +9,7 @@ import type { MetricasEmbudo } from "@/lib/database";
 
 const CLAVE_TOKEN = "tr-admin-token";
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
@@ -391,7 +391,7 @@ export default function AdminPage() {
       <div className="max-w-5xl mx-auto">
         <header className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="font-heading font-bold text-tr-forest text-2xl">Gestión comercial</h1>
+            <h1 className="font-heading font-bold text-tr-forest">Gestión comercial</h1>
             <p className="text-tr-muted text-small mt-1">
               Herramienta interna protegida con ADMIN_TOKEN. El token se guarda solo en esta pestaña.
             </p>

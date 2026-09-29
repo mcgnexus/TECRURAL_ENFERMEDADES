@@ -6,8 +6,9 @@ import Link from "next/link";
 import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
 
 export const metadata = {
-  title: "Historial | TECRURAL Diagnóstico",
-  description: "Historial de diagnósticos fitosanitarios",
+  title: "Historial de análisis",
+  description:
+    "Consulta tus análisis fitosanitarios anteriores y el estado de las revisiones que has solicitado a TecRural.",
 };
 
 /** El historial es por visitante: la cookie httpOnly la emite el proxy en la
@@ -33,7 +34,7 @@ function formatDate(dateString: string): string {
   });
 }
 
-const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-[var(--tr-text-caption)] font-semibold font-[var(--tr-font-body)]";
+const badgeBase = "inline-flex items-center px-2.5 py-0.5 rounded-full text-caption font-semibold font-[var(--tr-font-body)]";
 const badgeBlue = `${badgeBase} bg-tr-cyan/15 text-tr-cyan-text`;
 const badgePurple = `${badgeBase} bg-purple-100 text-purple-800`;
 const badgeGreen = `${badgeBase} bg-tr-lime text-tr-forest`;
@@ -48,7 +49,7 @@ const SEVERITY_CLASSES = {
   severa: badgeRed,
 };
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
 
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
@@ -61,11 +62,11 @@ async function HistorialContent() {
       <div className="max-w-2xl mx-auto">
         <header className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <h1 className="font-heading font-bold text-tr-forest text-2xl">Historial de diagnósticos</h1>
+            <h1 className="font-heading font-bold text-tr-forest">Historial de análisis</h1>
             <p className="text-tr-muted mt-1 text-body">{historial.length} registros</p>
           </div>
           <Link href="/" className={`${btnPrimary} whitespace-nowrap`}>
-            Nuevo diagnóstico
+            Nuevo análisis
           </Link>
         </header>
 
@@ -81,7 +82,7 @@ async function HistorialContent() {
                 : "No hemos podido identificar este dispositivo, así que no podemos mostrarte un historial. Haz un análisis y vuelve a entrar."}
             </p>
             <Link href="/" className={`mt-6 ${btnPrimary} inline-flex`}>
-              Hacer diagnóstico
+              Hacer un análisis
             </Link>
           </div>
         ) : (

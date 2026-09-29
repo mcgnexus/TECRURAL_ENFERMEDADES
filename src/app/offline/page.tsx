@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold text-[var(--tr-text-body)] transition-all duration-200 ";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
 const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98]`;
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
 
@@ -32,10 +32,10 @@ export default function OfflinePage() {
             </svg>
           </div>
 
-          <h1 className="font-heading font-bold text-tr-forest text-2xl mb-3">Sin conexión</h1>
+          <h1 className="font-heading font-bold text-tr-forest mb-3">Sin conexión</h1>
           <p className="text-tr-muted text-body mb-6">
             No hay conexión a internet. La app funciona en modo offline para ver tu historial,
-            pero necesitas conexión para realizar nuevos diagnósticos.
+            pero necesitas conexión para realizar nuevos análisis.
           </p>
 
           <div className="space-y-3">
@@ -66,7 +66,7 @@ export default function OfflinePage() {
           </div>
 
           <p className="mt-6 text-caption text-tr-muted">
-            Los diagnósticos guardados están disponibles offline.
+            Los análisis guardados están disponibles offline.
             Las fotos se sincronizarán al recuperar conexión.
           </p>
         </div>

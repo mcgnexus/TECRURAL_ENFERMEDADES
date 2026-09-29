@@ -2,13 +2,17 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TECRURAL Diagnóstico | Análisis fitosanitario por IA",
-  description: "Diagnóstico de enfermedades, plagas y deficiencias en cultivos de Andalucía oriental usando inteligencia artificial. Toma una foto y obtén recomendaciones inmediatas.",
-  keywords: ["agricultura", "fitosanitario", "diagnóstico", "IA", "cultivos", "Andalucía"],
+  title: {
+    default: "TECRURAL | Orientación fitosanitaria por foto",
+    template: "%s | TECRURAL",
+  },
+  description:
+    "Toma una foto de tu cultivo y obtén una orientación inicial sobre los síntomas observados, con recomendaciones de manejo. No es un diagnóstico fitosanitario definitivo.",
+  keywords: ["agricultura", "fitosanidad", "síntomas cultivo", "orientación", "revisión técnica", "Andalucía"],
   authors: [{ name: "TECRURAL" }],
   openGraph: {
-    title: "TECRURAL Diagnóstico",
-    description: "Análisis fitosanitario por IA para cultivos",
+    title: "TECRURAL | Orientación fitosanitaria por foto",
+    description: "Orientación inicial sobre los síntomas de tu cultivo a partir de una foto.",
     type: "website",
     locale: "es_ES",
   },
