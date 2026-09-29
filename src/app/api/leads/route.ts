@@ -6,6 +6,7 @@ import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
 import { consumirUsoPorClave, estadoCuotas } from "@/lib/cuota";
 import { validarDataUrlImagen } from "@/lib/imagen";
+import { ipCliente } from "@/lib/ip-request";
 import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, PrioridadLead } from "@/types/lead";
 
@@ -82,12 +83,6 @@ const leadSchema = z.object({
 // está en la tabla `cuotas`, que es global y sobrevive al reciclaje.
 const MAX_LEADS_POR_IP_HORA = 5;
 
-function ipDePeticion(request: NextRequest): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return request.headers.get("x-real-ip") ?? "desconocida";
-}
-
 export async function POST(request: NextRequest) {
   try {
     // El cuerpo se lee antes del rate limit: si no, una petición de 8 MB con
@@ -135,7 +130,7 @@ export async function POST(request: NextRequest) {
     // Cuota por IP, ahora en la tabla `cuotas` y por tanto global entre
     // instancias. Va tras la validación del cuerpo: un envío con el teléfono
     // mal formado no debe gastar un uso de un agricultor legítimo.
-    const ip = ipDePeticion(request);
+    const ip = ipCliente(request);
     const cuotaIp = await consumirUsoPorClave("lead", ip, MAX_LEADS_POR_IP_HORA);
     if (!cuotaIp.permitido) {
       return NextResponse.json(
@@ -212,7 +207,7 @@ export async function POST(request: NextRequest) {
       try {
         await notificarLeadNuevo(guardado, await obtenerMetricasCaptacion());
       } catch (error) {
-        console.warn("Aviso de lead nuevo no completado:", error);
+        console.warn("Aviso de lead nuevo no completado.");
       }
     })();
 
@@ -222,7 +217,7 @@ export async function POST(request: NextRequest) {
       prioridad: guardado.prioridad,
     });
   } catch (error) {
-    console.error("Error guardando lead:", error);
+    console.error("Error guardando lead.");
     const message = error instanceof Error ? error.message : "Error interno";
 
     if (message.includes("DATABASE_URL")) {
@@ -276,7 +271,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ leads, total: leads.length });
   } catch (error) {
-    console.error("Error listando leads:", error);
+    console.error("Error listando leads.");
     return NextResponse.json({ error: "Error listando leads" }, { status: 500 });
   }
 }
@@ -323,7 +318,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error actualizando lead:", error);
+    console.error("Error actualizando lead.");
     return NextResponse.json({ error: "Error actualizando lead" }, { status: 500 });
   }
 }

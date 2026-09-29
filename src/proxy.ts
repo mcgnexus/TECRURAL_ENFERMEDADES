@@ -54,6 +54,6 @@ export const config = {
   // Solo las rutas que renderizan o reciben datos. Excluir estáticos, assets y
   // el service worker del PWA: se piden mucho y no necesitan la cookie.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.svg$|.*\\.png$|.*\\.ico$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|robots\\.txt|sitemap\\.xml|sw.js|.*\\.svg$|.*\\.png$|.*\\.ico$).*)",
   ],
 };

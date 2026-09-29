@@ -187,9 +187,9 @@ export function CameraCapture({
           <button
             onClick={onToggleModoMulti}
             type="button"
-            className="text-caption font-semibold text-tr-green-strong hover:underline text-right"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--tr-radius-control)] px-2 text-small font-semibold text-tr-green-strong underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tr-green-strong text-right"
           >
-            {modoMulti ? "Modo simple (1 foto)" : "Añadir más fotos (avanzado)"}
+            {modoMulti ? "Usar una foto" : "Añadir más fotos"}
           </button>
         )}
       </div>
@@ -197,7 +197,7 @@ export function CameraCapture({
       <p className="mb-3 text-caption text-tr-muted">
         {modoMulti
           ? "La foto principal es obligatoria. Las fotos del envés y de la planta completa son opcionales y ayudan a afinar el análisis."
-          : "Con una foto nítida del síntoma es suficiente para empezar. Puedes añadir más fotos desde «avanzado» si quieres más precisión."}
+          : "Con una foto nítida del síntoma es suficiente para empezar. Si quieres, puedes añadir también el envés de la hoja y una foto de la planta completa."}
       </p>
 
       <div className="space-y-3">
@@ -226,16 +226,19 @@ export function CameraCapture({
               </div>
 
               {foto ? (
-                <div className="relative aspect-[4/3] rounded-[var(--tr-radius-control)] overflow-hidden border border-tr-line">
-                  <img
-                    src={`data:${foto.mimeType};base64,${foto.base64}`}
-                    alt={slot.label}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-tr-forest/85 text-white text-caption font-semibold">
-                    {slot.label}
-                  </span>
-                </div>
+                <>
+                  <div className="relative aspect-[4/3] rounded-[var(--tr-radius-control)] overflow-hidden border border-tr-line">
+                    <img
+                      src={`data:${foto.mimeType};base64,${foto.base64}`}
+                      alt={slot.label}
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-tr-forest/85 text-white text-caption font-semibold">
+                      {slot.label}
+                    </span>
+                  </div>
+                  <p className="sr-only" role="status" aria-live="polite">{slot.label} añadida.</p>
+                </>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <button

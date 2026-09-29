@@ -408,7 +408,7 @@ export async function obtenerFotoLead(
   // como un fichero en lugar de mostrarla.
   const match = /^data:(image\/(?:jpeg|png|webp));base64,/.exec(foto);
   if (!match) {
-    console.warn(`Foto del lead ${leadId} (índice ${indice}) con formato inesperado`);
+    console.warn("Foto de lead con formato inesperado.");
     return null;
   }
 

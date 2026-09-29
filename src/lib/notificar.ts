@@ -267,10 +267,7 @@ async function conReintentos(canal: string, enviar: () => Promise<void>): Promis
       ]);
       return;
     } catch (error) {
-      console.warn(
-        `Aviso de lead por ${canal} falló (intento ${intento}/${MAX_INTENTOS}):`,
-        error instanceof Error ? error.message : error
-      );
+      console.warn(`Aviso de lead por ${canal} falló (intento ${intento}/${MAX_INTENTOS}).`);
     } finally {
       clearTimeout(temporizador);
       controlador.abort();

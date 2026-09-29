@@ -158,7 +158,7 @@ async function devolverUnidad(clave: string): Promise<void> {
   } catch (error) {
     // La compensación es best-effort: perder una unidad es mucho menos grave
     // que propagar un error por ella.
-    console.warn("No se pudo devolver la unidad de cuota:", error);
+    console.warn("No se pudo devolver la unidad de cuota.");
   }
 }
 
@@ -225,10 +225,7 @@ export async function consumirUso(
 
     return { permitido: true, restantes: limites.porVisitante - visita.contador };
   } catch (error) {
-    console.error(
-      "Fallo al comprobar la cuota; se permite el uso para no bloquear al usuario:",
-      error
-    );
+    console.error("Fallo al comprobar la cuota; se permite el uso para no bloquear al usuario.");
     return { permitido: true, restantes: -1 };
   }
 }
@@ -255,7 +252,7 @@ export async function consumirUsoPorClave(
     if (!r.permitido) return { permitido: false, restantes: 0 };
     return { permitido: true, restantes: limitePorClave - r.contador };
   } catch (error) {
-    console.error("Fallo al comprobar la cuota por clave; se permite:", error);
+    console.error("Fallo al comprobar la cuota por clave; se permite.");
     return { permitido: true, restantes: -1 };
   }
 }
@@ -291,7 +288,7 @@ export async function estadoCuotas(): Promise<CuotaGlobal[]> {
       },
     ];
   } catch (error) {
-    console.error("Fallo al leer el estado de las cuotas:", error);
+    console.error("Fallo al leer el estado de las cuotas.");
     return [];
   }
 }
@@ -312,7 +309,7 @@ export async function topConsumidores(limite = 10) {
       resetsEn: new Date(f.resets_en as string).toISOString(),
     }));
   } catch (error) {
-    console.error("Fallo al leer top consumidores:", error);
+    console.error("Fallo al leer top consumidores.");
     return [];
   }
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDatabase, registrarEvento } from "@/lib/database";
+import { consumirUsoPorClave } from "@/lib/cuota";
+import { ipCliente } from "@/lib/ip-request";
 import type { NombreEvento } from "@/lib/analitica";
+import { z } from "zod";
 
 /**
  * Persistencia de eventos del embudo.
@@ -41,41 +44,81 @@ const PERMITIDOS: NombreEvento[] = [
   "whatsapp_click",
 ];
 
+const eventoSchema = z.object({
+  nombre: z.enum(PERMITIDOS),
+}).strip();
+const loteSchema = z.object({
+  eventos: z.array(eventoSchema).max(10),
+}).strip();
+const MAX_CUERPO = 16 * 1024;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function leerCuerpoLimitado(request: NextRequest): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_CUERPO) {
+      await reader.cancel();
+      return null;
+    }
+    partes.push(value);
+  }
+
+  const cuerpo = new Uint8Array(total);
+  let offset = 0;
+  for (const parte of partes) {
+    cuerpo.set(parte, offset);
+    offset += parte.byteLength;
+  }
+  return new TextDecoder().decode(cuerpo);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const uid = request.cookies.get("tr_uid")?.value;
-    if (!uid) {
+    if (!uid || !UUID_RE.test(uid)) {
       // Sin cookie no hay contra quién contar. Se responde 204 para no delatar
       // nada y no generar ruido en el cliente.
       return new NextResponse(null, { status: 204 });
     }
 
-    const cuerpo = (await request.json()) as {
-      eventos?: { nombre: string; params?: Record<string, unknown> }[];
-    };
+    const largo = Number(request.headers.get("content-length") ?? 0);
+    if (largo > MAX_CUERPO) return new NextResponse(null, { status: 413 });
 
-    const lista = Array.isArray(cuerpo.eventos) ? cuerpo.eventos : [];
-    if (lista.length === 0) return new NextResponse(null, { status: 204 });
-
-    // Se filtran por lista blanca y se limita el tamaño: nadie debe poder
-    // inyectar un nombre de evento arbitrario ni mandar mil filas de golpe.
-    const validos = lista
-      .filter((e): e is { nombre: NombreEvento; params?: Record<string, unknown> } =>
-        PERMITIDOS.includes(e.nombre as NombreEvento)
-      )
-      .slice(0, 10);
-
-    if (validos.length === 0) return new NextResponse(null, { status: 204 });
+    let json: unknown;
+    try {
+      json = JSON.parse((await leerCuerpoLimitado(request)) ?? "");
+    } catch {
+      return new NextResponse(null, { status: 400 });
+    }
+    const parseado = loteSchema.safeParse(json);
+    if (!parseado.success || parseado.data.eventos.length === 0) {
+      return new NextResponse(null, { status: 204 });
+    }
 
     await initDatabase();
-    for (const e of validos) {
-      await registrarEvento(uid, e.nombre, e.params);
+
+    // IP de cliente asignada por Vercel: evita que identidades de cookie
+    // arbitrarias permitan generar escrituras ilimitadas en la tabla.
+    const cuota = await consumirUsoPorClave("lead", `eventos:${ipCliente(request)}`, 120);
+    if (!cuota.permitido) return new NextResponse(null, { status: 429 });
+
+    for (const e of parseado.data.eventos) {
+      // Se persiste solo el nombre permitido; nunca parámetros arbitrarios del
+      // cliente, que podrían contener texto de cultivo u otros datos personales.
+      await registrarEvento(uid, e.nombre);
     }
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     // La analítica nunca debe romper la navegación del agricultor.
-    console.warn("No se pudieron registrar los eventos:", error);
+    console.warn("No se pudieron registrar los eventos.");
     return new NextResponse(null, { status: 204 });
   }
 }

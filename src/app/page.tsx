@@ -212,6 +212,23 @@ function HomeContent() {
                 </li>
               </ul>
             </div>
+
+            <section className={`mt-4 p-5 ${cardStyles}`} aria-labelledby="confianza-title">
+              <h2 id="confianza-title" className="font-heading font-semibold text-tr-forest">
+                Orientación cercana al campo
+              </h2>
+              <p className="mt-2 text-small text-tr-muted leading-relaxed">
+                TecRural está a cargo de Manuel Carrasco García y se dirige a agricultores del
+                Altiplano de Granada y la Costa Tropical. Puedes consultar cultivos como olivo,
+                almendro, cítricos, vid, tomate, aguacate y mango, entre otros.
+              </p>
+              <p className="mt-3 text-small text-tr-muted leading-relaxed">
+                Si al ver el resultado solicitas revisión, un técnico de TecRural recibirá el caso
+                y la foto que decidas compartir. Te contactaremos por llamada o WhatsApp, según
+                elijas; el tiempo depende de la demanda. Solicitarla no tiene coste ni implica
+                contratar un servicio.
+              </p>
+            </section>
           </div>
         </div>
 
@@ -240,6 +257,11 @@ function HomeContent() {
             Cuéntanos qué ves y sube una foto del síntoma
           </p>
         </header>
+
+        <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
+          Al terminar verás una orientación inicial. Si quieres una revisión técnica, podrás
+          solicitarla después; la foto solo se comparte con el técnico cuando envías esa solicitud.
+        </p>
 
         {error && (
           <div className={`mb-6 p-4 border-l-4 border-tr-warning bg-tr-warning/5 text-tr-warning-text text-body ${cardStyles}`} role="alert">
@@ -306,7 +328,7 @@ function HomeContent() {
           <button
             onClick={() => setVista("portada")}
             type="button"
-            className="text-small text-tr-muted hover:text-tr-ink hover:underline"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--tr-radius-control)] px-3 text-small text-tr-muted hover:text-tr-ink hover:underline"
             disabled={isLoading}
           >
             ← Volver al inicio

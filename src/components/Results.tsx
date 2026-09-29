@@ -342,13 +342,13 @@ export function Results({
         <div className={`${cardStyles} p-5 border-l-4 ${diag.gravedad === "severa" ? "border-red-500" : "border-tr-brand-green"}`}>
           <h3 className="font-heading font-semibold text-tr-forest">¿Quieres que revisemos este caso contigo?</h3>
           <p className="mt-1 text-body text-tr-muted">
-            Solicita una revisión de la fotografía y cuéntanos el cultivo y el municipio. Un
-            técnico de TecRural valorará tu caso y te propondrá el siguiente paso.
+            Un técnico de TecRural valorará la foto y el contexto del cultivo para proponerte el
+            siguiente paso. Al solicitarlo, podrás indicar tu teléfono y elegir llamada o WhatsApp.
           </p>
           {!ctaAbierto ? (
             <div className="mt-4 flex flex-col sm:flex-row gap-3">
               <button onClick={abrirCTA} type="button" className={`${btnPrimary} flex-1`}>
-                Solicitar revisión de TecRural
+                Pedir revisión técnica
               </button>
               {whatsappDisponible && (
                 <a
@@ -379,6 +379,10 @@ export function Results({
               />
             </div>
           )}
+          <p className="mt-3 text-small text-tr-muted leading-relaxed">
+            La foto se comparte con el técnico solo si envías la solicitud. No tiene coste ni
+            compromiso de contratación; el tiempo de respuesta depende de la demanda.
+          </p>
         </div>
       )}
 

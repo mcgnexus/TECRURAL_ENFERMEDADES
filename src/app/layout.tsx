@@ -67,17 +67,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
       </head>
       <body className="min-h-full flex flex-col bg-tr-paper">
+      {isProduction && (
         <script
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .catch((error) => console.error('No se pudo registrar el service worker:', error));
                 });
               }
             `,
           }}
         />
+      )}
         {children}
       </body>
     </html>

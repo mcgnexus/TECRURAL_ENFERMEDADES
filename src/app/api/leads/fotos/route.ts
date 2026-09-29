@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error obteniendo foto de lead:", error);
+    console.error("Error obteniendo foto de lead.");
     return NextResponse.json({ error: "No se pudo obtener la foto" }, { status: 500 });
   }
 }

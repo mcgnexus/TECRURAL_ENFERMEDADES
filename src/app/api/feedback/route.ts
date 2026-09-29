@@ -80,7 +80,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error guardando feedback:", error);
+    console.error("Error guardando feedback.");
     return NextResponse.json(
       { error: "Error guardando feedback" },
       { status: 500 }

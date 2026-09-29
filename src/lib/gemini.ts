@@ -516,8 +516,7 @@ export async function analizarConReintento(
     // funcionar por definición. Se propaga para que la ruta decida.
     if (error instanceof PresupuestoAgotadoError) throw error;
     console.warn(
-      `Primer intento fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`,
-      error
+      `Primer intento fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
     return await analizarConVerificacion(
       imagenes,

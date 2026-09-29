@@ -360,7 +360,7 @@ export function LeadForm({
         </div>
 
         {/* Confirmación de solicitud: separada del consentimiento comercial */}
-        <div className="flex items-start gap-2.5 p-3 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
           <input
             id={`lead-solicitud-${origen}`}
             type="checkbox"
@@ -373,13 +373,12 @@ export function LeadForm({
             disabled={estado === "enviando"}
             aria-invalid={errores.solicitud ? "true" : undefined}
             aria-describedby={errores.solicitud ? `lead-solicitud-error-${origen}` : undefined}
-            className="mt-1 h-4 w-4 flex-shrink-0 accent-[var(--tr-brand-green)]"
+            className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
           />
           <div className="flex-1">
-            <label htmlFor={`lead-solicitud-${origen}`} className="text-caption text-tr-muted leading-relaxed">
-              Confirmo que solicito que TecRural revise este caso y me responda al teléfono
-              indicado. Trataremos tus datos ({textos.datosTratados})
-              para gestionar esta solicitud y no los cederemos con fines publicitarios. *
+            <label htmlFor={`lead-solicitud-${origen}`} className="block text-small text-tr-ink leading-relaxed">
+              <span className="block font-semibold">Solicito que TecRural revise este caso y me responda al teléfono indicado. *</span>
+              <span className="mt-1 block text-tr-muted">Usaremos tus datos ({textos.datosTratados}) para gestionar la solicitud. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.</span>
             </label>
             {errores.solicitud && (
               <p id={`lead-solicitud-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
@@ -390,19 +389,18 @@ export function LeadForm({
         </div>
 
         {/* Consentimiento comercial: opcional, desmarcado por defecto */}
-        <div className="flex items-start gap-2.5 p-3 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
           <input
             id={`lead-comercial-${origen}`}
             type="checkbox"
             checked={form.consentimientoComercial}
             onChange={(e) => set("consentimientoComercial", e.target.checked)}
             disabled={estado === "enviando"}
-            className="mt-1 h-4 w-4 flex-shrink-0 accent-[var(--tr-brand-green)]"
+            className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
           />
-          <label htmlFor={`lead-comercial-${origen}`} className="text-caption text-tr-muted leading-relaxed">
-            Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural. Puedo
-            retirar este consentimiento cuando quiera
-            {" "}(<Link href="/baja" className="underline hover:no-underline">darse de baja</Link>).
+          <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
+            Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
+            <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
           </label>
         </div>
 

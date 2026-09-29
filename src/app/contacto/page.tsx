@@ -42,10 +42,10 @@ export default function ContactoPage() {
 
           <div className={`${cardStyles} p-4 bg-tr-paper`}>
             <p className="text-caption text-tr-muted leading-relaxed">
-              <span className="font-semibold text-tr-ink">Protección de datos:</span> solo
-              tratamos los datos que facilitas en este formulario para contactarte y darte
-              asesoramiento. No los cedemos a terceros con fines publicitarios y puedes pedir su
-              eliminación en cualquier momento.
+              Antes de enviar tu solicitud, consulta nuestra{" "}
+              <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>. También puedes consultar el{" "}
+              <Link href="/aviso-legal" className="font-semibold text-tr-green-strong underline hover:no-underline">aviso legal</Link> y la información sobre{" "}
+              <Link href="/cookies" className="font-semibold text-tr-green-strong underline hover:no-underline">cookies y analítica</Link>.
             </p>
           </div>
         </div>

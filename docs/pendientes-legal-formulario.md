@@ -5,17 +5,14 @@ formulario de solicitud de revisión. La aplicación no afirma por sí sola el c
 de la normativa de protección de datos: son necesarios estos contenidos y decisiones.
 
 ## 1. Identidad del responsable del tratamiento
-- Facilitado: correo de contacto `mcgnexus@gmail.com`.
-- Falta: razón social / nombre del responsable, NIF y domicilio de contacto
-  (y del delegado de protección de datos si se designa).
-- Dónde haría falta: textos de los formularios (`LeadForm`), página de contacto y
-  futura política de privacidad.
+- Facilitados: Manuel Carrasco García, DNI/NIF 76143911L, Barrio Los Reyes 113,
+  18830 Huéscar (Granada), y correo `mcgnexus@gmail.com`.
+- Incorporados en `/privacidad` y `/aviso-legal`. No consta designación de delegado de
+  protección de datos.
 
 ## 2. Política de privacidad publicada
-- Falta: página/URL de política de privacidad del proyecto (no existe en el repositorio).
-- Los formularios actuales incluyen resúmenes breves de finalidad, pero deben enlazar a
-  la política completa cuando exista (añadir enlace en `src/components/LeadForm.tsx` y
-  `src/app/contacto/page.tsx`).
+- Existe `/privacidad`, enlazada desde la casilla obligatoria de `LeadForm` y desde contacto.
+- Incluye categorías de datos, finalidades, bases, derechos, destinatarios y conservación.
 
 ## 3. Texto del consentimiento comercial
 - Implementado: casilla opcional, desmarcada por defecto, con versión registrada
@@ -36,10 +33,17 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 
 ## 6. Plazos de conservación y supresión de fotos
 - Las fotos solo se almacenan cuando el usuario envía una solicitud de revisión
-  (columna `leads.imagenes`). Pendiente de definir: plazo de conservación de esas fotos
-  y proceso de supresión (actualmente manual sobre la base de datos).
+  (columna `leads.imagenes`). La política fija un máximo de 12 meses desde el envío y
+  revisión manual mensual para borrarlas. El sistema todavía no automatiza esta tarea:
+  el responsable debe establecer un recordatorio mensual y ejecutar/verificar la limpieza.
 
-## 7. Baja de comunicaciones
+## 7. Aviso legal y cookies
+- Se crearon `/aviso-legal` y `/cookies`.
+- El código carga Google Analytics en producción si existe `NEXT_PUBLIC_GA_ID`, sin
+  consentimiento previo. No activar esa configuración para tráfico sujeto a consentimiento
+  hasta incorporar una solución de consentimiento; completar además inventario y duración.
+
+## 8. Baja de comunicaciones
 - Implementado: página `/baja` y endpoint `POST /api/baja` (baja por teléfono).
 - Pendiente: decidir si además se quiere un canal manual (responder "BAJA" por
   WhatsApp) y documentarlo en la firma de los mensajes comerciales.

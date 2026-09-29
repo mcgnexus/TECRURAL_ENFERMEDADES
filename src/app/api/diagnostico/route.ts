@@ -204,11 +204,11 @@ export async function POST(request: NextRequest) {
     try {
       await initDatabase();
     } catch (error) {
-      console.warn("initDatabase falló; se continúa sin cuota:", error);
+      console.warn("No se pudo inicializar la base para cuotas; se continúa sin cuota.");
     }
     const cuota = await consumirUso("diag", usuarioId);
     if (!cuota.permitido) {
-      console.warn(`Diagnóstico bloqueado por cuota: ${cuota.detalle}`);
+      console.warn("Diagnóstico bloqueado por cuota.");
       return NextResponse.json(
         { error: cuota.mensaje, cuota: { motivo: cuota.motivo } },
         { status: cuota.motivo === "global" ? 503 : 429 }
@@ -226,12 +226,12 @@ export async function POST(request: NextRequest) {
       // fallo es que se agotó el presupuesto de llamadas, arrancar la misma
       // estructura completa en DeepSeek lo multiplicaría por dos.
       if (!esFalloDeProveedor(error)) throw error;
-      console.warn("Fallo gemini, intentando fallback a deepseek...", error);
+      console.warn("Fallo del proveedor principal; se intenta el alternativo.");
       try {
         diagnostico = await analizarConProveedor(imagenes, "deepseek", contexto);
         proveedorUsado = "deepseek";
       } catch (fallbackError) {
-        console.error("Fallo también deepseek:", fallbackError);
+        console.error("Fallo del proveedor alternativo.");
         throw fallbackError;
       }
     }
@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
     if (!validacion.valido) {
       // El detalle técnico se queda en el log: al agricultor solo se le da
       // un aviso comprensible, sin jerga interna ni nombres de campos.
-      console.warn("Validación de coherencia fallida:", validacion.errores);
+      console.warn("Validación de coherencia fallida.");
       diagnostico.requiere_experto = true;
       diagnostico.recomendacion = `${diagnostico.recomendacion.trim()} La revisión automática detectó datos que no encajan del todo, por lo que conviene que un técnico confirme esta orientación.`;
     }
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
         );
         id = saved.id;
       } catch (dbError) {
-        console.warn("BD no disponible; se devuelve el análisis sin persistir:", dbError);
+        console.warn("Base de datos no disponible; se devuelve el análisis sin persistir.");
       }
     }
 
@@ -298,7 +298,7 @@ export async function POST(request: NextRequest) {
       cuota: { restantes: cuota.restantes },
     }, { headers });
   } catch (error) {
-    console.error("Error en diagnóstico:", error);
+    console.error("Error al procesar el diagnóstico.");
 
     const message = error instanceof Error ? error.message : "Error interno del servidor";
 

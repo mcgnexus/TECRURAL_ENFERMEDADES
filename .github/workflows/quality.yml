@@ -1,0 +1,63 @@
+name: Calidad y smoke test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: URL de la aplicación desplegada para comprobar recursos públicos
+        required: true
+        default: https://tecrural-diagnostico.vercel.app
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Tests y build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias (incluye herramientas de desarrollo)
+        run: npm ci --include=dev
+
+      - name: Ejecutar pruebas
+        run: npm test
+
+      - name: Compilar para producción
+        run: npm run build
+
+      - name: Comprobar guardas del esquema
+        run: npm run comprobar:esquema
+
+  deployment-smoke:
+    name: Comprobar recursos del despliegue
+    if: github.event_name == 'workflow_dispatch'
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: HEAD de recursos requeridos
+        env:
+          BASE_URL: ${{ inputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          case "$BASE_URL" in
+            https://*|http://*) ;;
+            *) echo "deployment_url debe comenzar con http:// o https://" >&2; exit 1 ;;
+          esac
+          BASE_URL="${BASE_URL%/}"
+          for path in /robots.txt /sitemap.xml /sw.js /icon-192.png /icon-512.png; do
+            echo "Comprobando $BASE_URL$path"
+            curl --fail --silent --show-error --head --location "$BASE_URL$path"
+          done

@@ -453,8 +453,7 @@ export async function analizarConReintentoDeepSeek(
   } catch (error) {
     if (error instanceof PresupuestoAgotadoError) throw error;
     console.warn(
-      `Primer intento DeepSeek fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`,
-      error
+      `Primer intento DeepSeek fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
     return await analizarConVerificacion(
       imagenes,

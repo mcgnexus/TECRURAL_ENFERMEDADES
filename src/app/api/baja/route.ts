@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Respuesta genérica: no revelamos si el teléfono estaba registrado
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error en baja comercial:", error);
+    console.error("Error en baja comercial.");
     return NextResponse.json(
       { error: "No se pudo procesar la baja. Inténtalo de nuevo más tarde." },
       { status: 500 }
