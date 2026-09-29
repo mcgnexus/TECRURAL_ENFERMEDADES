@@ -185,6 +185,8 @@
   .text-balance { text-wrap: balance; }
   .font-heading { font-family: var(--tr-font-heading); }
   .font-body { font-family: var(--tr-font-body); }
+  .home-hero-title { font-size: clamp(2.25rem, 5vw, 4rem); line-height: 1.12; }
+  .home-section-title { font-size: clamp(1.75rem, 3.6vw, 2.875rem); line-height: 1.15; }
   .text-body { font-size: var(--tr-text-body); }
   .text-small { font-size: var(--tr-text-small); }
   .text-caption { font-size: var(--tr-text-caption); }

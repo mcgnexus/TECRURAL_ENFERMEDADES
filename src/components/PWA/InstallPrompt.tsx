@@ -12,20 +12,22 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
 
   useEffect(() => {
     const ua = navigator.userAgent;
     setIsIOS(/iPad|iPhone|iPod/.test(ua));
     setIsStandalone(window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true);
-
-    if (isStandalone) return;
+    setHasAnalyzed(localStorage.getItem("pwa-has-analyzed") === "true");
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      if (!localStorage.getItem("pwa-install-dismissed")) {
-        setTimeout(() => setShowPrompt(true), 3000);
-      }
+    };
+
+    const handleAnalysisComplete = () => {
+      localStorage.setItem("pwa-has-analyzed", "true");
+      setHasAnalyzed(true);
     };
 
     const handleAppInstalled = () => {
@@ -37,12 +39,23 @@ export function PWAInstallPrompt({ onInstall, onDismiss }: PWAInstallPromptProps
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
+    window.addEventListener("tecrural:analysis-complete", handleAnalysisComplete);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
+      window.removeEventListener("tecrural:analysis-complete", handleAnalysisComplete);
     };
-  }, [isStandalone, onInstall]);
+  }, [onInstall]);
+
+  useEffect(() => {
+    if (!hasAnalyzed || isStandalone || localStorage.getItem("pwa-installed") === "true") return;
+    if (localStorage.getItem("pwa-install-dismissed") === "true") return;
+
+    // En iOS se ofrecen instrucciones manuales; en otros navegadores solo se
+    // muestra el aviso cuando existe el evento nativo de instalación.
+    if (isIOS || deferredPrompt) setShowPrompt(true);
+  }, [deferredPrompt, hasAnalyzed, isIOS, isStandalone]);
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;

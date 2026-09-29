@@ -2,10 +2,14 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import logoTecRural from "../../TecRural_icono.png";
+import fotoOlivo from "../../hoja olivo.jpg";
 import { CameraCapture, type FotosEstado, type FotoCapturada } from "@/components/CameraCapture";
 import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
 import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
+import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
 import { mensajeAmigable, errorDeRespuesta } from "@/lib/error-analisis";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
@@ -17,12 +21,10 @@ function dataUrlFoto(foto: FotoCapturada): string {
   return `data:${foto.mimeType};base64,${foto.base64}`;
 }
 
-const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
+const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
 
-const btnPrimary = `${btnBase} bg-tr-green-strong text-white hover:bg-tr-forest active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
-const btnSecondary = `${btnBase} bg-tr-surface text-tr-ink border border-tr-line hover:bg-tr-paper active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
-
-const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
+const btnPrimary = `${btnBase} bg-tr-forest text-white hover:bg-[#103b2f] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed`;
+const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line";
 
 function HomeContent() {
   const [vista, setVista] = useState<Vista>("portada");
@@ -100,6 +102,7 @@ function HomeContent() {
 
       setDiagnostico(data);
       setVista("resultado");
+      window.dispatchEvent(new Event("tecrural:analysis-complete"));
       trackEvento("analisis_completado", {
         gravedad: data.diagnostico?.gravedad,
         tipo: data.diagnostico?.tipo,
@@ -166,79 +169,147 @@ function HomeContent() {
   if (vista === "portada") {
     return (
       <main className="min-h-screen bg-tr-paper flex flex-col">
-        {/* Sin `items-center`: con el titular centrado a media altura, un viewport
-            bajo (móvil con barra del navegador, landscape) desbordaba por arriba y
-            el `h1` quedaba inalcanzable. `my-auto` en el hijo hace lo mismo
-            cuando sobra espacio y colapsa a flex-start cuando no, dejando todo el
-            desborde por abajo y por tanto accesible al scroll. */}
-        <div className="flex-1 flex justify-center py-10 px-4">
-          <div className="max-w-md w-full my-auto">
-            <div className="text-center mb-8">
-              <h1 className="font-heading font-bold text-tr-forest text-balance">
-                ¿Has observado algo extraño en tus plantas?
+        <header className="border-b border-tr-line bg-tr-surface px-4 py-3">
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-0 sm:flex-row sm:items-center sm:justify-between sm:px-2">
+            <Link href="/" className="inline-flex w-fit items-center gap-3 rounded-[var(--tr-radius-control)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tr-green-strong" aria-label="TECRURAL, ir al inicio">
+              <Image src={logoTecRural} alt="" width={40} height={40} priority className="object-contain" />
+              <span className="flex flex-col">
+                <span className="font-heading text-base font-extrabold tracking-wide text-tr-forest">TECRURAL</span>
+                <span className="text-caption leading-tight text-tr-muted">Orientación fitosanitaria para agricultores</span>
+              </span>
+            </Link>
+            <nav aria-label="Navegación principal" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:justify-end">
+              <a href="#como-funciona" className="inline-flex min-h-[44px] items-center rounded-[var(--tr-radius-control)] text-small font-semibold text-tr-forest underline-offset-2 hover:underline">Cómo funciona</a>
+              <Link href="/contacto" className="inline-flex min-h-[44px] items-center rounded-[var(--tr-radius-control)] text-small font-semibold text-tr-forest underline-offset-2 hover:underline">Contacto</Link>
+              <Link href="/contacto" className={`${btnBase} px-3 py-2 text-small bg-tr-lime text-tr-forest hover:bg-[#c7dc83]`}>
+                Hablar con un técnico
+              </Link>
+            </nav>
+          </div>
+        </header>
+        <div className="flex-1">
+          <section className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14" aria-labelledby="home-title">
+            <div className="text-center lg:text-left">
+              <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">ORIENTACIÓN AGRÍCOLA EN GRANADA</p>
+              <h1 id="home-title" className="home-hero-title font-heading font-bold text-tr-forest text-balance">
+                Descubre qué puede estar afectando a tu cultivo
               </h1>
-              <p className="text-tr-muted mt-4 text-body leading-relaxed text-pretty">
-                Sube una foto para recibir una orientación inicial sobre los síntomas de tu
-                cultivo. Disponible para agricultores del Altiplano y la Costa Tropical de
-                Granada.
+              <p className="mt-4 text-body leading-relaxed text-tr-ink text-pretty">
+                Sube una fotografía y recibe una primera orientación sobre los síntomas de tu planta.
+                <span className="mt-2 block text-tr-muted">Disponible para agricultores del Altiplano y la Costa Tropical de Granada.</span>
+              </p>
+              <button onClick={() => setVista("captura")} type="button" className={`${btnPrimary} mt-6 w-full sm:w-auto sm:min-w-64`}>
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Analizar mi planta
+              </button>
+              <p className="mt-3 text-small leading-relaxed text-tr-muted">
+                Orientación inicial basada en una fotografía. No sustituye el diagnóstico de un técnico.
               </p>
             </div>
 
-            <button
-              onClick={() => setVista("captura")}
-              type="button"
-              className={`${btnPrimary} w-full py-4`}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Analizar una planta
-            </button>
+            <figure className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl">
+              <Image
+                src={fotoOlivo}
+                alt="Rama de olivo con manchas en una hoja y un olivar desenfocado al fondo."
+                priority
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                className="aspect-[3/2] h-auto w-full object-cover"
+              />
+            </figure>
+          </section>
 
-            <div className={`mt-8 p-5 ${cardStyles}`}>
-              <ul className="text-small text-tr-muted space-y-3" role="list">
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
-                  La herramienta ofrece una <span className="text-tr-ink font-semibold">orientación inicial</span>, no un diagnóstico definitivo.
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
-                  Una <span className="text-tr-ink font-semibold">fotografía clara</span> mejora el análisis.
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tr-green-strong mt-2 flex-shrink-0" />
-                  Después de ver el resultado, podrás solicitar una <span className="text-tr-ink font-semibold">revisión de TecRural</span> si lo necesitas.
-                </li>
+          <section aria-label="Ventajas de TecRural" className="border-y border-tr-line bg-[#E9EFE7]">
+            <ul className="mx-auto grid max-w-6xl gap-3 px-4 py-5 text-center text-small font-semibold text-tr-forest sm:grid-cols-3 sm:gap-6 sm:px-6" role="list">
+              <li>Orientación inicial</li>
+              <li>Contexto local</li>
+              <li>Revisión técnica opcional</li>
+            </ul>
+          </section>
+
+          <section id="como-funciona" className="mx-auto max-w-6xl scroll-mt-6 px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="como-funciona-title">
+            <div className="max-w-2xl">
+              <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">UN PROCESO SENCILLO</p>
+              <h2 id="como-funciona-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">Cómo funciona</h2>
+            </div>
+            <ol className="mt-8 grid gap-8 md:grid-cols-3" role="list">
+              <li className="flex gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">1</span>
+                <div>
+                  <h3 className="font-heading font-semibold text-tr-forest">Sube una foto</h3>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Haz una fotografía clara de la hoja, fruto o tallo afectado.</p>
+                </div>
+              </li>
+              <li className="flex gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">2</span>
+                <div>
+                  <h3 className="font-heading font-semibold text-tr-forest">Recibe una orientación</h3>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">La herramienta analiza los síntomas y te ofrece posibles causas.</p>
+                </div>
+              </li>
+              <li className="flex gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">3</span>
+                <div>
+                  <h3 className="font-heading font-semibold text-tr-forest">Solicita revisión técnica</h3>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Si lo necesitas, un técnico de TecRural puede revisar tu caso.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          <section className="bg-white" aria-labelledby="cultivos-title">
+            <div className="mx-auto grid max-w-6xl gap-5 px-4 py-12 sm:px-6 sm:py-14 md:grid-cols-[0.8fr_1.2fr] md:items-center">
+              <div>
+                <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">CONTEXTO DE GRANADA</p>
+                <h2 id="cultivos-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">Cultivos disponibles</h2>
+                <p className="mt-3 text-body leading-relaxed text-tr-muted">La orientación contempla cultivos habituales del Altiplano y la Costa Tropical.</p>
+              </div>
+              <ul className="flex flex-wrap gap-2" aria-label="Cultivos disponibles" role="list">
+                {CULTIVOS_FRECUENTES.map((cultivo) => (
+                  <li key={cultivo} className="rounded-full border border-tr-line bg-tr-lime/40 px-3 py-2 text-small font-medium text-tr-ink">{cultivo}</li>
+                ))}
               </ul>
             </div>
+          </section>
 
-            <section className={`mt-4 p-5 ${cardStyles}`} aria-labelledby="confianza-title">
-              <h2 id="confianza-title" className="font-heading font-semibold text-tr-forest">
-                Orientación cercana al campo
-              </h2>
-              <p className="mt-2 text-small text-tr-muted leading-relaxed">
-                TecRural está a cargo de Manuel Carrasco García y se dirige a agricultores del
-                Altiplano de Granada y la Costa Tropical. Puedes consultar cultivos como olivo,
-                almendro, cítricos, vid, tomate, aguacate y mango, entre otros.
+          <section className="mx-auto grid max-w-6xl gap-5 px-4 py-12 sm:px-6 sm:py-16 md:grid-cols-[0.7fr_1.3fr]" aria-labelledby="equipo-title">
+            <div>
+              <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">QUIÉN ESTÁ DETRÁS</p>
+              <h2 id="equipo-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">TecRural, cerca de tu cultivo</h2>
+            </div>
+            <div className="max-w-2xl">
+              <p className="text-body leading-relaxed text-tr-ink">
+                TecRural está a cargo de Manuel Carrasco García y ofrece orientación a agricultores del Altiplano de Granada y la Costa Tropical.
               </p>
-              <p className="mt-3 text-small text-tr-muted leading-relaxed">
-                Si al ver el resultado solicitas revisión, un técnico de TecRural recibirá el caso
-                y la foto que decidas compartir. Te contactaremos por llamada o WhatsApp, según
-                elijas; el tiempo depende de la demanda. Solicitarla no tiene coste ni implica
-                contratar un servicio.
+              <p className="mt-3 text-body leading-relaxed text-tr-muted">
+                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada o WhatsApp, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. El tiempo de respuesta depende de la demanda; la solicitud no tiene coste ni implica contratar un servicio.
               </p>
-            </section>
-          </div>
+            </div>
+          </section>
+
+          <section className="bg-tr-forest px-4 py-12 text-center sm:py-14" aria-labelledby="cta-final-title">
+            <div className="mx-auto max-w-2xl">
+              <h2 id="cta-final-title" className="home-section-title font-heading font-bold text-white">Empieza con una foto de tu cultivo</h2>
+              <p className="mt-3 text-body leading-relaxed text-white/90">Recibe una orientación inicial y decide después si quieres pedir una revisión técnica.</p>
+              <button onClick={() => setVista("captura")} type="button" className={`${btnBase} mt-6 bg-tr-lime px-6 text-tr-forest hover:bg-[#c7dc83]`}>
+                Analizar mi planta
+              </button>
+            </div>
+          </section>
         </div>
 
-        <footer className="pb-6 text-center text-small text-tr-muted px-4">
-          <p>
-            <Link href="/historial" className="hover:underline">Historial</Link>
-            {" · "}
-            <Link href="/contacto" className="text-tr-green-strong font-semibold hover:underline">Contacta con TecRural</Link>
-          </p>
-          <p className="mt-1">No sustituye asesoramiento técnico profesional</p>
+        <footer className="border-t border-tr-line bg-tr-surface px-4 py-6 text-small text-tr-muted">
+          <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p>© TecRural · Orientación fitosanitaria para agricultores</p>
+            <nav aria-label="Enlaces legales y contacto" className="flex flex-wrap gap-x-5 gap-y-2">
+              <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/contacto">Contacto</Link>
+              <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/privacidad">Privacidad</Link>
+              <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/aviso-legal">Aviso legal</Link>
+              <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/cookies">Cookies</Link>
+            </nav>
+          </div>
         </footer>
       </main>
     );
