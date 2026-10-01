@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo } from "@/lib/database";
+import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
@@ -261,6 +261,14 @@ export async function GET(request: NextRequest) {
         obtenerMetricasEmbudo(),
       ]);
       return NextResponse.json({ metricas, cuota, embudo });
+    }
+
+    // ?accesos=1&dias=30 devuelve la vista de accesos: visitas anónimas,
+    // embudo diario e IPs (enmascaradas) procedentes de la tabla de cuotas.
+    if (request.nextUrl.searchParams.get("accesos")) {
+      const dias = Number(request.nextUrl.searchParams.get("dias")) || 30;
+      const accesos = await obtenerAccesos(dias);
+      return NextResponse.json({ accesos });
     }
 
     const leads = await obtenerLeads({

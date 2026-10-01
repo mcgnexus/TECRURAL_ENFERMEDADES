@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { enmascararIp } from "./accesos-ip";
 import type { DiagnosticoResponse, DiagnosticoWithMeta, ContextoUsuario } from "@/types/diagnostico";
 import type {
   ContextoDiagnosticoLead,
@@ -962,4 +963,168 @@ export async function obtenerHistorial(usuarioId: string, limit = 50): Promise<D
     proveedor_usado: row.proveedor ?? undefined,
     created_at: row.created_at,
   }));
+}
+
+// ============================================================================
+// ACCESOS AL PANEL
+// ============================================================================
+
+export interface DiaAcceso {
+  dia: string;
+  visitantes: number;
+  diagnosticos: number;
+  leads: number;
+}
+
+export interface IpAcceso {
+  /** IP con el último octeto/hexteto enmascarado: nunca sale entera de aquí. */
+  ip: string;
+  peticiones: number;
+  dias: number;
+  primera: string;
+  ultima: string;
+  /** Alguna vez alcanzó el límite de la ventana: posible bot o abuso. */
+  topada: boolean;
+}
+
+export interface VisitanteAnonimo {
+  id: string;
+  primera: string;
+  ultima: string;
+  pasos: number;
+  eventos: string[];
+}
+
+export interface AccesosResumen {
+  dias: number;
+  porDia: DiaAcceso[];
+  ips: IpAcceso[];
+  visitantes: VisitanteAnonimo[];
+  totales: { visitantes: number; diagnosticos: number; leads: number; ips: number };
+}
+
+// Las utilidades puras de IP (`parsearClaveCuotaIp`, `enmascararIp`) viven en
+// ./accesos-ip para poder probarse sin el cliente de base de datos.
+
+/**
+ * Vista de accesos para el panel: visitas anónimas, embudo diario e IPs.
+ *
+ * Importante: no hay enlace entre `visitor_id` e IP. Las IPs solo constan en
+ * `cuotas` como clave de rate-limit; los visitantes solo constan en `eventos`
+ * como UUID aleatorio. Se devuelven como dos listas independientes y así se
+ * explica en el propio panel, para no dar a entender una atribución que la base
+ * de datos no soporta.
+ */
+export async function obtenerAccesos(dias: number = 30): Promise<AccesosResumen> {
+  const db = getSql();
+  const rango = Math.min(Math.max(Math.trunc(dias), 1), 365);
+
+  const [diaRows, ipRows, visRows] = await Promise.all([
+    db`
+      WITH dias AS (
+        SELECT generate_series(
+          date_trunc('day', NOW() - make_interval(days => ${rango}::int)),
+          date_trunc('day', NOW()),
+          interval '1 day'
+        ) AS dia
+      ),
+      v AS (
+        SELECT date_trunc('day', created_at) AS dia, COUNT(DISTINCT visitor_id)::int AS visitantes
+        FROM eventos
+        WHERE evento = 'portada_vista'
+          AND created_at >= NOW() - make_interval(days => ${rango}::int)
+        GROUP BY 1
+      ),
+      d AS (
+        SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS diagnosticos
+        FROM diagnosticos
+        WHERE created_at >= NOW() - make_interval(days => ${rango}::int)
+        GROUP BY 1
+      ),
+      l AS (
+        SELECT date_trunc('day', created_at) AS dia, COUNT(*)::int AS leads
+        FROM leads
+        WHERE created_at >= NOW() - make_interval(days => ${rango}::int)
+        GROUP BY 1
+      )
+      SELECT
+        to_char(dias.dia, 'YYYY-MM-DD') AS dia,
+        COALESCE(v.visitantes, 0) AS visitantes,
+        COALESCE(d.diagnosticos, 0) AS diagnosticos,
+        COALESCE(l.leads, 0) AS leads
+      FROM dias
+      LEFT JOIN v ON v.dia = dias.dia
+      LEFT JOIN d ON d.dia = dias.dia
+      LEFT JOIN l ON l.dia = dias.dia
+      ORDER BY dias.dia ASC
+    `,
+    db`
+      SELECT
+        substring(clave from '^lead:ip:(?:eventos:)?([0-9a-fA-F.:]+):[0-9]{8}$') AS ip,
+        SUM(contador)::int AS peticiones,
+        COUNT(DISTINCT substring(clave from ':([0-9]{8})$'))::int AS dias,
+        MIN(actualizado_en)::text AS primera,
+        MAX(actualizado_en)::text AS ultima,
+        BOOL_OR(contador >= limite) AS topada
+      FROM cuotas
+      WHERE clave LIKE 'lead:ip:%'
+      GROUP BY 1
+      HAVING substring(clave from '^lead:ip:(?:eventos:)?([0-9a-fA-F.:]+):[0-9]{8}$') IS NOT NULL
+      ORDER BY peticiones DESC
+      LIMIT 100
+    `,
+    db`
+      SELECT
+        visitor_id,
+        MIN(created_at)::text AS primera,
+        MAX(created_at)::text AS ultima,
+        COUNT(DISTINCT evento)::int AS pasos,
+        string_agg(DISTINCT evento, ',') AS eventos
+      FROM eventos
+      WHERE created_at >= NOW() - make_interval(days => ${rango}::int)
+      GROUP BY visitor_id
+      ORDER BY MIN(created_at) DESC
+      LIMIT 200
+    `,
+  ]);
+
+  const porDia: DiaAcceso[] = diaRows.map((r) => ({
+    dia: String(r.dia),
+    visitantes: Number(r.visitantes),
+    diagnosticos: Number(r.diagnosticos),
+    leads: Number(r.leads),
+  }));
+
+  const ips: IpAcceso[] = ipRows.map((r) => ({
+    ip: enmascararIp(String(r.ip)),
+    peticiones: Number(r.peticiones),
+    dias: Number(r.dias),
+    primera: String(r.primera),
+    ultima: String(r.ultima),
+    topada: Boolean(r.topada),
+  }));
+
+  const visitantes: VisitanteAnonimo[] = visRows.map((r) => ({
+    id: String(r.visitor_id),
+    primera: String(r.primera),
+    ultima: String(r.ultima),
+    pasos: Number(r.pasos),
+    eventos: String(r.eventos ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean),
+  }));
+
+  return {
+    dias: rango,
+    porDia,
+    ips,
+    visitantes,
+    totales: {
+      visitantes: visitantes.length,
+      diagnosticos: porDia.reduce((s, d) => s + d.diagnosticos, 0),
+      leads: porDia.reduce((s, d) => s + d.leads, 0),
+      ips: ips.length,
+    },
+  };
 }
