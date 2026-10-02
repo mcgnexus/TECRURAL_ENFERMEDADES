@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDatabase, obtenerFotoLead, contarFotosLead } from "@/lib/database";
+import { obtenerFotoLead, contarFotosLead } from "@/lib/database";
 
 /**
  * Devuelve UNA foto compartida en un lead, protegida por ADMIN_TOKEN.
@@ -42,8 +42,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await initDatabase();
-
     // El número de fotos se consulta antes para no pasar un índice enorme a la
     // extracción de JSONB.
     const total = await contarFotosLead(leadId);

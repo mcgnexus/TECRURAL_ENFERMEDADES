@@ -184,7 +184,7 @@ function mensajeTelegram(p: PayloadNotificacion): string {
   return texto.length > LIMITE_TELEGRAM ? `${texto.slice(0, LIMITE_TELEGRAM - 3)}...` : texto;
 }
 
-async function enviarTelegram(p: PayloadNotificacion): Promise<void> {
+async function enviarTelegram(p: PayloadNotificacion, signal: AbortSignal): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
@@ -192,6 +192,7 @@ async function enviarTelegram(p: PayloadNotificacion): Promise<void> {
   const respuesta = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify({
       chat_id: chatId,
       text: mensajeTelegram(p),
@@ -213,7 +214,7 @@ async function enviarTelegram(p: PayloadNotificacion): Promise<void> {
 // WEBHOOK GENÉRICO
 // ---------------------------------------------------------------------------
 
-async function enviarWebhook(p: PayloadNotificacion, metricas?: MetricasCaptacion): Promise<void> {
+async function enviarWebhook(p: PayloadNotificacion, signal: AbortSignal, metricas?: MetricasCaptacion): Promise<void> {
   const url = process.env.LEAD_WEBHOOK_URL;
   if (!url) return;
 
@@ -241,6 +242,7 @@ async function enviarWebhook(p: PayloadNotificacion, metricas?: MetricasCaptacio
       ...(firma ? { "X-TecRural-Signature": `sha256=${firma}` } : {}),
     },
     body: cuerpo,
+    signal,
   });
 
   if (!respuesta.ok) {
@@ -252,13 +254,13 @@ async function enviarWebhook(p: PayloadNotificacion, metricas?: MetricasCaptacio
 // ENVÍO
 // ---------------------------------------------------------------------------
 
-async function conReintentos(canal: string, enviar: () => Promise<void>): Promise<void> {
+async function conReintentos(canal: string, enviar: (signal: AbortSignal) => Promise<void>): Promise<void> {
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
     const controlador = new AbortController();
     const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_MS);
     try {
       await Promise.race([
-        enviar(),
+        enviar(controlador.signal),
         new Promise<never>((_, rechazar) =>
           controlador.signal.addEventListener("abort", () =>
             rechazar(new Error(`timeout tras ${TIMEOUT_MS} ms`))
@@ -290,10 +292,10 @@ export async function notificarLeadNuevo(
   const payload = construirPayload(lead);
 
   if (telegramConfigurado()) {
-    await conReintentos("Telegram", () => enviarTelegram(payload));
+    await conReintentos("Telegram", (signal) => enviarTelegram(payload, signal));
   }
   if (webhookConfigurado()) {
-    await conReintentos("webhook", () => enviarWebhook(payload, metricas));
+    await conReintentos("webhook", (signal) => enviarWebhook(payload, signal, metricas));
   }
 }
 

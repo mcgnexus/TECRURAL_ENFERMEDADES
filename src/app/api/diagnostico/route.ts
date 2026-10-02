@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analizarConReintento, type ImagenAnalisis } from "@/lib/gemini";
 import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
-import { initDatabase, guardarDiagnostico } from "@/lib/database";
+import { guardarDiagnostico } from "@/lib/database";
 import { validarImagenServidor } from "@/lib/imagen";
 import { uidObligatorio } from "@/lib/identidad";
 import { consumirUso } from "@/lib/cuota";
@@ -201,17 +201,12 @@ export async function POST(request: NextRequest) {
     // hiciera antes, un cuerpo de 4 MB sin imagen válida consumiría cuota sin
     // coste detrás, y un agricultor con la foto mal hecha pagaría un uso que no
     // le hemos analizado.
-    try {
-      await initDatabase();
-    } catch (error) {
-      console.warn("No se pudo inicializar la base para cuotas; se continúa sin cuota.");
-    }
     const cuota = await consumirUso("diag", usuarioId);
     if (!cuota.permitido) {
-      console.warn("Diagnóstico bloqueado por cuota.");
+      console.warn("Diagnóstico bloqueado por cuota o indisponibilidad de la base.");
       return NextResponse.json(
-        { error: cuota.mensaje, cuota: { motivo: cuota.motivo } },
-        { status: cuota.motivo === "global" ? 503 : 429 }
+        { error: cuota.mensaje, cuota: { motivo: cuota.motivo, requiereTelefono: cuota.requiereTelefono } },
+        { status: cuota.motivo === "global" || cuota.motivo === "database" ? 503 : 429 }
       );
     }
     const headers: Record<string, string> = { "X-Cuota-Restante": String(cuota.restantes) };
@@ -268,7 +263,6 @@ export async function POST(request: NextRequest) {
       console.warn("Petición sin identificador de visitante; análisis no persistido");
     } else {
       try {
-        await initDatabase();
         const saved = await guardarDiagnostico(
           usuarioId,
           "", // imagen no almacenada permanentemente

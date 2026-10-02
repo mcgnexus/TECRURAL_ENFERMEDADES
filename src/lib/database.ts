@@ -12,10 +12,7 @@ import type {
 
 let sql: NeonQueryFunction<false, false> | null = null;
 
-/** El DDL idempotente se ejecuta una sola vez por instancia. Medido: las 24
- * sentencias costaban ~1,3 s en cada petición, incluidos los análisis, donde el
- * usuario está esperando el resultado. En un entorno serverless la instancia
- * se recicla, pero entonces las tablas ya existen y el coste es cero. */
+/** Promesa compartida por el comando explícito `npm run db:migrate`. */
 let initPromesa: Promise<void> | null = null;
 
 function getSql() {
@@ -228,7 +225,7 @@ function aplicarMigraciones(): Promise<void> {
   // db/one-off/limpiar-usuario-demo.mjs. Este método solo crea y altera
   // esquema; nunca borra filas.
 
-  // Migración 0006: cuotas de uso, en tabla y no en memoria.
+  // Migración 0006: cuotas legacy, conservadas para compatibilidad histórica.
   await db`
     CREATE TABLE IF NOT EXISTS cuotas (
       clave TEXT PRIMARY KEY,
@@ -244,6 +241,64 @@ function aplicarMigraciones(): Promise<void> {
   await db`
     CREATE INDEX IF NOT EXISTS idx_cuotas_resets
     ON cuotas(resets_en)
+  `;
+
+  // Consumos con marca de tiempo individual: los límites se calculan sobre
+  // ventanas móviles reales, no por día UTC.
+  await db`
+    CREATE TABLE IF NOT EXISTS cuota_usos (
+      id BIGSERIAL PRIMARY KEY,
+      ambito TEXT NOT NULL,
+      sujeto TEXT NOT NULL,
+      visitor_id TEXT,
+      telefono_hash TEXT,
+      ip TEXT,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_usos_ambito_sujeto_fecha
+    ON cuota_usos (ambito, sujeto, creado_en DESC)
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_usos_fecha
+    ON cuota_usos (creado_en)
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_usos_telefono_fecha
+    ON cuota_usos (telefono_hash, creado_en DESC)
+    WHERE telefono_hash IS NOT NULL
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_usos_ip_fecha
+    ON cuota_usos (ip, creado_en DESC)
+    WHERE ip IS NOT NULL
+  `;
+
+  // Solo se conserva HMAC del teléfono para vincular la cuota semanal. El
+  // teléfono original no se almacena ni se usa para comunicaciones.
+  await db`
+    CREATE TABLE IF NOT EXISTS cuota_telefonos (
+      visitor_id TEXT PRIMARY KEY,
+      telefono_hash TEXT NOT NULL,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expira_en TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '180 days')
+    )
+  `;
+
+  await db`
+    ALTER TABLE cuota_telefonos
+    ADD COLUMN IF NOT EXISTS expira_en TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '180 days')
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_telefonos_hash
+    ON cuota_telefonos (telefono_hash)
   `;
 
   // Migración 0007: embudo de captación.
@@ -1060,16 +1115,16 @@ export async function obtenerAccesos(dias: number = 30): Promise<AccesosResumen>
     `,
     db`
       SELECT
-        substring(clave from '^lead:ip:(?:eventos:)?([0-9a-fA-F.:]+):[0-9]{8}$') AS ip,
-        SUM(contador)::int AS peticiones,
-        COUNT(DISTINCT substring(clave from ':([0-9]{8})$'))::int AS dias,
-        MIN(actualizado_en)::text AS primera,
-        MAX(actualizado_en)::text AS ultima,
-        BOOL_OR(contador >= limite) AS topada
-      FROM cuotas
-      WHERE clave LIKE 'lead:ip:%'
-      GROUP BY 1
-      HAVING substring(clave from '^lead:ip:(?:eventos:)?([0-9a-fA-F.:]+):[0-9]{8}$') IS NOT NULL
+        ip,
+        COUNT(*)::int AS peticiones,
+        COUNT(DISTINCT (creado_en AT TIME ZONE 'UTC')::date)::int AS dias,
+        MIN(creado_en)::text AS primera,
+        MAX(creado_en)::text AS ultima,
+        COUNT(*) FILTER (WHERE sujeto NOT LIKE 'lead:eventos:%') >= 5 AS topada
+      FROM cuota_usos
+      WHERE ambito = 'lead' AND ip IS NOT NULL
+        AND creado_en >= NOW() - make_interval(days => ${rango}::int)
+      GROUP BY ip
       ORDER BY peticiones DESC
       LIMIT 100
     `,

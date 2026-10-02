@@ -11,7 +11,7 @@ import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
 import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
-import { mensajeAmigable, errorDeRespuesta } from "@/lib/error-analisis";
+import { mensajeAmigable, errorDeRespuesta, ErrorAnalisis } from "@/lib/error-analisis";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
@@ -34,6 +34,11 @@ function HomeContent() {
   const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requiereTelefono, setRequiereTelefono] = useState(false);
+  const [telefonoCuota, setTelefonoCuota] = useState("");
+  const [confirmarCuotaTelefono, setConfirmarCuotaTelefono] = useState(false);
+  const [guardandoTelefono, setGuardandoTelefono] = useState(false);
+  const [errorTelefono, setErrorTelefono] = useState<string | null>(null);
 
   const handleFotosChange = useCallback((nuevas: FotosEstado) => {
     setFotos(nuevas);
@@ -71,6 +76,7 @@ function HomeContent() {
 
     setIsLoading(true);
     setError(null);
+    setRequiereTelefono(false);
     trackEvento("analisis_iniciado", { fotos: 1 + (fotos.enves ? 1 : 0) + (fotos.planta_completa ? 1 : 0) });
 
     try {
@@ -115,12 +121,35 @@ function HomeContent() {
     } catch (err) {
       const mensaje = mensajeAmigable(err);
       setError(mensaje);
+      if (err instanceof ErrorAnalisis && err.requiereTelefono) setRequiereTelefono(true);
       trackEvento("analisis_error", { message: mensaje });
       // Las fotos y el contexto se conservan para reintentar
     } finally {
       setIsLoading(false);
     }
   }, [fotos, contexto, isLoading]);
+
+  const activarCuotaTelefono = useCallback(async () => {
+    setGuardandoTelefono(true);
+    setErrorTelefono(null);
+    try {
+      const response = await fetch("/api/cuota/telefono", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefono: telefonoCuota, aviso_uso_datos: confirmarCuotaTelefono }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo activar la ampliación.");
+      setRequiereTelefono(false);
+      setError(null);
+      setErrorTelefono(null);
+      setConfirmarCuotaTelefono(false);
+    } catch (err) {
+      setErrorTelefono(err instanceof Error ? err.message : "No se pudo activar la ampliación.");
+    } finally {
+      setGuardandoTelefono(false);
+    }
+  }, [telefonoCuota, confirmarCuotaTelefono]);
 
   const handleReiniciar = useCallback(() => {
     setDiagnostico(null);
@@ -351,6 +380,42 @@ function HomeContent() {
               </div>
             </div>
           </div>
+        )}
+
+        {requiereTelefono && (
+          <section className="mb-5 rounded-[var(--tr-radius-card)] border border-tr-line bg-tr-surface p-4" aria-labelledby="cuota-telefono-titulo">
+            <h2 id="cuota-telefono-titulo" className="font-heading font-semibold text-tr-forest">Amplía el límite semanal</h2>
+            <p className="mt-1 text-small text-tr-muted">Puedes hacer hasta 6 análisis en cualquier periodo de 7 días, contando los que ya hayas hecho esta semana.</p>
+            <label htmlFor="cuota-telefono" className="mt-3 block text-small font-semibold text-tr-forest">Teléfono</label>
+            <input
+              id="cuota-telefono"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={telefonoCuota}
+              onChange={(e) => setTelefonoCuota(e.target.value)}
+              className="mt-1 w-full rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper px-3 py-2.5 text-tr-ink"
+              placeholder="Ej.: 600 123 456"
+            />
+            <label className="mt-3 flex items-start gap-2 text-caption leading-relaxed text-tr-muted">
+              <input
+                type="checkbox"
+                checked={confirmarCuotaTelefono}
+                onChange={(e) => setConfirmarCuotaTelefono(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>Confirmo que facilito mi teléfono solo para ampliar el límite de análisis. No se guarda en claro (únicamente una huella seudonimizada), no se usa para contactarme ni para publicidad, y se conserva un máximo de 180 días. Esta ampliación no es una solicitud de revisión. <Link href="/privacidad#limite-analisis" className="underline">Más información</Link>.</span>
+            </label>
+            {errorTelefono && <p className="mt-2 text-small text-tr-warning-text" role="alert">{errorTelefono}</p>}
+            <button
+              type="button"
+              onClick={activarCuotaTelefono}
+              disabled={guardandoTelefono || !telefonoCuota.trim() || !confirmarCuotaTelefono}
+              className={`${btnPrimary} mt-3 w-full`}
+            >
+              {guardandoTelefono ? "Activando…" : "Ampliar a 6 análisis semanales"}
+            </button>
+          </section>
         )}
 
         <ContextoCultivo valor={contexto} onChange={setContexto} disabled={isLoading} />

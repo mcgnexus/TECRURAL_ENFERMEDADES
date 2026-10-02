@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, actualizarFeedback } from "@/lib/database";
+import { actualizarFeedback } from "@/lib/database";
 import { uidDeVisitante } from "@/lib/identidad";
 
 /**
@@ -66,7 +66,6 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    await initDatabase();
     const actualizado = await actualizarFeedback(
       parsed.data.id,
       parsed.data.feedback,

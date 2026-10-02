@@ -1,33 +1,8 @@
+import { createHmac } from "node:crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-
-/**
- * Cuotas de uso, en base de datos y no en memoria.
- *
- * Por qué aquí y no en un Map del módulo: en Vercel cada instancia de
- * serverless tiene su propia memoria, así que un límite en memoria se
- * multiplica por el número de instancias (con ocho, "5 por hora" son 40) y
- * desaparece en cuanto reciclan una instancia. Una fila en Postgres es un
- * límite global, persistente y además consultable desde /admin.
- *
- * Dos propiedades que importan y que se pierden fácil en un contador ingenuo:
- *
- * 1. El incremento es ATÓMICO. Se hace con `contador = contador + 1` dentro del
- *    propio UPDATE y el RETURNING devuelve el valor ya incrementado. Si se
- *    leyera primero y se escribiera después, dos peticiones simultáneas pasarían
- *    las dos la comprobación y las dos consumirían. Aquí no hay ventana.
- *
- * 2. La ventana se renueva solo si ya venció. Nunca se resetea al alcanzar el
- *    límite: si se reiniciara al llegar al tope, quien lo alcanzara se
- *    auto-liberaría y la cuota no valdría para nada.
- *
- * El consumo se descuenta ANTES de llamar al proveedor. Si el análisis falla
- * después, el uso se cuenta igual, porque el dinero ya se ha gastado en la
- * llamada: es preferible contar de más que dejar el reintento sin coste.
- */
 
 let sql: NeonQueryFunction<false, false> | null = null;
 
-/** Conección perezosa: se abre en la primera consulta, no al importar. */
 function getSql(): NeonQueryFunction<false, false> {
   if (!sql) {
     const url = process.env.DATABASE_URL;
@@ -39,221 +14,254 @@ function getSql(): NeonQueryFunction<false, false> {
 
 export type Ambito = "diag" | "lead";
 
-export interface Limites {
-  /** Usos por visitante en la ventana. */
-  porVisitante: number;
-  /** Tope total de la ventana para toda la app. */
-  global: number;
-  /** Duración de la ventana. */
-  ventanaMs: number;
-}
-
-export const LIMITES: Record<Ambito, Limites> = {
-  // Un agricultor de campo hace unos pocos análisis al día, y el que lleva
-  // varios días con la misma planta ya lo tiene en el historial. Diez por hora
-  // deja margen de sobra a un usuario legítimo y corta en seco a un script. El
-  // tope global es la red de seguridad que el proveedor no te da.
-  diag: { porVisitante: 10, global: 500, ventanaMs: 24 * 60 * 60 * 1000 },
-  lead: { porVisitante: 5, global: 200, ventanaMs: 24 * 60 * 60 * 1000 },
-};
+export const LIMITES = {
+  anonimos: 2,
+  telefono: 6,
+  global: 500,
+  semanaMs: 7 * 24 * 60 * 60 * 1000,
+  ventanaGlobalMs: 24 * 60 * 60 * 1000,
+} as const;
 
 export interface DecisionCuota {
   permitido: boolean;
-  /** Motivo legible, ya en español para el agricultor. */
-  motivo?: "visitante" | "global" | "sin_identificar";
-  /** Texto que se muestra cuando se rechaza. */
+  motivo?: "visitante" | "global" | "sin_identificar" | "database";
   mensaje?: string;
-  /** Aviso técnico para el log. */
-  detalle?: string;
   restantes: number;
+  requiereTelefono?: boolean;
 }
 
-function dia(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
+export function hashTelefonoCuota(telefono: string): string {
+  const secreto = process.env.CUOTA_TELEFONO_SECRET;
+  if (!secreto) throw new Error("CUOTA_TELEFONO_SECRET no configurado");
+  return createHmac("sha256", secreto).update(telefono).digest("hex");
 }
 
-function claveVisitante(ambito: Ambito, sufijo: string, ventana: Date): string {
-  return `${ambito}:${sufijo}:${dia(ventana)}`;
+export async function telefonoCuotaDeVisitante(uid: string): Promise<string | null> {
+  const rows = await getSql()`
+    SELECT telefono_hash FROM cuota_telefonos
+    WHERE visitor_id = ${uid} AND expira_en > NOW()
+  `;
+  return rows[0]?.telefono_hash ? String(rows[0].telefono_hash) : null;
 }
 
-function claveGlobal(ambito: Ambito, ventana: Date): string {
-  return `${ambito}:global:${dia(ventana)}`;
-}
-
-function mensaje(ambito: Ambito, motivo: "visitante" | "global"): string {
-  if (motivo === "global") {
-    return "El servicio está muy saturado en este momento. Inténtalo de nuevo en unos minutos.";
+/**
+ * Vincula una cuota semanal al visitante sin conservar el teléfono en claro.
+ * Los análisis anónimos de los últimos siete días cuentan dentro del máximo
+ * semanal al vincular el teléfono.
+ */
+export async function vincularTelefonoCuota(uid: string, telefonoHash: string): Promise<void> {
+  const db = getSql();
+  const insertado = await db`
+    INSERT INTO cuota_telefonos (visitor_id, telefono_hash, expira_en)
+    VALUES (${uid}, ${telefonoHash}, NOW() + INTERVAL '180 days')
+    ON CONFLICT (visitor_id) DO NOTHING
+    RETURNING visitor_id
+  `;
+  if (!insertado.length) {
+    const existente = await db`
+      SELECT telefono_hash FROM cuota_telefonos WHERE visitor_id = ${uid}
+    `;
+    if (existente[0]?.telefono_hash !== telefonoHash) {
+      throw new Error("Este dispositivo ya tiene un teléfono vinculado.");
+    }
   }
-  return ambito === "diag"
-    ? "Has alcanzado el límite de análisis de este dispositivo. Espera un rato y vuelve a intentarlo: tu historial se conserva."
-    : "Has enviado demasiadas solicitudes desde este dispositivo. Espera un rato antes de volver a enviar una.";
+  await db`
+    UPDATE cuota_usos
+    SET telefono_hash = ${telefonoHash}
+    WHERE visitor_id = ${uid}
+      AND ambito = 'diag'
+      AND telefono_hash IS NULL
+      AND creado_en > NOW() - INTERVAL '7 days'
+  `;
+}
+
+interface Intento {
+  permitido: boolean;
+  consumidos: number;
 }
 
 /**
- * Intenta consumir un uso. Devuelve la decisión sin lanzar: un fallo de base de
- * datos NUNCA debe dejar al agricultor sin servicio. En ese caso se permite el
- * análisis y se avisa por log, porque una cuota que bloquea a usuarios
- * legítimos cuando la base de datos tiene un problema es peor que una cuota que
- * se pierde durante la incidencia.
+ * Inserta un uso solo si los límites siguen disponibles. Los advisory locks se
+ * toman en orden estable y permanecen hasta terminar esta única sentencia, de
+ * modo que el conteo móvil y la inserción son atómicos entre instancias.
  */
-/**
- * Intenta consumir una unidad de una clave. Atómico.
- *
- * El CASE distingue los dos casos:
- *   - ventana vencida  -> el contador vuelve a 1 (se renueva sola, sin tarea)
- *   - ventana vigente  -> contador + 1
- * y el WHERE es la condición de permiso: renovar siempre, incrementar solo si
- * no está topado. Si la clave no cumple el WHERE, su fila no aparece en el
- * RETURNING, y esa ausencia es la señal de "en el tope".
- *
- * Dos detalles que costaron sangre y conviene no deshacer:
- *
- * 1. El WHERE va con OR, no con AND. Con `resets_en <= NOW() AND contador <
- *    limite` una fila recién insertada (resets_en en el futuro) nunca cumpliría
- *    la primera condición y no se incrementaría nunca.
- *
- * 2. La tabla se califica con un ALIAS (`AS c`). Calificarla con el nombre real
- *    (`cuotas.`) falla al insertar varias filas en una sentencia: Postgres da
- *    "missing FROM-clause entry for table cuotas", porque con más de una fila
- *    de VALUES la referencia al nombre no resuelve.
- */
-async function intentarConsumir(
-  clave: string,
-  limite: number,
-  fin: Date
-): Promise<{ permitido: boolean; contador: number }> {
-  const filas = await getSql()`
-    INSERT INTO cuotas AS c (clave, contador, limite, resets_en)
-    VALUES (${clave}, 1, ${limite}, ${fin})
-    ON CONFLICT (clave) DO UPDATE
-      SET contador = CASE
-                        WHEN c.resets_en <= NOW() THEN 1
-                        ELSE c.contador + 1
-                      END,
-          limite = EXCLUDED.limite,
-          resets_en = EXCLUDED.resets_en,
-          actualizado_en = NOW()
-      WHERE c.resets_en <= NOW()
-         OR c.contador < c.limite
-    RETURNING contador, limite
+async function intentarConsumo(args: {
+  ambito: Ambito;
+  sujeto: string;
+  visitorId?: string;
+  telefonoHash?: string | null;
+  ip?: string;
+  limite: number;
+  ventanaMs: number;
+  global?: { limite: number; ventanaMs: number };
+}): Promise<Intento> {
+  const db = getSql();
+  const globalSujeto = `${args.ambito}:global`;
+  const filas = await db`
+    WITH purga_usos AS (
+      DELETE FROM cuota_usos WHERE creado_en < NOW() - INTERVAL '31 days'
+      RETURNING id
+    ),
+    purga_telefonos AS (
+      DELETE FROM cuota_telefonos WHERE expira_en <= NOW()
+      RETURNING visitor_id
+    ),
+    lock_keys AS MATERIALIZED (
+      SELECT clave
+      FROM unnest(ARRAY[${args.sujeto}, ${globalSujeto}]) AS x(clave)
+      GROUP BY clave
+      ORDER BY clave
+    ),
+    locks AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(hashtextextended(clave, 0))
+      FROM lock_keys
+    ),
+    conteos AS MATERIALIZED (
+      SELECT
+        (
+          SELECT COUNT(*)::int FROM cuota_usos u
+          WHERE u.ambito = ${args.ambito}
+            AND (
+              u.sujeto = ${args.sujeto}
+              OR (
+                ${Boolean(args.telefonoHash)}
+                AND u.telefono_hash = ${args.telefonoHash ?? null}
+                AND u.sujeto <> ${globalSujeto}
+              )
+            )
+            AND u.creado_en > NOW() - (${args.ventanaMs}::bigint * INTERVAL '1 millisecond')
+            AND EXISTS (SELECT 1 FROM locks)
+        ) AS propios,
+        (
+          SELECT COUNT(*)::int FROM cuota_usos u
+          WHERE ${Boolean(args.global)}
+            AND u.ambito = ${args.ambito}
+            AND u.sujeto = ${globalSujeto}
+            AND u.creado_en > NOW() - (${args.global?.ventanaMs ?? 0}::bigint * INTERVAL '1 millisecond')
+            AND EXISTS (SELECT 1 FROM locks)
+        ) AS globales
+    ),
+    insertado AS (
+      INSERT INTO cuota_usos (ambito, sujeto, visitor_id, telefono_hash, ip)
+      SELECT ${args.ambito}, uso.sujeto, ${args.visitorId ?? null}, ${args.telefonoHash ?? null}, ${args.ip ?? null}
+      FROM conteos
+      CROSS JOIN LATERAL (
+        SELECT ${args.sujeto}::text AS sujeto
+        WHERE propios < ${args.limite}
+          AND (NOT ${Boolean(args.global)} OR globales < ${args.global?.limite ?? 0})
+        UNION ALL
+        SELECT ${globalSujeto}::text AS sujeto
+        WHERE ${Boolean(args.global)}
+          AND propios < ${args.limite}
+          AND globales < ${args.global?.limite ?? 0}
+      ) uso
+      RETURNING id
+    )
+    SELECT conteos.propios, COUNT(insertado.id)::int AS insertados
+    FROM conteos LEFT JOIN insertado ON TRUE
+    GROUP BY conteos.propios
   `;
 
-  if (filas.length === 0) return { permitido: false, contador: 0 };
-  return { permitido: true, contador: Number(filas[0].contador) };
-}
-
-/**
- * Devuelve una unidad consumida, para compensar un rechazo posterior.
- *
- * Solo se usa cuando el primer contador ya se consumió y el segundo rechaza:
- * sin esta compensación, al visitante se le cobraría un uso por una petición
- * que no se atendió. GREATEST(..., 0) evita que un contador quede negativo si
- * algo va mal.
- */
-async function devolverUnidad(clave: string): Promise<void> {
-  try {
-    await getSql()`
-      UPDATE cuotas SET contador = GREATEST(contador - 1, 0) WHERE clave = ${clave}
-    `;
-  } catch (error) {
-    // La compensación es best-effort: perder una unidad es mucho menos grave
-    // que propagar un error por ella.
-    console.warn("No se pudo devolver la unidad de cuota.");
+  if (Number(filas[0]?.insertados) > 0) {
+    return { permitido: true, consumidos: Number(filas[0].propios) + 1 };
   }
+  return { permitido: false, consumidos: 0 };
 }
 
-export async function consumirUso(
-  ambito: Ambito,
-  uid: string | null
-): Promise<DecisionCuota> {
-  const limites = LIMITES[ambito];
-
+export async function consumirUso(ambito: Ambito, uid: string | null): Promise<DecisionCuota> {
   if (!uid) {
-    // Sin identificador no hay contra quién contar, así que no se puede
-    // aplicar una cuota. Se rechaza: permitir sería devolver el endpoint a un
-    // consumo ilimitado, que es justo lo que se viene a cerrar.
     return {
       permitido: false,
       motivo: "sin_identificar",
-      mensaje:
-        "No hemos podido identificar este dispositivo para aplicar el límite de uso. Revisa que aceptes cookies y vuelve a intentarlo.",
-      detalle: `petición sin uid para ${ambito}`,
+      mensaje: "No hemos podido identificar este dispositivo. Recarga la página e inténtalo de nuevo.",
       restantes: 0,
     };
   }
 
   try {
-    const ahora = new Date();
-    const fin = new Date(ahora.getTime() + limites.ventanaMs);
-    const cVisita = claveVisitante(ambito, uid, ahora);
-    const cGlobal = claveGlobal(ambito, ahora);
-
-    // El contador del visitante va PRIMERO, y esto es lo que impide la denegación
-    // de servicio. Cuando los dos contadores se incrementaban en la misma
-    // sentencia, una petición rechazada por cuota de visitante consumía de todos
-    // modos una unidad del tope global: quien hubiera agotado su cuota podía
-    // seguir enviando peticiones y vaciar los 500 diarios globales, dejando sin
-    // servicio a todo el mundo. Comprobado contra la base de datos real: un solo
-    // rechazo dejaba el contador global en 1.
-    //
-    // Ahora, si el visitante ya está en el tope, se corta aquí y el contador
-    // global no se toca.
-    const visita = await intentarConsumir(cVisita, limites.porVisitante, fin);
-    if (!visita.permitido) {
+    if (ambito !== "diag") {
+      const porClave = await consumirUsoPorClave(ambito, uid, 5, 60 * 60 * 1000);
       return {
-        permitido: false,
-        motivo: "visitante",
-        mensaje: mensaje(ambito, "visitante"),
-        detalle: `${cVisita} en tope`,
-        restantes: 0,
+        permitido: porClave.permitido,
+        restantes: porClave.restantes,
+        ...(porClave.permitido ? {} : porClave.motivo === "database" ? { motivo: "database" as const } : { motivo: "visitante" as const }),
+        mensaje: porClave.permitido
+          ? undefined
+          : porClave.motivo === "database"
+            ? "No podemos comprobar el límite de uso ahora mismo. Inténtalo de nuevo en unos minutos."
+            : "Has alcanzado el límite de solicitudes de este dispositivo. Espera un rato antes de volver a intentarlo.",
       };
     }
 
-    const global = await intentarConsumir(cGlobal, limites.global, fin);
-    if (!global.permitido) {
-      // El tope global bloquea a un visitante que sí tenía margen: se le
-      // devuelve la unidad para que no la pierda por una petición no atendida.
-      await devolverUnidad(cVisita);
-      return {
-        permitido: false,
-        motivo: "global",
-        mensaje: mensaje(ambito, "global"),
-        detalle: `${cGlobal} en tope`,
-        restantes: 0,
-      };
+    const telefonoHash = await telefonoCuotaDeVisitante(uid);
+    const sujeto = telefonoHash ? `telefono:${telefonoHash}` : `visitante:${uid}`;
+    const limite = telefonoHash ? LIMITES.telefono : LIMITES.anonimos;
+    const resultado = await intentarConsumo({
+      ambito,
+      sujeto,
+      visitorId: uid,
+      telefonoHash,
+      limite,
+      ventanaMs: LIMITES.semanaMs,
+      global: { limite: LIMITES.global, ventanaMs: LIMITES.ventanaGlobalMs },
+    });
+    if (resultado.permitido) {
+      return { permitido: true, restantes: limite - resultado.consumidos };
     }
 
-    return { permitido: true, restantes: limites.porVisitante - visita.contador };
-  } catch (error) {
-    console.error("Fallo al comprobar la cuota; se permite el uso para no bloquear al usuario.");
-    return { permitido: true, restantes: -1 };
+    const conteos = await getSql()`
+      SELECT
+        COUNT(*) FILTER (WHERE sujeto = ${sujeto} AND creado_en > NOW() - INTERVAL '7 days')::int AS propios,
+        COUNT(*) FILTER (WHERE sujeto = 'diag:global' AND creado_en > NOW() - INTERVAL '24 hours')::int AS globales
+      FROM cuota_usos WHERE ambito = 'diag'
+    `;
+    const global = Number(conteos[0]?.globales ?? 0) >= LIMITES.global;
+    const requiereTelefono = !telefonoHash && !global;
+    return {
+      permitido: false,
+      motivo: global ? "global" : "visitante",
+      mensaje: global
+        ? "El servicio está muy solicitado. Inténtalo de nuevo más tarde."
+        : telefonoHash
+          ? "Has alcanzado los 6 análisis de esta semana. Podrás volver a analizar cuando se renueve el límite semanal."
+          : "Has completado tus 2 análisis iniciales de esta semana. Si quieres ampliar el límite a 6 análisis semanales, puedes facilitar tu teléfono.",
+      restantes: 0,
+      requiereTelefono,
+    };
+  } catch {
+    console.error("No se pudo comprobar la cuota de análisis.");
+    return {
+      permitido: false,
+      motivo: "database",
+      mensaje: "No podemos comprobar el límite de uso ahora mismo. Inténtalo de nuevo en unos minutos.",
+      restantes: 0,
+    };
   }
 }
 
-/**
- * Contador por clave arbitraria, para límites que no son de visitante.
- *
- * El caso que motiva esto: los leads se limitaban antes por IP con un Map en
- * memoria, que en Vercel solo existe en la instancia que atiende. Con ocho
- * instancias, "5 por hora" eran cuarenta. Aquí la IP cuenta igual de bien que
- * el uid, pero en la tabla y por tanto de forma global.
- */
 export async function consumirUsoPorClave(
   ambito: Ambito,
   sufijo: string,
-  limitePorClave: number
-): Promise<{ permitido: boolean; restantes: number }> {
+  limitePorClave: number,
+  ventanaMs = 60 * 60 * 1000,
+  ip?: string,
+): Promise<{ permitido: boolean; restantes: number; motivo?: "limite" | "database" }> {
   try {
-    const ahora = new Date();
-    const fin = new Date(ahora.getTime() + LIMITES[ambito].ventanaMs);
-    const clave = `${ambito}:ip:${sufijo}:${dia(ahora)}`;
-
-    const r = await intentarConsumir(clave, limitePorClave, fin);
-    if (!r.permitido) return { permitido: false, restantes: 0 };
-    return { permitido: true, restantes: limitePorClave - r.contador };
-  } catch (error) {
-    console.error("Fallo al comprobar la cuota por clave; se permite.");
-    return { permitido: true, restantes: -1 };
+    const resultado = await intentarConsumo({
+      ambito,
+      sujeto: `${ambito}:${sufijo}`,
+      limite: limitePorClave,
+      ventanaMs,
+      ip,
+    });
+    return {
+      permitido: resultado.permitido,
+      restantes: resultado.permitido ? limitePorClave - resultado.consumidos : 0,
+      ...(resultado.permitido ? {} : { motivo: "limite" as const }),
+    };
+  } catch {
+    console.error("No se pudo comprobar el límite de peticiones.");
+    return { permitido: false, restantes: 0, motivo: "database" };
   }
 }
 
@@ -265,51 +273,29 @@ export interface CuotaGlobal {
   restantes: number;
 }
 
-/** Lectura sin incremento, para el panel de administración. */
 export async function estadoCuotas(): Promise<CuotaGlobal[]> {
   try {
     const filas = await getSql()`
-      SELECT clave, contador, limite, resets_en
-      FROM cuotas
-      WHERE resets_en > NOW()
-        AND clave LIKE 'diag:global:%'
-      ORDER BY resets_en ASC
-      LIMIT 1
+      SELECT COUNT(*)::int AS consumidos,
+             (SELECT MIN(creado_en) + INTERVAL '24 hours'
+              FROM cuota_usos
+              WHERE ambito = 'diag' AND sujeto = 'diag:global'
+                AND creado_en > NOW() - INTERVAL '24 hours') AS resets_en
+      FROM cuota_usos
+      WHERE ambito = 'diag' AND sujeto = 'diag:global'
+        AND creado_en > NOW() - INTERVAL '24 hours'
     `;
-    if (filas.length === 0) return [];
-    const f = filas[0];
-    return [
-      {
-        ambito: "diag",
-        consumidos: Number(f.contador),
-        limite: Number(f.limite),
-        resetsEn: new Date(f.resets_en as string).toISOString(),
-        restantes: Math.max(0, Number(f.limite) - Number(f.contador)),
-      },
-    ];
-  } catch (error) {
-    console.error("Fallo al leer el estado de las cuotas.");
-    return [];
-  }
-}
-
-/** Lectura del detalle por visitante, para depurar un abuso concreto. */
-export async function topConsumidores(limite = 10) {
-  try {
-    const filas = await getSql()`
-      SELECT clave, contador, resets_en
-      FROM cuotas
-      WHERE resets_en > NOW() AND clave LIKE 'diag:%' AND clave NOT LIKE '%:global:%'
-      ORDER BY contador DESC
-      LIMIT ${limite}
-    `;
-    return filas.map((f) => ({
-      uid: String(f.clave).split(":")[1],
-      consumidos: Number(f.contador),
-      resetsEn: new Date(f.resets_en as string).toISOString(),
-    }));
-  } catch (error) {
-    console.error("Fallo al leer top consumidores.");
+    const consumidos = Number(filas[0]?.consumidos ?? 0);
+    if (!consumidos) return [];
+    return [{
+      ambito: "diag",
+      consumidos,
+      limite: LIMITES.global,
+      resetsEn: new Date(filas[0].resets_en as string).toISOString(),
+      restantes: Math.max(0, LIMITES.global - consumidos),
+    }];
+  } catch {
+    console.error("No se pudo leer el estado de las cuotas.");
     return [];
   }
 }

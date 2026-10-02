@@ -7,9 +7,11 @@
     "prebuild": "node scripts/comprobar-esquema-sin-borrados.mjs",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
+    "db:migrate": "tsx scripts/migrar-db.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "comprobar:esquema": "node scripts/comprobar-esquema-sin-borrados.mjs"
+    "comprobar:esquema": "node scripts/comprobar-esquema-sin-borrados.mjs",
+    "eval:agronomica": "tsx scripts/evaluar-calidad.ts"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
@@ -28,6 +30,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

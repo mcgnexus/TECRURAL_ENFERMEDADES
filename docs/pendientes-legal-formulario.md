@@ -47,3 +47,19 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 - Implementado: página `/baja` y endpoint `POST /api/baja` (baja por teléfono).
 - Pendiente: decidir si además se quiere un canal manual (responder "BAJA" por
   WhatsApp) y documentarlo en la firma de los mensajes comerciales.
+
+## 9. Ampliación de cuota por teléfono (nuevo)
+- Implementado: 2 análisis anónimos por semana móvil; al tercero la app ofrece
+  6 análisis semanales a cambio del teléfono (`POST /api/cuota/telefono`).
+  Solo se guarda un HMAC (`CUOTA_TELEFONO_SECRET`), vinculado al dispositivo y
+  con expiración a 180 días; no se usa para contactar ni para publicidad, y no
+  es una solicitud de revisión ni consentimiento comercial.
+- Redactado (borrador): texto de la casilla en `src/app/page.tsx` y sección 9
+  de `/privacidad`, que fija la finalidad (control de límites y prevención de
+  abuso), la base de interés legítimo (art. 6.1.f RGPD), la minimización con
+  HMAC, la no comunicación a los proveedores de IA y la conservación (180 días
+  la huella, 31 días los usos con IP). Las secciones 2, 3, 5 y 7 se han
+  ajustado para ser coherentes.
+- Recomendación: validar la redacción con asesoría jurídica antes de
+  promocionar el formulario. No es asesoramiento legal. Si cambia el texto de
+  la casilla, revisar también la sección 9 para que no se contradigan.

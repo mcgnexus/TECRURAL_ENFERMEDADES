@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDatabase, registrarEvento } from "@/lib/database";
+import { registrarEvento } from "@/lib/database";
 import { consumirUsoPorClave } from "@/lib/cuota";
 import { ipCliente } from "@/lib/ip-request";
 import type { NombreEvento } from "@/lib/analitica";
@@ -102,11 +102,12 @@ export async function POST(request: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
 
-    await initDatabase();
-
     // IP de cliente asignada por Vercel: evita que identidades de cookie
     // arbitrarias permitan generar escrituras ilimitadas en la tabla.
-    const cuota = await consumirUsoPorClave("lead", `eventos:${ipCliente(request)}`, 120);
+    const ip = ipCliente(request);
+    // Misma ventana que tenía el límite anterior (24 h), ahora deslizante de
+    // verdad: antes el corte era por día UTC y se reiniciaba a medianoche.
+    const cuota = await consumirUsoPorClave("lead", `eventos:${ip}`, 120, 24 * 60 * 60 * 1000, ip);
     if (!cuota.permitido) return new NextResponse(null, { status: 429 });
 
     for (const e of parseado.data.eventos) {

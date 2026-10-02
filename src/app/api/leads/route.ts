@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos } from "@/lib/database";
+import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
@@ -11,6 +11,7 @@ import { ESTADOS_LEAD } from "@/types/lead";
 import type { EstadoLead, PrioridadLead } from "@/types/lead";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 // Versión del texto del consentimiento comercial mostrado en el formulario.
 // Actualizar si cambia la redacción; se guarda junto al lead.
@@ -125,17 +126,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await initDatabase();
-
     // Cuota por IP, ahora en la tabla `cuotas` y por tanto global entre
     // instancias. Va tras la validación del cuerpo: un envío con el teléfono
     // mal formado no debe gastar un uso de un agricultor legítimo.
     const ip = ipCliente(request);
-    const cuotaIp = await consumirUsoPorClave("lead", ip, MAX_LEADS_POR_IP_HORA);
+    const cuotaIp = await consumirUsoPorClave("lead", ip, MAX_LEADS_POR_IP_HORA, 60 * 60 * 1000, ip);
     if (!cuotaIp.permitido) {
       return NextResponse.json(
-        { error: "Has enviado demasiadas solicitudes desde esta conexión. Inténtalo de nuevo más tarde." },
-        { status: 429 }
+        { error: cuotaIp.motivo === "database"
+          ? "No podemos comprobar el límite de solicitudes ahora mismo. Inténtalo en unos minutos."
+          : "Has enviado demasiadas solicitudes desde esta conexión. Inténtalo de nuevo más tarde." },
+        { status: cuotaIp.motivo === "database" ? 503 : 429 }
       );
     }
 
@@ -200,16 +201,16 @@ export async function POST(request: NextRequest) {
       ip,
     });
 
-    // Aviso al técnico. Va DESPUÉS del guardado y no se espera: el usuario
-    // recibe su confirmación sin depender del webhook. La consulta de métricas
-    // va dentro porque tampoco debe retrasar la respuesta.
-    void (async () => {
+    // Next mantiene este trabajo dentro del ciclo de vida de la petición aunque
+    // la respuesta al agricultor ya se haya enviado (Next `after()`; maxDuration
+    // se aplica también al callback). Así no dependemos de una promesa suelta.
+    after(async () => {
       try {
         await notificarLeadNuevo(guardado, await obtenerMetricasCaptacion());
       } catch (error) {
         console.warn("Aviso de lead nuevo no completado.");
       }
-    })();
+    });
 
     return NextResponse.json({
       success: true,
@@ -246,7 +247,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await initDatabase();
     const estado = request.nextUrl.searchParams.get("estado") as EstadoLead | null;
     const prioridad = request.nextUrl.searchParams.get("prioridad") as PrioridadLead | null;
     const limit = Number(request.nextUrl.searchParams.get("limit")) || 100;
@@ -310,7 +310,6 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    await initDatabase();
     if (parsed.data.notas !== undefined) {
       const anotado = await guardarNotaLead(parsed.data.id, parsed.data.notas);
       if (!anotado) {

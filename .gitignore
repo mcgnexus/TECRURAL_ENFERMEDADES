@@ -40,6 +40,11 @@ yarn-error.log*
 # PWA generated files
 public/fallback-*.js
 
+# Evaluación agronómica: imágenes y informes no se versionan (pueden contener
+# datos de explotaciones). Mantén casos.json como plantilla.
+/evaluacion/imagenes/
+/evaluacion/informes/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

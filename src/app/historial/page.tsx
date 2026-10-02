@@ -64,6 +64,9 @@ async function HistorialContent() {
           <div>
             <h1 className="font-heading font-bold text-tr-forest">Historial de análisis</h1>
             <p className="text-tr-muted mt-1 text-body">{historial.length} registros</p>
+            <p className="mt-2 max-w-xl text-caption leading-relaxed text-tr-muted">
+              El historial se guarda en este dispositivo mediante una cookie. No está asociado a una cuenta: si borras las cookies o cambias de dispositivo, puede que no puedas recuperarlo.
+            </p>
           </div>
           <Link href="/" className={`${btnPrimary} whitespace-nowrap`}>
             Nuevo análisis

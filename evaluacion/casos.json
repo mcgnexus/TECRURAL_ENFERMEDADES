@@ -1,0 +1,19 @@
+{
+  "$comentario": "Casos de referencia para evaluar la calidad agronómica. Las imágenes deben ser propias o cedidas con autorización; nunca fotos de usuarios sin consentimiento. Rellena 'esperado' con el criterio de un técnico.",
+  "casos": [
+    {
+      "id": "ejemplo-olivo-repilo",
+      "cultivo": "Olivo",
+      "sintoma": "Hojas con manchas circulares oscuras y defoliación",
+      "contexto": { "municipio": "Huéscar", "duracion": "hace 2 semanas" },
+      "imagenes": ["evaluacion/imagenes/ejemplo-olivo-repilo.jpg"],
+      "esperado": {
+        "tipo": "enfermedad",
+        "categoriaAceptable": ["repilo", "mancha", "hong"],
+        "requiereExperto": true,
+        "nota": "Sustituir por un caso real revisado por técnico antes de usarlo como referencia."
+      },
+      "esValidoParaEvaluar": false
+    }
+  ]
+}

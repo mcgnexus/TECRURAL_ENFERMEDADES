@@ -660,7 +660,7 @@ export default function AdminPage() {
                 <Tarjeta
                   etiqueta="Consumo de IA hoy"
                   valor={`${cuotas.consumidos} / ${cuotas.limite}`}
-                  detalle={`reinicia a las ${new Date(cuotas.resetsEn).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`}
+                  detalle={`próximo uso disponible: ${new Date(cuotas.resetsEn).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
                 />
               )}
               <Tarjeta

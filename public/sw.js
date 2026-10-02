@@ -1,4 +1,4 @@
-const CACHE_NAME = "tecrural-pwa-v1";
+const CACHE_NAME = "tecrural-pwa-v2";
 const APP_SHELL = ["/", "/offline", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -21,6 +21,16 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  // El historial depende de una cookie de visitante. No guardar ni servir
+  // respuestas personalizadas desde Cache API, ni siquiera como fallback offline.
+  const privada = url.pathname === "/historial" || url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/");
+  if (privada) {
+    if (request.mode === "navigate") {
+      event.respondWith(fetch(request).catch(async () => (await caches.match("/offline"))));
+    }
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(

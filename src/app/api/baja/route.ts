@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { initDatabase, bajaComercial } from "@/lib/database";
+import { bajaComercial } from "@/lib/database";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Introduce un teléfono válido" }, { status: 400 });
     }
 
-    await initDatabase();
     await bajaComercial(parsed.data.telefono);
 
     // Respuesta genérica: no revelamos si el teléfono estaba registrado

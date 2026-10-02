@@ -22,6 +22,8 @@ PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y l
 - **Base de datos:** Neon Postgres serverless (`src/lib/database.ts`). Tablas:
   - `diagnosticos` — hipótesis y contexto. Las fotos NO se guardan por defecto (política de datos); solo en el lead si el usuario pide revisión.
   - `leads` — solicitudes de revisión cualificadas, consentimientos y fotos compartidas.
+  - `cuota_usos` / `cuota_telefonos` — límites de uso con **ventana móvil real** (conteo por marcas de tiempo, sin corte a medianoche). El teléfono solo se guarda como HMAC (`CUOTA_TELEFONO_SECRET`), nunca en claro, y expira a los 180 días; los registros de uso se purgan a los 31 días.
+- **Cuotas de análisis:** 2 análisis sin datos en cualquier periodo de 7 días. Al tercero, la app ofrece ampliar a **6 análisis semanales** facilitando el teléfono, con casilla propia que explica el uso (solo límite, sin contacto ni publicidad); no es una solicitud de revisión ni consiente comunicaciones. El conteo es atómico (advisory locks) y si la base no responde el análisis se rechaza con 503 en lugar de ejecutarse sin límite.
 - **Validación:** coherencia del JSON, saneado de síntomas, `requiere_experto` automático, magic bytes de imágenes (`src/lib/imagen.ts`).
 
 ## Leads, consentimientos y baja
@@ -42,11 +44,11 @@ Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política 
 
 ## Migraciones
 
-`initDatabase()` aplica las migraciones de forma idempotente (`CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`). **Nunca borra filas**: es solo esquema. Historial en `db/migrations/`: `0001_leads.sql`, `0002_consentimientos_imagenes.sql`, `0003_datos_comerciales.sql`, `0004_metricas_captacion.sql`, `0005_identidad_visitante.sql`, `0006_cuotas.sql`, `0007_embudo.sql`. Las operaciones puntuales sobre datos, que exigen decisión humana, están en `db/one-off/`.
+El esquema se aplica con `npm run db:migrate` (idempotente: `CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`; **nunca borra filas**). Ejecútalo como paso de despliegue, no desde las peticiones: las rutas ya no llaman a `initDatabase()`. Historial en `db/migrations/` (`0001` a `0008`). Las operaciones puntuales sobre datos, que exigen decisión humana, están en `db/one-off/`.
 
 ## Variables de entorno
 
-Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_GA_ID`, `ADMIN_TOKEN` (opcionales).
+Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_GA_ID`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
 
 ## Analítica de conversión
 
@@ -62,7 +64,7 @@ npm run test:watch          # en modo vigilancia
 npm run comprobar:esquema   # solo el guard de esquema (también corre en prebuild)
 ```
 
-54 pruebas en cuatro ficheros. Tres de ellas son puras y siempre se ejecutan:
+55 pruebas en seis ficheros (más las de cuota SQL, que se saltan sin base aparte). La mayoría son puras y siempre se ejecutan:
 
 - `src/lib/error-analisis.test.ts` — traducción de errores HTTP a mensajes para el agricultor.
 - `src/lib/textos-lead.test.ts` — textos condicionales del formulario según el origen.
@@ -76,7 +78,11 @@ TEST_DATABASE_URL="postgres://.../neondb?..." npm test
 
 Sin esa variable **se salta y lo dice**, no falla. Lo natural es una rama de Neon, que se crea desde la consola en un par de clics.
 
-Si no hay base aparte y quieres ejecutarlas igualmente, existe `PERMITIR_TESTS_EN_PRODUCCION=1`. Solo tocan la tabla `cuotas`: no borran leads, diagnósticos ni eventos, pero **reinician los contadores de cuota del día**. Está desactivado por defecto a propósito.
+Si no hay base aparte y quieres ejecutarlas igualmente, existe `PERMITIR_TESTS_EN_PRODUCCION=1`. Solo tocan las tablas de cuota (`cuota_usos`, `cuota_telefonos`): no borran leads, diagnósticos ni eventos, pero **vacían los contadores de uso de la semana en curso**. Está desactivado por defecto a propósito.
+
+## Evaluación agronómica
+
+`npm run eval:agronomica` valida `evaluacion/casos.json` y, con `--ejecutar`, lanza el pipeline sobre cada caso con imagen y escribe un informe en `evaluacion/informes/` para revisión del técnico. Mide acuerdos/desacuerdos por cultivo y síntoma; no sustituye la validación humana. Las imágenes deben ser propias o cedidas con autorización (nunca fotos de usuarios sin consentimiento): `evaluacion/imagenes/` e `evaluacion/informes/` no se versionan.
 
 ## Desarrollo
 
