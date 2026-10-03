@@ -79,4 +79,17 @@ describe.skipIf(!disponible)("cuotas móviles", () => {
     }
     expect(permitidos).toBe(5);
   });
+
+  it("bloquea por conexión (IP) aunque el visitante sea nuevo", async () => {
+    const ip = "8.8.8.8";
+    for (let i = 0; i < mod.LIMITES.ipDiag; i++) {
+      await sql`
+        INSERT INTO cuota_usos (ambito, sujeto, ip, creado_en)
+        VALUES ('diag', ${`diag:ip:${ip}`}, ${ip}, NOW())
+      `;
+    }
+    const r = await mod.consumirUso("diag", randomUUID(), ip);
+    expect(r.permitido).toBe(false);
+    expect(r.motivo).toBe("red");
+  });
 });

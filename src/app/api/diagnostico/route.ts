@@ -4,6 +4,7 @@ import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
 import { guardarDiagnostico } from "@/lib/database";
 import { validarImagenServidor } from "@/lib/imagen";
 import { uidObligatorio } from "@/lib/identidad";
+import { ipCliente } from "@/lib/ip-request";
 import { consumirUso } from "@/lib/cuota";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 
@@ -201,7 +202,8 @@ export async function POST(request: NextRequest) {
     // hiciera antes, un cuerpo de 4 MB sin imagen válida consumiría cuota sin
     // coste detrás, y un agricultor con la foto mal hecha pagaría un uso que no
     // le hemos analizado.
-    const cuota = await consumirUso("diag", usuarioId);
+    // La IP es solo una red secundaria (anti-abuso); nunca identifica al usuario.
+    const cuota = await consumirUso("diag", usuarioId, ipCliente(request));
     if (!cuota.permitido) {
       console.warn("Diagnóstico bloqueado por cuota o indisponibilidad de la base.");
       return NextResponse.json(

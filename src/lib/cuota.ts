@@ -15,16 +15,26 @@ function getSql(): NeonQueryFunction<false, false> {
 export type Ambito = "diag" | "lead";
 
 export const LIMITES = {
+  /** Análisis sin datos de contacto, por visitante y ventana móvil de 7 días. */
   anonimos: 2,
+  /** Análisis por teléfono vinculado y ventana móvil de 7 días (incluye los anónimos). */
   telefono: 6,
+  /** Tope total de la app cada 24 h, red de seguridad frente a coste desbocado. */
   global: 500,
+  /**
+   * Límite complementario por conexión (IP) cada 24 h. No identifica a la
+   * persona: es una red secundaria para frenar el reinicio de cookie o el uso
+   * automatizado. Se deja holgado porque varias personas pueden compartir IP
+   * (red móvil, wifi de cooperativa).
+   */
+  ipDiag: 12,
   semanaMs: 7 * 24 * 60 * 60 * 1000,
-  ventanaGlobalMs: 24 * 60 * 60 * 1000,
+  diaMs: 24 * 60 * 60 * 1000,
 } as const;
 
 export interface DecisionCuota {
   permitido: boolean;
-  motivo?: "visitante" | "global" | "sin_identificar" | "database";
+  motivo?: "visitante" | "global" | "red" | "sin_identificar" | "database";
   mensaje?: string;
   restantes: number;
   requiereTelefono?: boolean;
@@ -65,14 +75,23 @@ export async function vincularTelefonoCuota(uid: string, telefonoHash: string): 
       throw new Error("Este dispositivo ya tiene un teléfono vinculado.");
     }
   }
+  // Solo se etiquetan los usos anónimos del propio visitante, no las filas de
+  // límites secundarios (global/IP), que no deben contarse dos veces.
   await db`
     UPDATE cuota_usos
     SET telefono_hash = ${telefonoHash}
     WHERE visitor_id = ${uid}
       AND ambito = 'diag'
       AND telefono_hash IS NULL
+      AND sujeto LIKE 'visitante:%'
       AND creado_en > NOW() - INTERVAL '7 days'
   `;
+}
+
+interface LimiteSecundario {
+  sujeto: string;
+  limite: number;
+  ventanaMs: number;
 }
 
 interface Intento {
@@ -81,22 +100,31 @@ interface Intento {
 }
 
 /**
- * Inserta un uso solo si los límites siguen disponibles. Los advisory locks se
- * toman en orden estable y permanecen hasta terminar esta única sentencia, de
- * modo que el conteo móvil y la inserción son atómicos entre instancias.
+ * Inserta un uso solo si TODOS los límites siguen disponibles: el primario
+ * (visitante o teléfono) y cada uno de los secundarios (global, IP) que se
+ * pasen. Cuando se permite, inserta una fila por cada límite en la MISMA
+ * sentencia, de forma atómica.
+ *
+ * Los advisory locks se toman en orden estable sobre todos los sujetos
+ * implicados y permanecen hasta terminar esta única sentencia, de modo que el
+ * conteo móvil y la inserción no tienen ventana entre instancias.
  */
 async function intentarConsumo(args: {
   ambito: Ambito;
   sujeto: string;
   visitorId?: string;
   telefonoHash?: string | null;
-  ip?: string;
+  ip?: string | null;
   limite: number;
   ventanaMs: number;
-  global?: { limite: number; ventanaMs: number };
+  secundarios?: LimiteSecundario[];
 }): Promise<Intento> {
   const db = getSql();
-  const globalSujeto = `${args.ambito}:global`;
+  const secundarios: LimiteSecundario[] = args.secundarios ?? [];
+  const secundariosJson = JSON.stringify(
+    secundarios.map((s) => ({ sujeto: s.sujeto, limite: s.limite, ventana_ms: s.ventanaMs })),
+  );
+
   const filas = await db`
     WITH purga_usos AS (
       DELETE FROM cuota_usos WHERE creado_en < NOW() - INTERVAL '31 days'
@@ -106,9 +134,17 @@ async function intentarConsumo(args: {
       DELETE FROM cuota_telefonos WHERE expira_en <= NOW()
       RETURNING visitor_id
     ),
+    sec_defs AS (
+      SELECT sujeto, limite, ventana_ms
+      FROM jsonb_to_recordset(${secundariosJson}::jsonb)
+        AS x(sujeto text, limite int, ventana_ms bigint)
+    ),
     lock_keys AS MATERIALIZED (
-      SELECT clave
-      FROM unnest(ARRAY[${args.sujeto}, ${globalSujeto}]) AS x(clave)
+      SELECT clave FROM (
+        SELECT ${args.sujeto}::text AS clave
+        UNION
+        SELECT sujeto AS clave FROM sec_defs
+      ) t
       GROUP BY clave
       ORDER BY clave
     ),
@@ -117,49 +153,57 @@ async function intentarConsumo(args: {
       FROM lock_keys
     ),
     conteos AS MATERIALIZED (
-      SELECT
+      SELECT (
+        SELECT COUNT(*)::int FROM cuota_usos u
+        WHERE u.ambito = ${args.ambito}
+          AND (
+            u.sujeto = ${args.sujeto}
+            OR (
+              ${Boolean(args.telefonoHash)}
+              AND u.telefono_hash = ${args.telefonoHash ?? null}
+              AND u.sujeto LIKE 'visitante:%'
+            )
+          )
+          AND u.creado_en > NOW() - (${args.ventanaMs}::bigint * INTERVAL '1 millisecond')
+          AND EXISTS (SELECT 1 FROM locks)
+      ) AS propios
+    ),
+    sec_conteos AS MATERIALIZED (
+      SELECT d.sujeto, d.limite,
         (
           SELECT COUNT(*)::int FROM cuota_usos u
           WHERE u.ambito = ${args.ambito}
-            AND (
-              u.sujeto = ${args.sujeto}
-              OR (
-                ${Boolean(args.telefonoHash)}
-                AND u.telefono_hash = ${args.telefonoHash ?? null}
-                AND u.sujeto <> ${globalSujeto}
-              )
-            )
-            AND u.creado_en > NOW() - (${args.ventanaMs}::bigint * INTERVAL '1 millisecond')
+            AND u.sujeto = d.sujeto
+            AND u.creado_en > NOW() - (d.ventana_ms * INTERVAL '1 millisecond')
             AND EXISTS (SELECT 1 FROM locks)
-        ) AS propios,
-        (
-          SELECT COUNT(*)::int FROM cuota_usos u
-          WHERE ${Boolean(args.global)}
-            AND u.ambito = ${args.ambito}
-            AND u.sujeto = ${globalSujeto}
-            AND u.creado_en > NOW() - (${args.global?.ventanaMs ?? 0}::bigint * INTERVAL '1 millisecond')
-            AND EXISTS (SELECT 1 FROM locks)
-        ) AS globales
+        ) AS consumidos
+      FROM sec_defs d
+    ),
+    permitido AS MATERIALIZED (
+      SELECT
+        (SELECT propios FROM conteos) AS propios,
+        (SELECT propios FROM conteos) < ${args.limite}
+          AND NOT EXISTS (SELECT 1 FROM sec_conteos WHERE consumidos >= limite) AS ok
     ),
     insertado AS (
       INSERT INTO cuota_usos (ambito, sujeto, visitor_id, telefono_hash, ip)
-      SELECT ${args.ambito}, uso.sujeto, ${args.visitorId ?? null}, ${args.telefonoHash ?? null}, ${args.ip ?? null}
-      FROM conteos
+      SELECT
+        ${args.ambito},
+        uso.sujeto,
+        ${args.visitorId ?? null},
+        CASE WHEN uso.es_principal THEN ${args.telefonoHash ?? null} ELSE NULL END,
+        ${args.ip ?? null}
+      FROM permitido
       CROSS JOIN LATERAL (
-        SELECT ${args.sujeto}::text AS sujeto
-        WHERE propios < ${args.limite}
-          AND (NOT ${Boolean(args.global)} OR globales < ${args.global?.limite ?? 0})
+        SELECT ${args.sujeto}::text AS sujeto, true AS es_principal WHERE permitido.ok
         UNION ALL
-        SELECT ${globalSujeto}::text AS sujeto
-        WHERE ${Boolean(args.global)}
-          AND propios < ${args.limite}
-          AND globales < ${args.global?.limite ?? 0}
+        SELECT sc.sujeto, false FROM sec_conteos sc WHERE permitido.ok
       ) uso
       RETURNING id
     )
-    SELECT conteos.propios, COUNT(insertado.id)::int AS insertados
-    FROM conteos LEFT JOIN insertado ON TRUE
-    GROUP BY conteos.propios
+    SELECT permitido.propios, COUNT(insertado.id)::int AS insertados
+    FROM permitido LEFT JOIN insertado ON TRUE
+    GROUP BY permitido.propios
   `;
 
   if (Number(filas[0]?.insertados) > 0) {
@@ -168,7 +212,16 @@ async function intentarConsumo(args: {
   return { permitido: false, consumidos: 0 };
 }
 
-export async function consumirUso(ambito: Ambito, uid: string | null): Promise<DecisionCuota> {
+/** IP válida para límites; descarta el centinela cuando el cliente no la trae. */
+function ipParaLimite(ip: string | null | undefined): string | null {
+  return ip && ip !== "desconocida" ? ip : null;
+}
+
+export async function consumirUso(
+  ambito: Ambito,
+  uid: string | null,
+  ip?: string | null,
+): Promise<DecisionCuota> {
   if (!uid) {
     return {
       permitido: false,
@@ -193,40 +246,89 @@ export async function consumirUso(ambito: Ambito, uid: string | null): Promise<D
       };
     }
 
+    const ipValida = ipParaLimite(ip);
     const telefonoHash = await telefonoCuotaDeVisitante(uid);
     const sujeto = telefonoHash ? `telefono:${telefonoHash}` : `visitante:${uid}`;
     const limite = telefonoHash ? LIMITES.telefono : LIMITES.anonimos;
+
+    const secundarios: LimiteSecundario[] = [
+      { sujeto: "diag:global", limite: LIMITES.global, ventanaMs: LIMITES.diaMs },
+    ];
+    if (ipValida) {
+      secundarios.push({ sujeto: `diag:ip:${ipValida}`, limite: LIMITES.ipDiag, ventanaMs: LIMITES.diaMs });
+    }
+
     const resultado = await intentarConsumo({
       ambito,
       sujeto,
       visitorId: uid,
       telefonoHash,
+      ip: ipValida,
       limite,
       ventanaMs: LIMITES.semanaMs,
-      global: { limite: LIMITES.global, ventanaMs: LIMITES.ventanaGlobalMs },
+      secundarios,
     });
     if (resultado.permitido) {
       return { permitido: true, restantes: limite - resultado.consumidos };
     }
 
+    // Bloqueado: se averigua qué límite saltó para dar el mensaje correcto y no
+    // ofrecer el teléfono cuando el problema es la conexión o el servicio.
+    const ipSujeto = ipValida ? `diag:ip:${ipValida}` : null;
     const conteos = await getSql()`
       SELECT
-        COUNT(*) FILTER (WHERE sujeto = ${sujeto} AND creado_en > NOW() - INTERVAL '7 days')::int AS propios,
-        COUNT(*) FILTER (WHERE sujeto = 'diag:global' AND creado_en > NOW() - INTERVAL '24 hours')::int AS globales
-      FROM cuota_usos WHERE ambito = 'diag'
+        (
+          SELECT COUNT(*)::int FROM cuota_usos
+          WHERE ambito = 'diag'
+            AND (
+              sujeto = ${sujeto}
+              OR (
+                ${Boolean(telefonoHash)}
+                AND telefono_hash = ${telefonoHash ?? null}
+                AND sujeto LIKE 'visitante:%'
+              )
+            )
+            AND creado_en > NOW() - INTERVAL '7 days'
+        ) AS propios,
+        (
+          SELECT COUNT(*)::int FROM cuota_usos
+          WHERE ambito = 'diag' AND sujeto = 'diag:global'
+            AND creado_en > NOW() - INTERVAL '24 hours'
+        ) AS globales,
+        (
+          SELECT COUNT(*)::int FROM cuota_usos
+          WHERE ambito = 'diag' AND sujeto = ${ipSujeto}
+            AND creado_en > NOW() - INTERVAL '24 hours'
+        ) AS por_ip
     `;
-    const global = Number(conteos[0]?.globales ?? 0) >= LIMITES.global;
-    const requiereTelefono = !telefonoHash && !global;
+    const propios = Number(conteos[0]?.propios ?? 0);
+    const globales = Number(conteos[0]?.globales ?? 0);
+    const porIp = Number(conteos[0]?.por_ip ?? 0);
+
+    if (globales >= LIMITES.global) {
+      return {
+        permitido: false,
+        motivo: "global",
+        mensaje: "El servicio está muy solicitado. Inténtalo de nuevo más tarde.",
+        restantes: 0,
+      };
+    }
+    if (ipValida && porIp >= LIMITES.ipDiag) {
+      return {
+        permitido: false,
+        motivo: "red",
+        mensaje: "Se han alcanzado los análisis permitidos desde esta conexión. Si no eres tú, inténtalo más tarde o desde otra red.",
+        restantes: 0,
+      };
+    }
     return {
       permitido: false,
-      motivo: global ? "global" : "visitante",
-      mensaje: global
-        ? "El servicio está muy solicitado. Inténtalo de nuevo más tarde."
-        : telefonoHash
-          ? "Has alcanzado los 6 análisis de esta semana. Podrás volver a analizar cuando se renueve el límite semanal."
-          : "Has completado tus 2 análisis iniciales de esta semana. Si quieres ampliar el límite a 6 análisis semanales, puedes facilitar tu teléfono.",
+      motivo: "visitante",
+      mensaje: telefonoHash
+        ? "Has alcanzado los 6 análisis de esta semana. Podrás volver a analizar cuando se renueve el límite semanal."
+        : "Has completado tus 2 análisis iniciales de esta semana. Si quieres ampliar el límite a 6 análisis semanales, puedes facilitar tu teléfono.",
       restantes: 0,
-      requiereTelefono,
+      requiereTelefono: !telefonoHash,
     };
   } catch {
     console.error("No se pudo comprobar la cuota de análisis.");
@@ -244,7 +346,7 @@ export async function consumirUsoPorClave(
   sufijo: string,
   limitePorClave: number,
   ventanaMs = 60 * 60 * 1000,
-  ip?: string,
+  ip?: string | null,
 ): Promise<{ permitido: boolean; restantes: number; motivo?: "limite" | "database" }> {
   try {
     const resultado = await intentarConsumo({
@@ -252,7 +354,7 @@ export async function consumirUsoPorClave(
       sujeto: `${ambito}:${sufijo}`,
       limite: limitePorClave,
       ventanaMs,
-      ip,
+      ip: ipParaLimite(ip),
     });
     return {
       permitido: resultado.permitido,

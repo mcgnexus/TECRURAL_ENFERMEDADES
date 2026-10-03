@@ -4,6 +4,8 @@ PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y l
 
 ## Flujo de usuario
 
+Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-app.md`](docs/flujo-app.md).
+
 1. **Portada**: explica el servicio (orientación inicial, no diagnóstico definitivo; foto clara; revisión de TecRural como siguiente paso) y el botón «Analizar una planta».
 2. **Contexto del cultivo**: cultivo (selector + "Otro"/"No lo sé"), municipio o comarca (Altiplano/Costa Tropical + "Otro"), síntoma observado, desde cuándo (opcional), variedad (opcional). Sin GPS.
 3. **Fotos**: modo simple por defecto (1 foto nítida del síntoma). Modo avanzado opcional añade envés y planta completa. Vista previa, reemplazo y eliminación por foto. Validación de tipo real (magic bytes), tamaño (≤12 MB) y formato en frontend y backend. Compresión a JPEG ~1024px/0,8MB (elimina EXIF y optimiza móvil manteniendo detalle para manchas y síntomas pequeños).
@@ -23,7 +25,7 @@ PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y l
   - `diagnosticos` — hipótesis y contexto. Las fotos NO se guardan por defecto (política de datos); solo en el lead si el usuario pide revisión.
   - `leads` — solicitudes de revisión cualificadas, consentimientos y fotos compartidas.
   - `cuota_usos` / `cuota_telefonos` — límites de uso con **ventana móvil real** (conteo por marcas de tiempo, sin corte a medianoche). El teléfono solo se guarda como HMAC (`CUOTA_TELEFONO_SECRET`), nunca en claro, y expira a los 180 días; los registros de uso se purgan a los 31 días.
-- **Cuotas de análisis:** 2 análisis sin datos en cualquier periodo de 7 días. Al tercero, la app ofrece ampliar a **6 análisis semanales** facilitando el teléfono, con casilla propia que explica el uso (solo límite, sin contacto ni publicidad); no es una solicitud de revisión ni consiente comunicaciones. El conteo es atómico (advisory locks) y si la base no responde el análisis se rechaza con 503 en lugar de ejecutarse sin límite.
+- **Cuotas de análisis:** 2 análisis sin datos en cualquier periodo de 7 días. Al tercero, la app ofrece ampliar a **6 análisis semanales** facilitando el teléfono, con casilla propia que explica el uso (solo límite, sin contacto ni publicidad); no es una solicitud de revisión ni consiente comunicaciones. Se añaden un tope global de 500/24 h y un **límite complementario por conexión (IP) de 12/24 h** contra el abuso. El conteo es atómico (advisory locks) y si la base no responde el análisis se rechaza con 503 en lugar de ejecutarse sin límite.
 - **Validación:** coherencia del JSON, saneado de síntomas, `requiere_experto` automático, magic bytes de imágenes (`src/lib/imagen.ts`).
 
 ## Leads, consentimientos y baja
