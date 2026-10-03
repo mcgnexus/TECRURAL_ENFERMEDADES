@@ -1,17 +1,155 @@
 {
-  "$comentario": "Casos de referencia para evaluar la calidad agronómica. Las imágenes deben ser propias o cedidas con autorización; nunca fotos de usuarios sin consentimiento. Rellena 'esperado' con el criterio de un técnico.",
+  "$comentario": "Casos de referencia para evaluar la calidad agronómica. Las imágenes deben ser propias o cedidas con autorización; nunca fotos de usuarios sin consentimiento. FLUJO POR CASO: (1) copia una foto real en evaluacion/imagenes/<id>.jpg; (2) un técnico rellena 'esperado' con su criterio; (3) cambia esValidoParaEvaluar a true; (4) lanza 'npm run eval:agronomica -- --ejecutar'. Mientras esValidoParaEvaluar sea false el caso es un marcador y no se ejecuta, aunque falte la imagen.",
   "casos": [
     {
       "id": "ejemplo-olivo-repilo",
       "cultivo": "Olivo",
-      "sintoma": "Hojas con manchas circulares oscuras y defoliación",
-      "contexto": { "municipio": "Huéscar", "duracion": "hace 2 semanas" },
+      "sintoma": "Manchas en hojas o frutos",
+      "contexto": { "municipio": "Huéscar", "duracion": "Desde hace semanas" },
       "imagenes": ["evaluacion/imagenes/ejemplo-olivo-repilo.jpg"],
       "esperado": {
         "tipo": "enfermedad",
         "categoriaAceptable": ["repilo", "mancha", "hong"],
         "requiereExperto": true,
         "nota": "Sustituir por un caso real revisado por técnico antes de usarlo como referencia."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "olivo-sano",
+      "cultivo": "Olivo",
+      "sintoma": "Otro / no lo sé",
+      "contexto": { "municipio": "Baza", "duracion": "Hoy, acaba de aparecer" },
+      "imagenes": ["evaluacion/imagenes/olivo-sano.jpg"],
+      "esperado": {
+        "tipo": "sano",
+        "requiereExperto": false,
+        "nota": "Hoja sana de olivo. Caso de control: detectar falsos positivos (la IA inventa problemas donde no los hay)."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "olivo-cochinilla-negra",
+      "cultivo": "Olivo",
+      "sintoma": "Insectos o plagas visibles",
+      "contexto": { "municipio": "Huéscar", "duracion": "Desde hace meses" },
+      "imagenes": ["evaluacion/imagenes/olivo-cochinilla-negra.jpg"],
+      "esperado": {
+        "tipo": "plaga",
+        "categoriaAceptable": ["cochinilla", "saissetia"],
+        "requiereExperto": true,
+        "nota": "Ramas con cochinilla negra (Saissetia oleae). Sin foto del envés la confianza debería ser baja."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "olivo-clorosis-hierro",
+      "cultivo": "Olivo",
+      "sintoma": "Amarilleo (hojas amarillas)",
+      "contexto": { "municipio": "Baza", "duracion": "Desde hace meses" },
+      "imagenes": ["evaluacion/imagenes/olivo-clorosis-hierro.jpg"],
+      "esperado": {
+        "tipo": "deficiencia_nutricional",
+        "categoriaAceptable": ["clorosis", "hierro", "fe"],
+        "requiereExperto": true,
+        "nota": "Clorosis férrica en suelo calizo del Altiplano: nervios verdes, limbo amarillo. Distinguir de verticilosis."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "almendro-monilia",
+      "cultivo": "Almendro",
+      "sintoma": "Manchas en hojas o frutos",
+      "contexto": { "municipio": "Huéscar", "duracion": "Desde hace días" },
+      "imagenes": ["evaluacion/imagenes/almendro-monilia.jpg"],
+      "esperado": {
+        "tipo": "enfermedad",
+        "categoriaAceptable": ["monilia", "monilinia", "mancha"],
+        "requiereExperto": true,
+        "nota": "Flores y brotes con monilia. Confusión típica con abolladura: el técnico decide qué acepta."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "vid-mildiu",
+      "cultivo": "Vid",
+      "sintoma": "Manchas en hojas o frutos",
+      "contexto": { "municipio": "Motril", "duracion": "Desde hace días" },
+      "imagenes": ["evaluacion/imagenes/vid-mildiu.jpg"],
+      "esperado": {
+        "tipo": "enfermedad",
+        "categoriaAceptable": ["mildiu", "plasmopara"],
+        "requiereExperto": true,
+        "nota": "Manchas oleosas en haz y polvillo blanco en envés. El envés es clave: caso para validar el nudge de fotos."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "tomate-arana-roja",
+      "cultivo": "Tomate",
+      "sintoma": "Insectos o plagas visibles",
+      "contexto": { "municipio": "Motril", "duracion": "Desde hace semanas" },
+      "imagenes": ["evaluacion/imagenes/tomate-arana-roja.jpg"],
+      "esperado": {
+        "tipo": "plaga",
+        "categoriaAceptable": ["araña", "tetranychus", "acaro", "ácaro"],
+        "requiereExperto": true,
+        "nota": "Punteado clorótico por araña roja en invernadero. El punteado fino exige buena resolución: caso de control para la subida a 1536 px."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "tomate-deficiencia-magnesio",
+      "cultivo": "Tomate",
+      "sintoma": "Amarilleo (hojas amarillas)",
+      "contexto": { "municipio": "Motril", "duracion": "Desde hace semanas" },
+      "imagenes": ["evaluacion/imagenes/tomate-deficiencia-magnesio.jpg"],
+      "esperado": {
+        "tipo": "deficiencia_nutricional",
+        "categoriaAceptable": ["magnesio", "deficiencia", "clorosis"],
+        "requiereExperto": false,
+        "nota": "Clorosis internerval en hojas viejas por falta de magnesio. Sin gravedad severa: no debería derivar a técnico."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "citricos-cochinilla-algodonosa",
+      "cultivo": "Cítricos (naranjo, limonero, mandarino)",
+      "sintoma": "Insectos o plagas visibles",
+      "contexto": { "municipio": "Motril", "duracion": "Desde hace meses" },
+      "imagenes": ["evaluacion/imagenes/citricos-cochinilla-algodonosa.jpg"],
+      "esperado": {
+        "tipo": "plaga",
+        "categoriaAceptable": ["cochinilla", "planococcus", "algodonosa"],
+        "requiereExperto": true,
+        "nota": "Cochinilla algodonosa en frutos y ramillas."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "aguacate-antracnosis",
+      "cultivo": "Aguacate",
+      "sintoma": "Manchas en hojas o frutos",
+      "contexto": { "municipio": "Motril", "duracion": "Desde hace semanas" },
+      "imagenes": ["evaluacion/imagenes/aguacate-antracnosis.jpg"],
+      "esperado": {
+        "tipo": "enfermedad",
+        "categoriaAceptable": ["antracnosis", "colletotrichum", "mancha"],
+        "requiereExperto": true,
+        "nota": "Manchas necróticas en fruto tras lluvias. Costa Tropical: cultivo subtropical con pocos few-shots en el prompt."
+      },
+      "esValidoParaEvaluar": false
+    },
+    {
+      "id": "citricos-sano",
+      "cultivo": "Cítricos (naranjo, limonero, mandarino)",
+      "sintoma": "Otro / no lo sé",
+      "contexto": { "municipio": "Motril", "duracion": "Hoy, acaba de aparecer" },
+      "imagenes": ["evaluacion/imagenes/citricos-sano.jpg"],
+      "esperado": {
+        "tipo": "sano",
+        "requiereExperto": false,
+        "nota": "Segundo caso de control sano, en subtropical: comprobar que no se deriva a técnico sin motivo."
       },
       "esValidoParaEvaluar": false
     }

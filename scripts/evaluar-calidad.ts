@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ImagenAnalisis } from "../src/lib/gemini";
+import {
+  acierta,
+  resumirEvaluacion,
+  resultadoDe,
+  type CasoEvaluable,
+  type ResultadoCaso,
+} from "../src/lib/evaluacion";
 
 /**
  * Evaluación agronómica reproducible.
@@ -11,20 +18,15 @@ import type { ImagenAnalisis } from "../src/lib/gemini";
  *
  * Objetivo: medir desacuerdos con el criterio del técnico por cultivo y tipo de
  * síntoma, no "aprobar" la IA. Las imágenes deben ser propias o con autorización.
+ *
+ * El informe incluye, además del acuerdo global: desglose por cultivo y por
+ * tipo esperado, tramos de confianza (¿los casos con más confianza aciertan
+ * más?) y el balance de requiere_experto (falsos positivos y negativos).
  */
 
-interface Caso {
-  id: string;
-  cultivo?: string;
-  sintoma?: string;
+interface Caso extends CasoEvaluable {
   contexto?: { municipio?: string; duracion?: string; variedad?: string };
   imagenes: string[];
-  esperado?: {
-    tipo?: "enfermedad" | "deficiencia_nutricional" | "plaga" | "sano";
-    categoriaAceptable?: string[];
-    requiereExperto?: boolean;
-    nota?: string;
-  };
   esValidoParaEvaluar?: boolean;
 }
 
@@ -49,21 +51,62 @@ function cargarCaso(caso: Caso): ImagenAnalisis[] {
   });
 }
 
-function acierta(
-  caso: Caso,
-  respuesta: { diagnostico: { tipo: string; nombre: string }; requiere_experto?: boolean },
-): boolean {
-  const esperado = caso.esperado;
-  if (!esperado) return false;
-  if (esperado.tipo && respuesta.diagnostico.tipo !== esperado.tipo) return false;
-  if (esperado.categoriaAceptable?.length) {
-    const nombre = respuesta.diagnostico.nombre.toLowerCase();
-    if (!esperado.categoriaAceptable.some((c) => nombre.includes(c.toLowerCase()))) return false;
-  }
-  if (esperado.requiereExperto !== undefined && Boolean(respuesta.requiere_experto) !== esperado.requiereExperto) {
-    return false;
-  }
-  return true;
+function pct(parte: number, total: number): string {
+  if (total === 0) return "—";
+  return `${Math.round((parte / total) * 100)}%`;
+}
+
+function lineaGrupo(grupos: { clave: string; total: number; acuerdos: number }[]): string {
+  return grupos
+    .map((g) => `| ${g.clave} | ${g.acuerdos}/${g.total} (${pct(g.acuerdos, g.total)}) |`)
+    .join("\n");
+}
+
+function seccionResumen(resultados: ResultadoCaso[]): string {
+  const resumen = resumirEvaluacion(resultados);
+  const exp = resumen.requiereExperto;
+  return [
+    `Acuerdos globales: ${resumen.acuerdos}/${resumen.total} (${pct(resumen.acuerdos, resumen.total)})`,
+    "",
+    "### Por cultivo",
+    "| Cultivo | Acuerdos |",
+    "| --- | --- |",
+    lineaGrupo(resumen.porCultivo),
+    "",
+    "### Por tipo esperado",
+    "| Tipo | Acuerdos |",
+    "| --- | --- |",
+    lineaGrupo(resumen.porTipoEsperado),
+    "",
+    "### Calibración de la confianza",
+    "| Tramo | Acuerdos |",
+    "| --- | --- |",
+    resumen.calibracion
+      .map((t) => `| ${t.tramo} | ${t.acuerdos}/${t.casos} (${pct(t.acuerdos, t.casos)}) |`)
+      .join("\n"),
+    "",
+    "### Balance de requiere_experto",
+    `Verdaderos positivos: ${exp.tp} · Verdaderos negativos: ${exp.tn} · Falsos positivos (deriva sin necesidad): ${exp.fp} · Falsos negativos (pasa por alto un caso grave): ${exp.fn}`,
+    "",
+  ].join("\n");
+}
+
+function seccionCasos(resultados: ResultadoCaso[]): string {
+  return resultados
+    .map((r) => {
+      if (r.error) {
+        return `## ${r.casoId} — ERROR\n- ${r.error}\n`;
+      }
+      return [
+        `## ${r.casoId} — ${r.acuerdo ? "acuerdo" : "DESACUERDO"}`,
+        `- Cultivo: ${r.cultivo || "—"} · Síntoma: ${r.sintoma || "—"}`,
+        `- Esperado: tipo=${r.tipoEsperado ?? "—"} requiere_experto=${r.requiereEsperado ?? "—"}`,
+        `- Obtenido: tipo=${r.tipoObtenido} nombre="${r.nombreObtenido}" requiere_experto=${r.requiereObtenido}`,
+        `- Confianza: ${r.confianza ?? "—"}`,
+        "",
+      ].join("\n");
+    })
+    .join("\n");
 }
 
 async function main(): Promise<void> {
@@ -89,8 +132,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const resultados: string[] = [];
-  let aciertos = 0;
+  const resultados: ResultadoCaso[] = [];
 
   // Los proveedores se cargan solo en modo ejecución: en simulación evita exigir
   // claves de API y mantiene el script sin dependencias externas.
@@ -111,29 +153,29 @@ async function main(): Promise<void> {
         proveedor === "deepseek"
           ? await analizarConReintentoDeepSeek(imagenes, contexto)
           : await analizarConReintento(imagenes, contexto);
-      const ok = acierta(caso, respuesta);
-      if (ok) aciertos++;
-      resultados.push(
-        [
-          `## ${caso.id} — ${ok ? "acuerdo" : "DESACUERDO"}`,
-          `- Cultivo: ${caso.cultivo ?? "—"} · Síntoma: ${caso.sintoma ?? "—"}`,
-          `- Esperado: ${JSON.stringify(caso.esperado ?? {})}`,
-          `- Obtenido: tipo=${respuesta.diagnostico.tipo} nombre="${respuesta.diagnostico.nombre}" requiere_experto=${respuesta.requiere_experto}`,
-          `- Confianza: ${respuesta.diagnostico.confianza} · Identificación: ${respuesta.confianza_identificacion}`,
-          "",
-        ].join("\n"),
-      );
+      resultados.push(resultadoDe(caso, respuesta));
     } catch (error) {
-      resultados.push(`## ${caso.id} — ERROR\n- ${error instanceof Error ? error.message : "error"}\n`);
+      resultados.push(resultadoDe(caso, undefined, error instanceof Error ? error.message : "error"));
     }
   }
 
   fs.mkdirSync(DIR_INFORMES, { recursive: true });
   const sello = new Date().toISOString().replace(/[:.]/g, "-");
   const ruta = path.join(DIR_INFORMES, `informe-${proveedor}-${sello}.md`);
-  const cabecera = `# Evaluación agronómica (${proveedor})\n\nFecha: ${new Date().toISOString()}\nCasos evaluables: ${evaluables.length}\nAcuerdos: ${aciertos}/${evaluables.length}\n\n`;
-  fs.writeFileSync(ruta, cabecera + resultados.join("\n"), "utf8");
-  console.log(`\nAcuerdos: ${aciertos}/${evaluables.length}. Informe: ${path.relative(RAIZ, ruta)}`);
+  const cabecera = [
+    `# Evaluación agronómica (${proveedor})`,
+    "",
+    `Fecha: ${new Date().toISOString()}`,
+    `Casos evaluables: ${evaluables.length}`,
+    "",
+    seccionResumen(resultados),
+    "---",
+    "",
+  ].join("\n");
+  fs.writeFileSync(ruta, cabecera + seccionCasos(resultados), "utf8");
+
+  const resumen = resumirEvaluacion(resultados);
+  console.log(`\nAcuerdos: ${resumen.acuerdos}/${resumen.total}. Informe: ${path.relative(RAIZ, ruta)}`);
 }
 
 void main();

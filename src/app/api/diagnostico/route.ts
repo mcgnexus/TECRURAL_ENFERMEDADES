@@ -315,6 +315,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Si el proveedor de respaldo rechaza las imágenes (no es multimodal), el
+    // mensaje al agricultor es el mismo que para una foto no interpretable:
+    // reintentar con una foto válida es lo único que puede ayudar.
+    if (/image_url|multimodal|not support|unsupport/i.test(message)) {
+      return NextResponse.json(
+        { error: "No hemos podido interpretar bien esta foto. Prueba a repetirla con más luz y el síntoma bien enfocado.", retry: true },
+        { status: 502 }
+      );
+    }
+
     if (message.includes("API_KEY no configurada") || message.includes("Missing credentials")) {
       return NextResponse.json(
         { error: "El servicio de análisis no está disponible ahora mismo. Inténtalo de nuevo en unos minutos." },

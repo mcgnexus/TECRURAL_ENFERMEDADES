@@ -10,6 +10,12 @@ import {
   type Verificacion,
 } from "./system-prompt";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
+import { propagarCalidadImagen } from "./calidad-imagen";
+import {
+  claveObservacion,
+  obtenerObservacion,
+  guardarObservacion,
+} from "./observacion-cache";
 
 export interface ImagenAnalisis {
   base64: string;
@@ -44,6 +50,14 @@ const MAX_TOKENS_VERIFICACION = 2048;
 // completa con las imágenes, así que este número se multiplica por las fases.
 const ESPERA_REINTENTO_MS = [800, 2500];
 const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
+
+/**
+ * Tope por llamada, no por análisis. Sin él, un proveedor colgado consumía los
+ * 120 s de maxDuration y la petición moría en un 504 genérico. 45 s deja hueco
+ * para el peor caso razonable: dos reintentos y el fallback al otro proveedor
+ * caben en el margen restante, o el análisis muere con un 503 controlado.
+ */
+const TIMEOUT_LLAMADA_MS = 45_000;
 
 /**
  * Presupuesto de llamadas por análisis.
@@ -105,8 +119,8 @@ interface LlamadaOpts {
   schema: object;
   maxOutputTokens: number;
   imagenes: ImagenAnalisis[];
-  /** La verificación solo razona sobre texto ya extraído: reenviar la imagen
-   * multiplica el coste sin aportar información. */
+  /** Paso de imágenes explícito por llamada: la verificación reenvía solo la
+   * principal (ver verificarDiagnostico). */
   conImagenes?: boolean;
   etiqueta: string;
   /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
@@ -137,25 +151,35 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
 
     try {
       presupuesto?.consumir();
-      const response = await ai.models.generateContent({
-        model: MODELO,
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: opts.prompt },
-              ...parteImagenes(opts.imagenes, opts.conImagenes !== false),
-            ],
+      // Cada intento lleva su propio AbortController: si se agota el tiempo,
+      // el error depende del intento, no del ciclo de vida de la petición.
+      const controlador = new AbortController();
+      const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_LLAMADA_MS);
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: MODELO,
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: opts.prompt },
+                ...parteImagenes(opts.imagenes, opts.conImagenes !== false),
+              ],
+            },
+          ],
+          config: {
+            ...CONFIG_BASE,
+            responseMimeType: "application/json",
+            responseSchema: opts.schema,
+            temperature: 0.1,
+            maxOutputTokens: opts.maxOutputTokens,
+            abortSignal: controlador.signal,
           },
-        ],
-        config: {
-          ...CONFIG_BASE,
-          responseMimeType: "application/json",
-          responseSchema: opts.schema,
-          temperature: 0.1,
-          maxOutputTokens: opts.maxOutputTokens,
-        },
-      });
+        });
+      } finally {
+        clearTimeout(temporizador);
+      }
 
       const text = response.text;
       if (!text) throw new Error(`Respuesta vacía de Gemini (${opts.etiqueta})`);
@@ -402,6 +426,7 @@ export async function analizarImagen(
 async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
   observacion: Observacion,
+  imagenes: ImagenAnalisis[],
   presupuesto?: Presupuesto
 ): Promise<Verificacion> {
   const prompt = `${VERIFICATION_PROMPT}
@@ -416,8 +441,12 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     prompt,
     schema: VERIFICATION_SCHEMA,
     maxOutputTokens: MAX_TOKENS_VERIFICACION,
-    imagenes: [],
-    conImagenes: false,
+    // El verificador ahora sí ve la foto principal: comparar la hipótesis solo
+    // con el texto de la observación validaba la coherencia del razonamiento,
+    // no la realidad fotográfica. Si la observación fue deficitaria, texto y
+    // hipótesis podían estar de acuerdo... con el mismo error.
+    imagenes: imagenes.length > 0 ? [imagenes[0]] : [],
+    conImagenes: true,
     etiqueta: "verificación",
     presupuesto,
   });
@@ -442,7 +471,7 @@ async function analizarConVerificacion(
     undefined,
     presupuesto
   );
-  const verificacion = await verificarDiagnostico(diag, observacion, presupuesto);
+  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto);
 
   // El cuarto turno solo aporta si la verificación aporta algo que corregir.
   // Antes se disparaba con "no validado", que es el caso habitual en fotos
@@ -468,7 +497,7 @@ async function analizarConVerificacion(
         verificacion.inconsistencias.join("; "),
         presupuesto
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion, presupuesto);
+      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -500,17 +529,24 @@ export async function analizarConReintento(
   // gasto: antes, el peor caso eran 56 llamadas desde una sola petición.
   const presupuesto = new Presupuesto(PRESUPUESTO_LLAMADAS);
 
-  // La observación se comparte entre ambos intentos: si falla el diagnóstico,
-  // repetir la fase 1 añadiría ~4 s sin aportar nada nuevo.
-  const observacion = await observarImagen(imagenes, presupuesto);
+  // La observación se comparte entre ambos intentos y, si las fotos son las
+  // mismas que un reintento reciente, también entre peticiones: el hash de las
+  // imágenes permite saltarse la fase 1 completa (una llamada menos y ~2,4 s).
+  const claveCache = claveObservacion("gemini", imagenes);
+  const enCache = obtenerObservacion(claveCache);
+  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto));
+  if (!enCache) guardarObservacion(claveCache, observacion);
+  else console.info("Observación reutilizada de la caché (misma foto en reintento).");
   try {
-    return await analizarConVerificacion(
+    const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       false,
       presupuesto
     );
+    propagarCalidadImagen(resultado, observacion);
+    return resultado;
   } catch (error) {
     // Si el fallo es que se acabaron las llamadas, reintentar no puede
     // funcionar por definición. Se propaga para que la ruta decida.
@@ -518,12 +554,14 @@ export async function analizarConReintento(
     console.warn(
       `Primer intento fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
-    return await analizarConVerificacion(
+    const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       true,
       presupuesto
     );
+    propagarCalidadImagen(resultado, observacion);
+    return resultado;
   }
 }

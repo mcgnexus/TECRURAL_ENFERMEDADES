@@ -20,7 +20,12 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
    síntoma, duración y variedad. Mejora la orientación; no se exige.
 3. **Foto y envío** (`POST /api/diagnostico`).
    - Se valida el tipo real de la imagen (magic bytes), el tamaño y el formato
-     en el cliente y en el servidor; se comprime a JPEG/WebP.
+     en el cliente y en el servidor; se comprime a JPEG/WebP con un objetivo
+     de **1536 px y ~1 MB** (calidad 0.8): conservar detalle fino (punteado de
+     araña roja, fructificaciones tempranas) justifica el mayor peso.
+   - Si el síntoma declarado apunta a plaga u hongo que vive en la cara
+     inferior de la hoja (ácaros, cochinilla, mildiu, manchas…), se muestra la
+     tarjeta del **envés** automáticamente (sugerencia, nunca obligación).
    - El identificador se lee de la cookie `httpOnly`, nunca del cuerpo.
 4. **Control de cuota** (antes de llamar a la IA).
    - Se registra un uso atómico y se decide si se permite.
@@ -30,6 +35,22 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
      seguridad de coste) y uno **por conexión (IP) de 12 cada 24 h** (anti-abuso).
 5. **Análisis por IA** (solo servidor).
    - Proveedor principal: Gemini; si falla, DeepSeek como respaldo automático.
+   - Pipeline de cuatro capas: observación → hipótesis (con few-shots por
+     cultivo) → **verificación adversarial que vuelve a ver la foto principal**
+     (antes razonaba solo sobre texto) → turno de corrección si hay feedback.
+   - Cada llamada tiene un **tope de 45 s** con `AbortSignal` (Gemini) o
+     `timeout` del SDK (DeepSeek): un proveedor colgado ya no consume los
+     120 s de `maxDuration`.
+   - La **calidad de la imagen** la evalúa la fase de observación y se propaga
+     al diagnóstico: nitidez baja o encuadre insuficiente fuerzan
+     `requiere_experto` y añaden una nota al usuario.
+   - La observación se **cachea por hash de las imágenes** durante 15 minutos:
+     si el usuario reintenta con la misma foto, la fase 1 no se repite (menos
+     coste y menos espera). La caché es en memoria por instancia y no guarda
+     imágenes, solo el JSON de la observación.
+   - Si DeepSeek rechaza las imágenes (no es multimodal), la observación falla
+     limpio (no se inventa nada) y la ruta devuelve el mismo mensaje amable de
+     foto no interpretable.
    - El resultado se normaliza y se valida su coherencia; se marca
      `requiere_experto` cuando procede.
 6. **Resultado**.

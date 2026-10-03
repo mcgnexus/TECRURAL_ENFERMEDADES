@@ -11,6 +11,12 @@ import {
 } from "./system-prompt";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 import type { ImagenAnalisis } from "./gemini";
+import { propagarCalidadImagen } from "./calidad-imagen";
+import {
+  claveObservacion,
+  obtenerObservacion,
+  guardarObservacion,
+} from "./observacion-cache";
 
 export type { ImagenAnalisis };
 
@@ -25,6 +31,10 @@ function getDeepSeek() {
     deepseek = new OpenAI({
       baseURL: "https://api.deepseek.com/v1",
       apiKey,
+      // Tope por llamada. Sin él, un proveedor colgado consumía los 120 s de
+      // maxDuration y la petición moría en un 504 genérico.
+      timeout: 45_000,
+      maxRetries: 0,
     });
   }
   return deepseek;
@@ -215,13 +225,32 @@ function esReintentable(error: unknown): boolean {
   );
 }
 
+/**
+ * deepseek-chat no es multimodal: si rechaza las imágenes, analizar 3 veces lo
+ * mismo solo confirma el fallo. Detectado el rechazo, se reintenta una vez sin
+ * imágenes y con aviso explícito para que no alucine fotos que no ha visto.
+ */
+function esRechazoDeImagenes(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (status !== 400) return false;
+  return /image|imagen|multimodal|vision|not support|unsupport/i.test(
+    String((error as { message?: string })?.message ?? "")
+  );
+}
+
+const AVISO_SIN_IMAGENES = `LAS IMÁGENES NO HAN PODIDO ENVIARSE. NO has visto ninguna foto: razona únicamente con la observación previa incluida en el texto y, si no la hay, di que no es posible orientar sin imagen. No inventes detalles visuales.`;
+
 interface LlamadaOpts {
   prompt: string;
   maxTokens: number;
   imagenes: ImagenAnalisis[];
-  /** La verificación solo razona sobre texto ya extraído: reenviar la imagen
-   * multiplica el coste sin aportar información. */
+  /** Paso de imágenes explícito por llamada: la verificación reenvía solo la
+   * principal (ver verificarDiagnostico). */
   conImagenes?: boolean;
+  /** En la observación NO se acepta el plan B sin imágenes: si el proveedor
+   * rechaza las fotos, la observación sería inventada y el diagnóstico entero
+   * se apoyaría en ella. Mejor propagar el fallo al proveedor anterior. */
+  sinImagenesSiRechazo?: boolean;
   etiqueta: string;
   /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
   presupuesto?: Presupuesto;
@@ -231,6 +260,10 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
   const client = getDeepSeek();
   let ultimoError: unknown;
   const presupuesto = opts.presupuesto;
+  // Si el proveedor rechazó las imágenes, el reintento de cortesía va sin
+  // ellas (y solo una vez: la segunda vez ya no habría nada que cambiar).
+  let imagenesDelIntento = opts.conImagenes !== false ? opts.imagenes : [];
+  let avisoSinImagenes = false;
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
     if (presupuesto && !presupuesto.disponible()) {
@@ -246,7 +279,11 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
         messages: [
           {
             role: "user",
-            content: contenidoMultimodal(opts.prompt, opts.imagenes, opts.conImagenes !== false),
+            content: contenidoMultimodal(
+              avisoSinImagenes ? `${AVISO_SIN_IMAGENES}\n\n${opts.prompt}` : opts.prompt,
+              imagenesDelIntento,
+              true
+            ),
           },
         ],
         response_format: { type: "json_object" },
@@ -265,6 +302,20 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
     } catch (error) {
       ultimoError = error;
       const esJson = /JSON inválido/.test(String((error as Error)?.message ?? ""));
+      // Rechazo de imágenes: una oportunidad sin ellas antes de abandonar,
+      // salvo en la observación (ver sinImagenesSiRechazo).
+      if (
+        !esJson &&
+        esRechazoDeImagenes(error) &&
+        imagenesDelIntento.length > 0 &&
+        !avisoSinImagenes &&
+        opts.sinImagenesSiRechazo !== false
+      ) {
+        imagenesDelIntento = [];
+        avisoSinImagenes = true;
+        ultimoError = undefined;
+        continue;
+      }
       if (esJson || !esReintentable(error) || intento === MAX_INTENTOS) break;
       await dormir(ESPERA_REINTENTO_MS[intento - 1]);
     }
@@ -286,6 +337,7 @@ async function observarImagen(
     prompt: buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA),
     maxTokens: 2048,
     imagenes,
+    sinImagenesSiRechazo: false,
     etiqueta: "observación DeepSeek",
     presupuesto,
   });
@@ -351,6 +403,7 @@ export async function analizarImagenDeepSeek(
 async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
   observacion: Observacion,
+  imagenes: ImagenAnalisis[],
   presupuesto?: Presupuesto
 ): Promise<Verificacion> {
   const prompt = `${VERIFICATION_PROMPT}
@@ -364,8 +417,10 @@ ${JSON.stringify(diagnostico, null, 2)}`;
   return llamarConReintento<Verificacion>({
     prompt: buildPromptWithSchema(prompt, VERIFICATION_SCHEMA),
     maxTokens: 2048,
-    imagenes: [],
-    conImagenes: false,
+    // El verificador ve la foto principal: la coherencia se comprueba contra
+    // la imagen, no solo contra el texto de la observación.
+    imagenes: imagenes.length > 0 ? [imagenes[0]] : [],
+    conImagenes: true,
     etiqueta: "verificación DeepSeek",
     presupuesto,
   });
@@ -390,7 +445,7 @@ async function analizarConVerificacion(
     undefined,
     presupuesto
   );
-  const verificacion = await verificarDiagnostico(diag, observacion, presupuesto);
+  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto);
 
   // El cuarto turno solo aporta si la verificación aporta algo que corregir y
   // si queda presupuesto: son dos llamadas más.
@@ -413,7 +468,7 @@ async function analizarConVerificacion(
         verificacion.inconsistencias.join("; "),
         presupuesto
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion, presupuesto);
+      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -441,26 +496,36 @@ export async function analizarConReintentoDeepSeek(
   contexto?: ContextoUsuario
 ): Promise<DiagnosticoResponse> {
   const presupuesto = new Presupuesto(PRESUPUESTO_LLAMADAS);
-  const observacion = await observarImagen(imagenes, presupuesto);
+  // La observación se comparte entre ambos intentos y, si las fotos son las
+  // mismas que un reintento reciente, también entre peticiones (caché por hash).
+  const claveCache = claveObservacion("deepseek", imagenes);
+  const enCache = obtenerObservacion(claveCache);
+  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto));
+  if (!enCache) guardarObservacion(claveCache, observacion);
+  else console.info("Observación DeepSeek reutilizada de la caché.");
   try {
-    return await analizarConVerificacion(
+    const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       false,
       presupuesto
     );
+    propagarCalidadImagen(resultado, observacion);
+    return resultado;
   } catch (error) {
     if (error instanceof PresupuestoAgotadoError) throw error;
     console.warn(
       `Primer intento DeepSeek fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
-    return await analizarConVerificacion(
+    const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       true,
       presupuesto
     );
+    propagarCalidadImagen(resultado, observacion);
+    return resultado;
   }
 }

@@ -61,15 +61,16 @@ const SLOTS: { id: SlotFoto; label: string; descripcion: string; icon: string; o
   },
 ];
 
-// Compresión única: WebP re-codificado (elimina metadatos EXIF) y tamaño y
-// resolución suficientes para distinguir manchas y síntomas pequeños. WebP
-// pesa bastante menos que JPEG a igual calidad, lo que importa en móvil con
-// cobertura limitada. Si el navegador no soporta WebP se recurre a JPEG.
+// Compresión única: WebP re-codificado (elimina metadatos EXIF). 1536 px y
+// 1 MB conservan el detalle que la fitopatología necesita: punteado de
+// araña roja, fructificaciones tempranas o esporas se perdían a 1024 px.
+// WebP pesa bastante menos que JPEG a igual calidad, lo que importa en móvil
+// con cobertura limitada. Si el navegador no soporta WebP se recurre a JPEG.
 const COMPRESSION_OPTS = {
-  maxSizeMB: 0.6,
-  maxWidthOrHeight: 1024,
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1536,
   useWebWorker: true,
-  quality: 0.75,
+  quality: 0.8,
   fileType: "image/webp" as const,
   initialQuality: 0.8,
 };
@@ -312,7 +313,7 @@ export function CameraCapture({
       />
 
       <p className="mt-3 text-caption text-tr-muted text-center">
-        Fotos optimizadas para envío móvil (unos 1024 px, comprimidas). Se envían al servicio de
+        Fotos optimizadas para envío móvil (hasta 1536 px, comprimidas). Se envían al servicio de
         análisis y no se guardan, salvo que solicites una revisión de TecRural.
       </p>
     </div>

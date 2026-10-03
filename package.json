@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "comprobar:esquema": "node scripts/comprobar-esquema-sin-borrados.mjs",
-    "eval:agronomica": "tsx scripts/evaluar-calidad.ts"
+    "eval:agronomica": "tsx scripts/evaluar-calidad.ts",
+    "eval:calibrar": "tsx scripts/calibrar-confianza.ts"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

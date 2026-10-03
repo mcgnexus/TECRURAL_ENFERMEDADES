@@ -8,7 +8,7 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 
 1. **Portada**: explica el servicio (orientación inicial, no diagnóstico definitivo; foto clara; revisión de TecRural como siguiente paso) y el botón «Analizar una planta».
 2. **Contexto del cultivo**: cultivo (selector + "Otro"/"No lo sé"), municipio o comarca (Altiplano/Costa Tropical + "Otro"), síntoma observado, desde cuándo (opcional), variedad (opcional). Sin GPS.
-3. **Fotos**: modo simple por defecto (1 foto nítida del síntoma). Modo avanzado opcional añade envés y planta completa. Vista previa, reemplazo y eliminación por foto. Validación de tipo real (magic bytes), tamaño (≤12 MB) y formato en frontend y backend. Compresión a JPEG ~1024px/0,8MB (elimina EXIF y optimiza móvil manteniendo detalle para manchas y síntomas pequeños).
+3. **Fotos**: modo simple por defecto (1 foto nítida del síntoma). Modo avanzado opcional añade envés y planta completa. Vista previa, reemplazo y eliminación por foto. Validación de tipo real (magic bytes), tamaño (≤12 MB) y formato en frontend y backend. Compresión a JPEG/WebP ~1536px/1MB (elimina EXIF y optimiza móvil manteniendo detalle para manchas y síntomas pequeños).
 4. **Análisis**: botón «Analizar foto»; desactivado solo si falta la foto principal. Estados de espera claros sin porcentajes falsos; datos y fotos se conservan si hay error; reintentos permitidos. Errores amigables (red, límite de uso, proveedor, imagen no interpretable, servicio caído) sin trazas ni claves.
 5. **Resultado**: en lenguaje claro — qué se observa; posibles causas como hipótesis; qué falta para afinar; próximos pasos prudentes; cuándo pedir revisión técnica; aviso visible de que la IA no sustituye inspección profesional. Fiabilidad mostrada cualitativamente (señales claras / indicios moderados / señales poco claras), sin porcentajes no calibrados. Sin prescripciones de productos, marcas ni dosis. Compartible (Web Share API con fallback a portapapeles).
 6. **Revisión de TecRural**: CTA tras el resultado sin ocultarlo; formulario con nombre opcional, teléfono/canal, municipio y cultivo precargados y editables, mensaje opcional, confirmación de solicitud y consentimiento comercial **separado y desmarcado por defecto**. Las fotos se comparten solo al enviar la revisión, informando antes.
@@ -17,8 +17,8 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 
 - **Next.js 16 (App Router) + React 19 + Tailwind v4**, PWA con `next-pwa`.
 - **IA (solo servidor, claves nunca en el cliente):**
-  - `src/lib/gemini.ts` — pipeline de 4 capas: observación → hipótesis (few-shots por cultivo) → verificación adversarial → reintento. Acepta varias fotos (principal + envés + planta completa).
-  - `src/lib/deepseek.ts` — mismo pipeline sobre DeepSeek Chat como fallback automático.
+  - `src/lib/gemini.ts` — pipeline de 4 capas: observación → hipótesis (few-shots por cultivo) → verificación adversarial (reenvía la foto principal) → reintento. Acepta varias fotos (principal + envés + planta completa). Timeout de 45 s por llamada y observación cacheada por hash de imagen (`src/lib/observacion-cache.ts`): reintentar con la misma foto no repite la fase 1.
+  - `src/lib/deepseek.ts` — mismo pipeline sobre DeepSeek Chat como fallback automático; si rechaza las imágenes (no es multimodal), la observación falla limpio y el diagnóstico solo continúa sin imágenes con aviso explícito.
   - `src/lib/system-prompt.ts` — prompts (hipótesis, sin prescripciones), esquemas y ejemplos.
   - Selección de proveedor automática (recomendado Gemini); el usado se registra en BD para comparar coste y calidad.
 - **Base de datos:** Neon Postgres serverless (`src/lib/database.ts`). Tablas:
@@ -84,7 +84,11 @@ Si no hay base aparte y quieres ejecutarlas igualmente, existe `PERMITIR_TESTS_E
 
 ## Evaluación agronómica
 
-`npm run eval:agronomica` valida `evaluacion/casos.json` y, con `--ejecutar`, lanza el pipeline sobre cada caso con imagen y escribe un informe en `evaluacion/informes/` para revisión del técnico. Mide acuerdos/desacuerdos por cultivo y síntoma; no sustituye la validación humana. Las imágenes deben ser propias o cedidas con autorización (nunca fotos de usuarios sin consentimiento): `evaluacion/imagenes/` e `evaluacion/informes/` no se versionan.
+`npm run eval:agronomica` valida `evaluacion/casos.json` y, con `--ejecutar`, lanza el pipeline sobre cada caso con imagen y escribe un informe en `evaluacion/informes/` para revisión del técnico. El informe incluye: acuerdos globales, desglose por cultivo y por tipo esperado, **tramos de confianza** (¿los casos con más confianza aciertan más?) y el **balance de requiere_experto** (falsos positivos/negativos en la derivación a técnico). Mide acuerdos/desacuerdos por cultivo y síntoma; no sustituye la validación humana. Las imágenes deben ser propias o cedidas con autorización (nunca fotos de usuarios sin consentimiento): `evaluacion/imagenes/` e `evaluacion/informes/` no se versionan.
+
+**Flujo por caso** (documentado en la cabecera de `casos.json`): copiar foto real a `evaluacion/imagenes/<id>.jpg` → el técnico rellena `esperado` → `esValidoParaEvaluar: true` → `npm run eval:agronomica -- --ejecutar`. Mientras sea `false`, el caso es un marcador y no se ejecuta.
+
+`npm run eval:calibrar` genera un informe de **solo lectura** a partir de los diagnósticos reales de la BD (últimos 180 días): distribución de confianza por proveedor, % de derivación a experto por tramo de confianza y casos con feedback del usuario. Es la herramienta para ajustar los umbrales de `route.ts` con datos, no a ojo. Requiere `DATABASE_URL`.
 
 ## Desarrollo
 

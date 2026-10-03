@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import logoTecRural from "../../TecRural_icono.png";
@@ -12,6 +12,7 @@ import { PWAProviders } from "@/components/PWA/Providers";
 import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
 import { mensajeAmigable, errorDeRespuesta, ErrorAnalisis } from "@/lib/error-analisis";
+import { debeSugerirEnves } from "@/lib/sugerir-fotos";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 
 type Vista = "portada" | "captura" | "resultado";
@@ -43,6 +44,24 @@ function HomeContent() {
   const handleFotosChange = useCallback((nuevas: FotosEstado) => {
     setFotos(nuevas);
   }, []);
+
+  // Nudge del envés: si el síntoma declarado apunta a plaga u hongo que vive
+  // en la cara inferior de la hoja, se abre el modo multi una sola vez para
+  // que la tarjeta del envés sea visible. Solo se sugiere (nunca se fuerza) y
+  // solo si el usuario no ha capturado ya el envés o abierto el modo a mano.
+  const nudgeEnvesHecho = useRef(false);
+  useEffect(() => {
+    if (nudgeEnvesHecho.current) return;
+    if (vista !== "captura") return;
+    if (modoMulti || fotos.enves) {
+      nudgeEnvesHecho.current = true;
+      return;
+    }
+    if (debeSugerirEnves(contexto.sintoma, contexto.sintomaOtro)) {
+      nudgeEnvesHecho.current = true;
+      setModoMulti(true);
+    }
+  }, [vista, modoMulti, fotos.enves, contexto.sintoma]);
 
   // Llegada a la portada. Es el paso 1 del embudo y el denominador de la tasa
   // de conversión: sin él no se pueden contar las visitas que se van sin
