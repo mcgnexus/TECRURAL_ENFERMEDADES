@@ -4,8 +4,9 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import imageCompression from "browser-image-compression";
 import { TIPOS_ACEPTADOS_FRONTEND, MAX_BYTES_IMAGEN } from "@/lib/imagen";
 import { trackEvento } from "@/lib/analitica";
+import { evaluarCalidadFoto, type AvisoCalidadFoto } from "@/lib/calidad-foto";
 
-type Proveedor = "gemini" | "deepseek";
+type Proveedor = "gemini" | "openai";
 
 export type SlotFoto = "principal" | "enves" | "planta_completa";
 
@@ -23,6 +24,7 @@ export interface FotosEstado {
 
 interface CameraCaptureProps {
   onFotosChange: (fotos: FotosEstado) => void;
+  initialFotos?: FotosEstado;
   disabled?: boolean;
   proveedor?: Proveedor;
   modoMulti?: boolean;
@@ -91,20 +93,42 @@ function webpSoportado(): boolean {
 
 export function CameraCapture({
   onFotosChange,
+  initialFotos,
   disabled = false,
   modoMulti = false,
   onToggleModoMulti,
 }: CameraCaptureProps) {
-  const [fotos, setFotos] = useState<FotosEstado>({ principal: null, enves: null, planta_completa: null });
+  const [fotos, setFotos] = useState<FotosEstado>(initialFotos ?? { principal: null, enves: null, planta_completa: null });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avisoCalidad, setAvisoCalidad] = useState<AvisoCalidadFoto | null>(null);
+  const [camaraAbierta, setCamaraAbierta] = useState(false);
+  const [camaraNativaFallback, setCamaraNativaFallback] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const slotActivoRef = useRef<SlotFoto>("principal");
+  const origenRef = useRef<"camara" | "galeria">("galeria");
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     onFotosChange(fotos);
   }, [fotos, onFotosChange]);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      void videoRef.current.play().catch(() => undefined);
+    }
+  }, [stream]);
+
+  useEffect(() => () => stream?.getTracks().forEach((track) => track.stop()), [stream]);
+
+  const cerrarCamara = useCallback(() => {
+    stream?.getTracks().forEach((track) => track.stop());
+    setStream(null);
+    setCamaraAbierta(false);
+  }, [stream]);
 
   const fijarFoto = useCallback((slot: SlotFoto, foto: FotoCapturada | null) => {
     setFotos((prev) => ({ ...prev, [slot]: foto }));
@@ -139,11 +163,12 @@ export function CameraCapture({
           mimeType,
           file: compressed,
         });
+        setAvisoCalidad(await evaluarCalidadFoto(compressed));
         // Paso 2 del embudo: el agricultor ya tiene foto, que es el punto en
         // el que la mayoría abandona. Se registraba en el tipo y en el README
         // desde hacía tiempo, pero ninguna llamada lo emitía.
         trackEvento("captura_realizada", {
-          origen: file.type.startsWith("image/") ? "archivo" : "desconocido",
+          origen: origenRef.current,
           kb: Math.round(compressed.size / 1024),
           formato: mimeType === "image/webp" ? "webp" : "jpeg",
         });
@@ -169,12 +194,49 @@ export function CameraCapture({
 
   const abrirCamara = (slot: SlotFoto) => {
     slotActivoRef.current = slot;
-    cameraInputRef.current?.click();
+    origenRef.current = "camara";
+    if (camaraNativaFallback) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    void navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .then((cameraStream) => {
+        setError(null);
+        setCamaraNativaFallback(false);
+        setStream(cameraStream);
+        setCamaraAbierta(true);
+      })
+      .catch(() => {
+        setCamaraNativaFallback(true);
+        setError("No se pudo abrir la cámara integrada. Puedes usar la cámara del dispositivo.");
+      });
   };
 
   const abrirGaleria = (slot: SlotFoto) => {
     slotActivoRef.current = slot;
+    origenRef.current = "galeria";
     galleryInputRef.current?.click();
+  };
+
+  const capturarFotograma = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setError("No hemos podido capturar la imagen. Prueba de nuevo o usa la cámara del dispositivo.");
+        return;
+      }
+      cerrarCamara();
+      void procesarArchivo(new File([blob], `tecrural-${Date.now()}.jpg`, { type: "image/jpeg" }));
+    }, "image/jpeg", 0.92);
   };
 
   const slotsVisibles = modoMulti ? SLOTS : SLOTS.filter((s) => s.id === "principal");
@@ -275,10 +337,32 @@ export function CameraCapture({
         })}
       </div>
 
+      {camaraAbierta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-label="Captura guiada">
+          <div className="w-full max-w-lg rounded-2xl bg-tr-surface p-4">
+            <p className="mb-3 text-small text-tr-ink">Acerca el síntoma, busca luz natural y mantén la hoja enfocada dentro del marco.</p>
+            <div className="relative overflow-hidden rounded-xl bg-black">
+              <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
+              <div className="pointer-events-none absolute inset-[12%] rounded-3xl border-2 border-white/90" />
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={capturarFotograma} className={`${btnPrimary} flex-1`}>Capturar</button>
+              <button type="button" onClick={cerrarCamara} className={`${btnSecondary} flex-1`}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!modoMulti && adicionales > 0 && (
-        <p className="mt-3 text-caption text-tr-green-strong text-center" role="status">
-          + {adicionales} foto{adicionales > 1 ? "s" : ""} adicional{adicionales > 1 ? "es" : ""} lista{adicionales > 1 ? "s" : ""} (se incluirá en el análisis)
-        </p>
+        <div className="mt-3 flex items-center justify-center gap-3 text-caption text-tr-green-strong" role="status">
+          <span>+ {adicionales} foto{adicionales > 1 ? "s" : ""} adicional{adicionales > 1 ? "es" : ""} lista{adicionales > 1 ? "s" : ""} (se incluirá en el análisis)</span>
+          <button type="button" className="min-h-[44px] underline" onClick={() => {
+            fijarFoto("enves", null);
+            fijarFoto("planta_completa", null);
+          }} disabled={disabled || isProcessing}>
+            Quitar adicionales
+          </button>
+        </div>
       )}
 
       {isProcessing && (
@@ -290,6 +374,13 @@ export function CameraCapture({
 
       {error && (
         <p className="mt-3 text-small text-tr-warning-text text-center" role="alert">{error}</p>
+      )}
+
+      {avisoCalidad && (avisoCalidad.nitidezBaja || avisoCalidad.exposicionDeficiente) && (
+        <div className="mt-3 rounded-xl border border-tr-warning bg-tr-warning/10 p-3 text-small text-tr-warning-text" role="status">
+          <p>La foto podría salir borrosa o con poca luz. Es una comprobación orientativa; puedes continuar o repetirla.</p>
+          <button type="button" className="mt-2 min-h-[44px] underline" onClick={() => setAvisoCalidad(null)}>Continuar con esta foto</button>
+        </div>
       )}
 
       <input

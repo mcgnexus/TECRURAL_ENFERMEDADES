@@ -23,6 +23,7 @@ interface ResultsProps {
   fotosDataUrl?: string[];
   contextoUsuario?: ContextoUsuario;
   onRetry: () => void;
+  onImprovePhoto: () => void;
   isLoading?: boolean;
 }
 
@@ -75,6 +76,7 @@ export function Results({
   fotosDataUrl,
   contextoUsuario,
   onRetry,
+  onImprovePhoto,
   isLoading = false,
 }: ResultsProps) {
   const {
@@ -423,6 +425,16 @@ export function Results({
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        {diagnostico.calidad_imagen && (diagnostico.calidad_imagen.nitidez === "baja" || diagnostico.calidad_imagen.encuadre === "insuficiente" || diagnostico.calidad_imagen.iluminacion !== "adecuada") && (
+          <button
+            onClick={onImprovePhoto}
+            disabled={isLoading}
+            type="button"
+            className={`${btnSecondary} flex-1`}
+          >
+            Mejorar la foto
+          </button>
+        )}
         <button
           onClick={showFeedback}
           disabled={isLoading || feedbackEstado === "enviando"}

@@ -58,7 +58,7 @@ export interface DiagnosticoWithMeta extends DiagnosticoResponse {
   nombre_planta?: string | null;
   feedback_usuario?: string;
   created_at?: string;
-  proveedor_usado?: "gemini" | "deepseek";
+  proveedor_usado?: "gemini" | "openai";
   angulo_usado?: "haz" | "enves" | "planta_completa";
   contexto_usuario?: ContextoUsuario;
 }

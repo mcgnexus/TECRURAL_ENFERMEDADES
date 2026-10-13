@@ -11,9 +11,11 @@ import { Results } from "@/components/Results";
 import { PWAProviders } from "@/components/PWA/Providers";
 import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
-import { mensajeAmigable, errorDeRespuesta, ErrorAnalisis } from "@/lib/error-analisis";
+import { mensajeAmigable, ErrorAnalisis } from "@/lib/error-analisis";
 import { debeSugerirEnves } from "@/lib/sugerir-fotos";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
+import { leerProgresoAnalisis } from "@/lib/progreso-analisis";
+import type { FaseAnalisis } from "@/lib/opciones-analisis";
 
 type Vista = "portada" | "captura" | "resultado";
 
@@ -33,7 +35,9 @@ function HomeContent() {
   const [fotos, setFotos] = useState<FotosEstado>({ principal: null, enves: null, planta_completa: null });
   const [modoMulti, setModoMulti] = useState(false);
   const [diagnostico, setDiagnostico] = useState<DiagnosticoWithMeta | null>(null);
+  const [editandoFoto, setEditandoFoto] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [faseAnalisis, setFaseAnalisis] = useState<FaseAnalisis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requiereTelefono, setRequiereTelefono] = useState(false);
   const [telefonoCuota, setTelefonoCuota] = useState("");
@@ -61,7 +65,7 @@ function HomeContent() {
       nudgeEnvesHecho.current = true;
       setModoMulti(true);
     }
-  }, [vista, modoMulti, fotos.enves, contexto.sintoma]);
+  }, [vista, modoMulti, fotos.enves, contexto.sintoma, contexto.sintomaOtro]);
 
   // Llegada a la portada. Es el paso 1 del embudo y el denominador de la tasa
   // de conversión: sin él no se pueden contar las visitas que se van sin
@@ -70,7 +74,7 @@ function HomeContent() {
   // contar porque el componente no se desmonta.
   useEffect(() => {
     if (vista === "portada") {
-      trackEvento("portada_vista", { tiene_historial: fotos.principal !== null });
+      trackEvento("portada_vista");
     }
     // Solo al montar: depende de `vista` intentionally, pero recontar en cada
     // cambio de vista inflaría el embudo.
@@ -94,6 +98,7 @@ function HomeContent() {
     if (!fotos.principal || isLoading) return;
 
     setIsLoading(true);
+    setFaseAnalisis(null);
     setError(null);
     setRequiereTelefono(false);
     trackEvento("analisis_iniciado", { fotos: 1 + (fotos.enves ? 1 : 0) + (fotos.planta_completa ? 1 : 0) });
@@ -115,17 +120,10 @@ function HomeContent() {
         body: formData,
       });
 
-      // El cuerpo se lee UNA sola vez: un `Response` no se puede consumir dos
-      // veces. Y sin exigir que sea JSON, porque la plataforma responde texto
-      // plano en un 413 y un `response.json()` directo lanzaría un SyntaxError
-      // que se perdería como error genérico, sin estado ni mensaje útil.
-      if (!response.ok) {
-        throw await errorDeRespuesta(response);
-      }
-
-      const data = (await response.json()) as DiagnosticoWithMeta;
+      const data = await leerProgresoAnalisis<DiagnosticoWithMeta>(response, setFaseAnalisis);
 
       setDiagnostico(data);
+      setEditandoFoto(false);
       setVista("resultado");
       window.dispatchEvent(new Event("tecrural:analysis-complete"));
       trackEvento("analisis_completado", {
@@ -145,6 +143,7 @@ function HomeContent() {
       // Las fotos y el contexto se conservan para reintentar
     } finally {
       setIsLoading(false);
+      setFaseAnalisis(null);
     }
   }, [fotos, contexto, isLoading]);
 
@@ -175,7 +174,19 @@ function HomeContent() {
     setFotos({ principal: null, enves: null, planta_completa: null });
     setContexto(CONTEXTO_INICIAL);
     setError(null);
+    setEditandoFoto(false);
     setVista("portada");
+  }, []);
+
+  const handleMejorarFoto = useCallback(() => {
+    setEditandoFoto(true);
+    setError(null);
+    setVista("captura");
+  }, []);
+
+  const cancelarMejoraFoto = useCallback(() => {
+    setEditandoFoto(false);
+    setVista("resultado");
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -203,6 +214,7 @@ function HomeContent() {
             ]}
             contextoUsuario={resumenContexto(contexto)}
             onRetry={handleReiniciar}
+            onImprovePhoto={handleMejorarFoto}
             isLoading={isLoading}
           />
         </div>
@@ -439,9 +451,20 @@ function HomeContent() {
 
         <ContextoCultivo valor={contexto} onChange={setContexto} disabled={isLoading} />
 
+        {editandoFoto && (
+          <button
+            type="button"
+            onClick={cancelarMejoraFoto}
+            className="mt-3 inline-flex min-h-[44px] items-center text-small font-semibold text-tr-green-strong underline"
+          >
+            Volver al resultado anterior
+          </button>
+        )}
+
         <div className="mt-5">
           <CameraCapture
             onFotosChange={handleFotosChange}
+            initialFotos={fotos}
             disabled={isLoading}
             modoMulti={modoMulti}
             onToggleModoMulti={() => setModoMulti((v) => !v)}
@@ -471,7 +494,12 @@ function HomeContent() {
           <div className="mt-6 text-center" role="status" aria-live="polite">
             <div className="inline-flex items-center gap-2 text-tr-green-strong font-body font-medium">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-tr-brand-green border-t-transparent" />
-              Analizando la foto...
+              {faseAnalisis === "observacion" && "Observando la foto..."}
+              {faseAnalisis === "hipotesis" && "Contrastando posibles causas..."}
+              {faseAnalisis === "verificacion" && "Verificando la orientación..."}
+              {faseAnalisis === "reintento" && "Revisando una alternativa..."}
+              {faseAnalisis === "proveedor_alternativo" && "Conectando con un servicio alternativo..."}
+              {!faseAnalisis && "Enviando las fotos..."}
             </div>
             <p className="text-small text-tr-muted mt-1">
               Suele tardar entre 10 y 20 segundos. Mantén esta pantalla abierta.

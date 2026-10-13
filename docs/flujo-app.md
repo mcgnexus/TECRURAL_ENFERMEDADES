@@ -23,24 +23,29 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
      en el cliente y en el servidor; se comprime a JPEG/WebP con un objetivo
      de **1536 px y ~1 MB** (calidad 0.8): conservar detalle fino (punteado de
      araña roja, fructificaciones tempranas) justifica el mayor peso.
-   - Si el síntoma declarado apunta a plaga u hongo que vive en la cara
-     inferior de la hoja (ácaros, cochinilla, mildiu, manchas…), se muestra la
-     tarjeta del **envés** automáticamente (sugerencia, nunca obligación).
+    - Si el síntoma declarado apunta a plaga u hongo que vive en la cara
+      inferior de la hoja (ácaros, cochinilla, mildiu, manchas…), se muestra la
+      tarjeta del **envés** automáticamente (sugerencia, nunca obligación).
+    - La captura integrada muestra una guía de encuadre; si no se concede
+      permiso de cámara, se conserva el selector nativo. Un chequeo local
+      orientativo de nitidez y exposición permite repetir o continuar.
    - El identificador se lee de la cookie `httpOnly`, nunca del cuerpo.
 4. **Control de cuota** (antes de llamar a la IA).
-   - Se registra un uso atómico y se decide si se permite.
+    - Se registra un uso atómico y se decide si se permite. Las filas de
+      visitante, IP y límite global comparten un ID para poder reembolsarlas
+      juntas ante un fallo confirmado del proveedor.
    - Se permiten **2 análisis** por visitante en cualquier ventana móvil de
      7 días.
    - Se aplican además dos topes: uno **global de 500 cada 24 h** (red de
      seguridad de coste) y uno **por conexión (IP) de 12 cada 24 h** (anti-abuso).
 5. **Análisis por IA** (solo servidor).
-   - Proveedor principal: Gemini; si falla, DeepSeek como respaldo automático.
-   - Pipeline de cuatro capas: observación → hipótesis (con few-shots por
-     cultivo) → **verificación adversarial que vuelve a ver la foto principal**
+    - Proveedor principal: Gemini; si falla, OpenAI `gpt-4o-mini` como respaldo
+      multimodal opcional (`OPENAI_API_KEY`). DeepSeek Chat no se usa para fotos.
+    - Pipeline de cuatro capas: observación → hipótesis (con few-shots por
+      cultivo) → **verificación adversarial de la foto relevante**
      (antes razonaba solo sobre texto) → turno de corrección si hay feedback.
-   - Cada llamada tiene un **tope de 45 s** con `AbortSignal` (Gemini) o
-     `timeout` del SDK (DeepSeek): un proveedor colgado ya no consume los
-     120 s de `maxDuration`.
+    - Cada llamada tiene un tope y el análisis comparte un **deadline total de
+      105 s** entre fases y proveedores, dejando margen antes de `maxDuration`.
    - La **calidad de la imagen** la evalúa la fase de observación y se propaga
      al diagnóstico: nitidez baja o encuadre insuficiente fuerzan
      `requiere_experto` y añaden una nota al usuario.
@@ -48,9 +53,11 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
      si el usuario reintenta con la misma foto, la fase 1 no se repite (menos
      coste y menos espera). La caché es en memoria por instancia y no guarda
      imágenes, solo el JSON de la observación.
-   - Si DeepSeek rechaza las imágenes (no es multimodal), la observación falla
-     limpio (no se inventa nada) y la ruta devuelve el mismo mensaje amable de
-     foto no interpretable.
+    - Si ambos proveedores fallan, se devuelve un error de servicio y se
+      reembolsan las cuotas del intento. Los errores de entrada no se reembolsan.
+    - La API transmite progreso NDJSON por fase, sin porcentajes inventados. El
+      resultado se cachea hasta 15 minutos por visitante, imagen y contexto; la
+      caché es efímera por instancia y no almacena fotos.
    - El resultado se normaliza y se valida su coherencia; se marca
      `requiere_experto` cuando procede.
 6. **Resultado**.

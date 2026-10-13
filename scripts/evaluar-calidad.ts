@@ -34,7 +34,7 @@ const RAIZ = process.cwd();
 const RUTA_CASOS = path.join(RAIZ, "evaluacion", "casos.json");
 const DIR_INFORMES = path.join(RAIZ, "evaluacion", "informes");
 const ejecutar = process.argv.includes("--ejecutar");
-const proveedor = process.argv.includes("--deepseek") ? "deepseek" : "gemini";
+const proveedor = process.argv.includes("--openai") ? "openai" : "gemini";
 
 function mimeDe(ruta: string): string {
   const ext = path.extname(ruta).toLowerCase();
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
   // Los proveedores se cargan solo en modo ejecución: en simulación evita exigir
   // claves de API y mantiene el script sin dependencias externas.
   const { analizarConReintento } = await import("../src/lib/gemini");
-  const { analizarConReintentoDeepSeek } = await import("../src/lib/deepseek");
+  const { analizarConReintentoOpenAI } = await import("../src/lib/openai");
 
   for (const caso of evaluables) {
     const imagenes = cargarCaso(caso);
@@ -150,8 +150,8 @@ async function main(): Promise<void> {
     };
     try {
       const respuesta =
-        proveedor === "deepseek"
-          ? await analizarConReintentoDeepSeek(imagenes, contexto)
+        proveedor === "openai"
+          ? await analizarConReintentoOpenAI(imagenes, contexto)
           : await analizarConReintento(imagenes, contexto);
       resultados.push(resultadoDe(caso, respuesta));
     } catch (error) {

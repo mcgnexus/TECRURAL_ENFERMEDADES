@@ -1,49 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analizarConReintento, type ImagenAnalisis } from "@/lib/gemini";
-import { analizarConReintentoDeepSeek } from "@/lib/deepseek";
+import { analizarConReintentoOpenAI } from "@/lib/openai";
 import { guardarDiagnostico } from "@/lib/database";
 import { validarImagenServidor } from "@/lib/imagen";
 import { uidObligatorio } from "@/lib/identidad";
 import { ipCliente } from "@/lib/ip-request";
-import { consumirUso } from "@/lib/cuota";
+import { consumirUso, reembolsarConsumoDiagnostico } from "@/lib/cuota";
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
+import { sanitizarSintomas } from "@/lib/sanitizar-sintomas";
+import { esErrorProveedorIA, ErrorProveedorIA } from "@/lib/errores-proveedor";
+import type { OpcionesAnalisis } from "@/lib/opciones-analisis";
+import { claveResultado, obtenerResultado, guardarResultado } from "@/lib/resultado-cache";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-type Proveedor = "gemini" | "deepseek";
+type Proveedor = "gemini" | "openai";
 
 /** Por qué se corta el fallback. Para no caer al segundo proveedor cuando el
  * primer fallo no es del proveedor, sino que se acabaron las llamadas. */
 function esFalloDeProveedor(error: unknown): boolean {
   const nombre = (error as { name?: string })?.name;
-  return nombre !== "PresupuestoAgotadoError";
+  const causa = (error as { cause?: { name?: string } })?.cause;
+  return nombre !== "PresupuestoAgotadoError" && causa?.name !== "PresupuestoAgotadoError" && causa?.name !== "DeadlineDiagnosticoError";
 }
 
 async function analizarConProveedor(
   imagenes: ImagenAnalisis[],
   proveedor: Proveedor,
-  contexto?: ContextoUsuario
+  contexto?: ContextoUsuario,
+  opciones?: OpcionesAnalisis
 ) {
-  if (proveedor === "gemini") {
-    return await analizarConReintento(imagenes, contexto);
+  try {
+    if (proveedor === "gemini") return await analizarConReintento(imagenes, contexto, opciones);
+    return await analizarConReintentoOpenAI(imagenes, contexto, opciones);
+  } catch (error) {
+    if (esErrorProveedorIA(error)) throw error;
+    throw new ErrorProveedorIA(proveedor, error);
   }
-  return await analizarConReintentoDeepSeek(imagenes, contexto);
-}
-
-function sanitizarSintomas(sintomas: string[]): string[] {
-  const genericos = new Set([
-    "manchas", "color raro", "extraño", "raro", "malo", "enfermo",
-    "amarillo", "marron", "negro", "blanco", "verde", "seco", "marchito",
-    "mancha", "punto", "rayas", "lineas", "zonas", "areas",
-  ]);
-
-  return sintomas
-    .map((s) => s.trim())
-    .filter((s) => s.length > 5)
-    .filter((s) => !genericos.has(s.toLowerCase()))
-    .filter((s, i, arr) => arr.findIndex((x) => x.toLowerCase() === s.toLowerCase()) === i)
-    .slice(0, 8);
 }
 
 /** Normaliza el nombre del diagnóstico al formato "Compatible con X" para que la
@@ -170,7 +164,11 @@ async function leerImagenValidada(
   };
 }
 
-export async function POST(request: NextRequest) {
+async function procesarDiagnostico(
+  request: NextRequest,
+  onPhase: NonNullable<OpcionesAnalisis["onPhase"]>
+) {
+  let requestId: string | undefined;
   try {
     // El identificador de visitante viene de la cookie httpOnly que emite el
     // proxy, no del cuerpo de la petición: así no se puede atribuir el
@@ -198,41 +196,52 @@ export async function POST(request: NextRequest) {
     if (enves) imagenes.push(enves);
     if (planta) imagenes.push(planta);
 
+    const cacheKey = claveResultado(imagenes, contexto, usuarioId ?? "");
+    const resultadoCacheado = obtenerResultado(cacheKey);
+
     // Cuota DESPUÉS de validar las fotos y ANTES de llamar al proveedor. Si se
     // hiciera antes, un cuerpo de 4 MB sin imagen válida consumiría cuota sin
     // coste detrás, y un agricultor con la foto mal hecha pagaría un uso que no
     // le hemos analizado.
     // La IP es solo una red secundaria (anti-abuso); nunca identifica al usuario.
-    const cuota = await consumirUso("diag", usuarioId, ipCliente(request));
-    if (!cuota.permitido) {
+    const cuota = resultadoCacheado ? null : await consumirUso("diag", usuarioId, ipCliente(request));
+    if (cuota && !cuota.permitido) {
       console.warn("Diagnóstico bloqueado por cuota o indisponibilidad de la base.");
       return NextResponse.json(
         { error: cuota.mensaje, cuota: { motivo: cuota.motivo, requiereTelefono: cuota.requiereTelefono } },
         { status: cuota.motivo === "global" || cuota.motivo === "database" ? 503 : 429 }
       );
     }
-    const headers: Record<string, string> = { "X-Cuota-Restante": String(cuota.restantes) };
+    const headers: Record<string, string> = cuota ? { "X-Cuota-Restante": String(cuota.restantes) } : {};
+    requestId = cuota?.requestId;
 
-    let diagnostico: DiagnosticoResponse;
-    let proveedorUsado: Proveedor = "gemini";
+    let diagnostico: DiagnosticoResponse = resultadoCacheado?.diagnostico as DiagnosticoResponse;
+    let proveedorUsado: Proveedor = resultadoCacheado?.proveedor ?? "gemini";
+    const opciones: OpcionesAnalisis = { deadlineAt: Date.now() + 105_000, onPhase };
 
-    try {
-      diagnostico = await analizarConProveedor(imagenes, "gemini", contexto);
+    if (!resultadoCacheado) try {
+      diagnostico = await analizarConProveedor(imagenes, "gemini", contexto, opciones);
     } catch (error) {
-      // El fallback solo tiene sentido si el primer proveedor falló. Si el
-      // fallo es que se agotó el presupuesto de llamadas, arrancar la misma
-      // estructura completa en DeepSeek lo multiplicaría por dos.
+      // Si Gemini agotó el deadline, no se inicia otra cadena de llamadas.
       if (!esFalloDeProveedor(error)) throw error;
-      console.warn("Fallo del proveedor principal; se intenta el alternativo.");
+      opciones.onPhase?.("proveedor_alternativo");
+      console.warn("Fallo de Gemini; se intenta OpenAI.");
       try {
-        diagnostico = await analizarConProveedor(imagenes, "deepseek", contexto);
-        proveedorUsado = "deepseek";
+        diagnostico = await analizarConProveedor(imagenes, "openai", contexto, opciones);
+        proveedorUsado = "openai";
       } catch (fallbackError) {
-        console.error("Fallo del proveedor alternativo.");
+        console.error("Falló OpenAI como proveedor de respaldo.");
         throw fallbackError;
       }
     }
 
+    const validacion = validarCoherencia(diagnostico);
+    if (requiereExpertoPorValidacion(diagnostico)) {
+      diagnostico.requiere_experto = true;
+    }
+    if (!resultadoCacheado && validacion.valido) {
+      guardarResultado(cacheKey, { diagnostico, proveedor: proveedorUsado });
+    }
     diagnostico.diagnostico.sintomas_observados = sanitizarSintomas(diagnostico.diagnostico.sintomas_observados);
     normalizarTextoPaciente(diagnostico);
 
@@ -241,17 +250,12 @@ export async function POST(request: NextRequest) {
       diagnostico.recomendacion = `${diagnostico.recomendacion.trim()} ${notaCalidad}`;
     }
 
-    const validacion = validarCoherencia(diagnostico);
     if (!validacion.valido) {
       // El detalle técnico se queda en el log: al agricultor solo se le da
       // un aviso comprensible, sin jerga interna ni nombres de campos.
       console.warn("Validación de coherencia fallida.");
       diagnostico.requiere_experto = true;
       diagnostico.recomendacion = `${diagnostico.recomendacion.trim()} La revisión automática detectó datos que no encajan del todo, por lo que conviene que un técnico confirme esta orientación.`;
-    }
-
-    if (requiereExpertoPorValidacion(diagnostico)) {
-      diagnostico.requiere_experto = true;
     }
 
     // Guardado best-effort SIN la foto: la imagen no se almacena de forma
@@ -263,7 +267,7 @@ export async function POST(request: NextRequest) {
     let id: string | undefined;
     if (!usuarioId) {
       console.warn("Petición sin identificador de visitante; análisis no persistido");
-    } else {
+    } else if (!resultadoCacheado) {
       try {
         const saved = await guardarDiagnostico(
           usuarioId,
@@ -291,9 +295,20 @@ export async function POST(request: NextRequest) {
         coherente: validacion.valido,
         errores: validacion.errores,
       },
-      cuota: { restantes: cuota.restantes },
+      cuota: { restantes: cuota?.restantes, cache: Boolean(resultadoCacheado) },
     }, { headers });
   } catch (error) {
+    if (requestId && esErrorProveedorIA(error)) {
+      try {
+        await reembolsarConsumoDiagnostico(requestId);
+      } catch {
+        console.error("No se pudo devolver la cuota de un fallo del proveedor.");
+      }
+      return NextResponse.json(
+        { error: "El servicio de análisis no está disponible ahora mismo. No se ha consumido tu análisis; inténtalo de nuevo en unos minutos.", codigo: "proveedor_no_disponible" },
+        { status: 503 }
+      );
+    }
     console.error("Error al procesar el diagnóstico.");
 
     const message = error instanceof Error ? error.message : "Error interno del servidor";
@@ -337,4 +352,45 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/** Stream de progreso NDJSON: las fases son eventos reales del pipeline. */
+export async function POST(request: NextRequest) {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let cerrada = false;
+      const emitir = (evento: unknown) => {
+        if (cerrada) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(evento)}\n`));
+        } catch {
+          cerrada = true;
+        }
+      };
+      const cerrar = () => {
+        if (cerrada) return;
+        cerrada = true;
+        try { controller.close(); } catch { /* El cliente pudo desconectarse. */ }
+      };
+      void procesarDiagnostico(request, (phase) => emitir({ type: "phase", phase }))
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) emitir({ type: "error", status: response.status, data });
+          else emitir({ type: "result", data });
+          cerrar();
+        })
+        .catch(() => {
+          emitir({ type: "error", status: 500, data: { error: "No hemos podido completar el análisis. Comprueba tu conexión e inténtalo de nuevo." } });
+          cerrar();
+        });
+    },
+  });
+  return new NextResponse(body, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

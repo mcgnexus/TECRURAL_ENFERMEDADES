@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 let sql: NeonQueryFunction<false, false> | null = null;
@@ -38,6 +38,7 @@ export interface DecisionCuota {
   mensaje?: string;
   restantes: number;
   requiereTelefono?: boolean;
+  requestId?: string;
 }
 
 export function hashTelefonoCuota(telefono: string): string {
@@ -115,6 +116,7 @@ async function intentarConsumo(args: {
   visitorId?: string;
   telefonoHash?: string | null;
   ip?: string | null;
+  requestId?: string;
   limite: number;
   ventanaMs: number;
   secundarios?: LimiteSecundario[];
@@ -186,13 +188,14 @@ async function intentarConsumo(args: {
           AND NOT EXISTS (SELECT 1 FROM sec_conteos WHERE consumidos >= limite) AS ok
     ),
     insertado AS (
-      INSERT INTO cuota_usos (ambito, sujeto, visitor_id, telefono_hash, ip)
+      INSERT INTO cuota_usos (ambito, sujeto, visitor_id, telefono_hash, ip, request_id)
       SELECT
         ${args.ambito},
         uso.sujeto,
         ${args.visitorId ?? null},
         CASE WHEN uso.es_principal THEN ${args.telefonoHash ?? null} ELSE NULL END,
-        ${args.ip ?? null}
+        ${args.ip ?? null},
+        ${args.requestId ?? null}
       FROM permitido
       CROSS JOIN LATERAL (
         SELECT ${args.sujeto}::text AS sujeto, true AS es_principal WHERE permitido.ok
@@ -257,6 +260,7 @@ export async function consumirUso(
     if (ipValida) {
       secundarios.push({ sujeto: `diag:ip:${ipValida}`, limite: LIMITES.ipDiag, ventanaMs: LIMITES.diaMs });
     }
+    const requestId = randomUUID();
 
     const resultado = await intentarConsumo({
       ambito,
@@ -264,12 +268,19 @@ export async function consumirUso(
       visitorId: uid,
       telefonoHash,
       ip: ipValida,
+      requestId,
       limite,
       ventanaMs: LIMITES.semanaMs,
       secundarios,
     });
     if (resultado.permitido) {
-      return { permitido: true, restantes: limite - resultado.consumidos };
+      // Cada consumo de diagnóstico lleva el mismo ID en las filas de cuota
+      // primaria, IP y global para poder revertir solo este intento.
+      return {
+        permitido: true,
+        restantes: limite - resultado.consumidos,
+        requestId,
+      };
     }
 
     // Bloqueado: se averigua qué límite saltó para dar el mensaje correcto y no
@@ -339,6 +350,14 @@ export async function consumirUso(
       restantes: 0,
     };
   }
+}
+
+/** Elimina de forma idempotente todas las filas de cuota de un intento fallido. */
+export async function reembolsarConsumoDiagnostico(requestId: string): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) return;
+  await getSql()`
+    DELETE FROM cuota_usos WHERE ambito = 'diag' AND request_id = ${requestId}::uuid
+  `;
 }
 
 export async function consumirUsoPorClave(

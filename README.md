@@ -1,6 +1,6 @@
 # TECRURAL Diagnóstico
 
-PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash o DeepSeek Chat, selección automática) → solicitud de revisión técnica de TecRural.
+PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash con respaldo multimodal opcional OpenAI `gpt-4o-mini`) → solicitud de revisión técnica de TecRural.
 
 ## Flujo de usuario
 
@@ -17,10 +17,11 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 
 - **Next.js 16 (App Router) + React 19 + Tailwind v4**, PWA con `next-pwa`.
 - **IA (solo servidor, claves nunca en el cliente):**
-  - `src/lib/gemini.ts` — pipeline de 4 capas: observación → hipótesis (few-shots por cultivo) → verificación adversarial (reenvía la foto principal) → reintento. Acepta varias fotos (principal + envés + planta completa). Timeout de 45 s por llamada y observación cacheada por hash de imagen (`src/lib/observacion-cache.ts`): reintentar con la misma foto no repite la fase 1.
-  - `src/lib/deepseek.ts` — mismo pipeline sobre DeepSeek Chat como fallback automático; si rechaza las imágenes (no es multimodal), la observación falla limpio y el diagnóstico solo continúa sin imágenes con aviso explícito.
+  - `src/lib/gemini.ts` — pipeline de 4 capas: observación → hipótesis (few-shots por cultivo) → verificación adversarial de la foto relevante → reintento. Acepta varias fotos (principal + envés + planta completa), limita cada llamada a 45 s y comparte un deadline de 105 s con el fallback.
+  - `src/lib/openai.ts` — respaldo multimodal `gpt-4o-mini`, solo activo con `OPENAI_API_KEY`. DeepSeek Chat no se usa como respaldo visual porque no admite imágenes.
+  - Las fases llegan al cliente por NDJSON para mostrar progreso real. Observación y resultado final tienen cachés efímeras en memoria por instancia; no almacenan fotos.
   - `src/lib/system-prompt.ts` — prompts (hipótesis, sin prescripciones), esquemas y ejemplos.
-  - Selección de proveedor automática (recomendado Gemini); el usado se registra en BD para comparar coste y calidad.
+  - Selección automática Gemini → OpenAI; el proveedor usado se registra en BD para comparar coste y calidad. El deadline total es compartido entre fases y proveedores.
 - **Base de datos:** Neon Postgres serverless (`src/lib/database.ts`). Tablas:
   - `diagnosticos` — hipótesis y contexto. Las fotos NO se guardan por defecto (política de datos); solo en el lead si el usuario pide revisión.
   - `leads` — solicitudes de revisión cualificadas, consentimientos y fotos compartidas.
@@ -46,11 +47,11 @@ Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política 
 
 ## Migraciones
 
-El esquema se aplica con `npm run db:migrate` (idempotente: `CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`; **nunca borra filas**). Ejecútalo como paso de despliegue, no desde las peticiones: las rutas ya no llaman a `initDatabase()`. Historial en `db/migrations/` (`0001` a `0008`). Las operaciones puntuales sobre datos, que exigen decisión humana, están en `db/one-off/`.
+El esquema se aplica con `npm run db:migrate` (idempotente: `CREATE TABLE IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`; **nunca borra filas**). Ejecútalo como paso de despliegue, no desde las peticiones: las rutas ya no llaman a `initDatabase()`. Historial en `db/migrations/` (`0001` a `0009`). Las operaciones puntuales sobre datos, que exigen decisión humana, están en `db/one-off/`.
 
 ## Variables de entorno
 
-Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_GA_ID`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
+Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback multimodal opcional), `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_GA_ID`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
 
 ## Analítica de conversión
 

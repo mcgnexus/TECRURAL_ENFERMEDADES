@@ -279,6 +279,12 @@ function aplicarMigraciones(): Promise<void> {
     WHERE ip IS NOT NULL
   `;
 
+  await db`ALTER TABLE cuota_usos ADD COLUMN IF NOT EXISTS request_id UUID`;
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_cuota_usos_request_id
+    ON cuota_usos (request_id) WHERE request_id IS NOT NULL
+  `;
+
   // Solo se conserva HMAC del teléfono para vincular la cuota semanal. El
   // teléfono original no se almacena ni se usa para comunicaciones.
   await db`

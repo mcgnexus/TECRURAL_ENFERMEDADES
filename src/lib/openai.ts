@@ -4,7 +4,6 @@ import {
   RETRY_PROMPT,
   OBSERVATION_PROMPT,
   VERIFICATION_PROMPT,
-  conContextoUsuario,
   selectFewShots,
   type Observacion,
   type Verificacion,
@@ -12,6 +11,11 @@ import {
 import type { ContextoUsuario, DiagnosticoResponse } from "@/types/diagnostico";
 import type { ImagenAnalisis } from "./gemini";
 import { propagarCalidadImagen } from "./calidad-imagen";
+import { ErrorProveedorIA } from "./errores-proveedor";
+import { DeadlineDiagnosticoError } from "./errores-proveedor";
+import { tiempoRestanteMs, type OpcionesAnalisis } from "./opciones-analisis";
+import { PRESUPUESTO_LLAMADAS, Presupuesto, PresupuestoAgotadoError } from "./presupuesto-llamadas";
+import { construirPromptDiagnostico } from "./construir-prompt-diagnostico";
 import {
   claveObservacion,
   obtenerObservacion,
@@ -21,8 +25,20 @@ import {
 export type { ImagenAnalisis };
 
 let deepseek: OpenAI | null = null;
+let openaiVision: OpenAI | null = null;
 
-function getDeepSeek() {
+type ProveedorVision = "deepseek" | "openai";
+const nombreProveedor = (proveedor: ProveedorVision) => proveedor === "openai" ? "OpenAI" : "DeepSeek";
+
+function getClient(proveedor: ProveedorVision) {
+  if (proveedor === "openai") {
+    if (!openaiVision) {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY no configurada");
+      openaiVision = new OpenAI({ apiKey, timeout: 35_000, maxRetries: 0 });
+    }
+    return openaiVision;
+  }
   if (!deepseek) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
@@ -191,31 +207,9 @@ function contenidoMultimodal(
 // si el primero ha fallado de verdad por una causa suya.
 const ESPERA_REINTENTO_MS = [800, 2500];
 const MAX_INTENTOS = ESPERA_REINTENTO_MS.length + 1;
-const PRESUPUESTO_LLAMADAS = 6;
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Contador de llamadas del análisis en curso. Vive por petición, no global. */
-class Presupuesto {
-  private usadas = 0;
-  constructor(private readonly maximo: number) {}
-  disponible(): boolean {
-    return this.usadas < this.maximo;
-  }
-  restantes(): number {
-    return Math.max(0, this.maximo - this.usadas);
-  }
-  consumir(): void {
-    this.usadas++;
-  }
-}
-
-export class PresupuestoAgotadoError extends Error {
-  constructor() {
-    super("Presupuesto de llamadas agotado");
-    this.name = "PresupuestoAgotadoError";
-  }
-}
-
 /** Saturación o corte de red: transitorio, merece la pena reintentar. */
 function esReintentable(error: unknown): boolean {
   const status = (error as { status?: number })?.status;
@@ -254,10 +248,13 @@ interface LlamadaOpts {
   etiqueta: string;
   /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
   presupuesto?: Presupuesto;
+  proveedor?: ProveedorVision;
+  opciones?: OpcionesAnalisis;
 }
 
 async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
-  const client = getDeepSeek();
+  const proveedor = opts.proveedor ?? "deepseek";
+  const client = getClient(proveedor);
   let ultimoError: unknown;
   const presupuesto = opts.presupuesto;
   // Si el proveedor rechazó las imágenes, el reintento de cortesía va sin
@@ -274,8 +271,10 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
     }
     try {
       presupuesto?.consumir();
+      const tiempoRestante = tiempoRestanteMs(opts.opciones);
+      if (tiempoRestante <= 0) throw new DeadlineDiagnosticoError();
       const response = await client.chat.completions.create({
-        model: "deepseek-chat",
+        model: proveedor === "openai" ? "gpt-4o-mini" : "deepseek-chat",
         messages: [
           {
             role: "user",
@@ -289,10 +288,10 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
         response_format: { type: "json_object" },
         temperature: 0.1,
         max_tokens: opts.maxTokens,
-      });
+      }, { timeout: Math.min(35_000, tiempoRestante) });
 
       const text = response.choices[0]?.message?.content;
-      if (!text) throw new Error(`Respuesta vacía de DeepSeek (${opts.etiqueta})`);
+      if (!text) throw new Error(`Respuesta vacía de ${nombreProveedor(proveedor)} (${opts.etiqueta})`);
 
       try {
         return JSON.parse(text) as T;
@@ -317,7 +316,9 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
         continue;
       }
       if (esJson || !esReintentable(error) || intento === MAX_INTENTOS) break;
-      await dormir(ESPERA_REINTENTO_MS[intento - 1]);
+      const restante = tiempoRestanteMs(opts.opciones);
+      if (restante <= 0) throw new DeadlineDiagnosticoError();
+      await dormir(Math.min(ESPERA_REINTENTO_MS[intento - 1], restante));
     }
   }
 
@@ -331,15 +332,20 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
 
 async function observarImagen(
   imagenes: ImagenAnalisis[],
-  presupuesto: Presupuesto
+  presupuesto: Presupuesto,
+  proveedor: ProveedorVision,
+  opciones: OpcionesAnalisis
 ): Promise<Observacion> {
+  opciones.onPhase?.("observacion");
   return llamarConReintento<Observacion>({
     prompt: buildPromptWithSchema(OBSERVATION_PROMPT, OBSERVATION_SCHEMA),
     maxTokens: 2048,
     imagenes,
     sinImagenesSiRechazo: false,
-    etiqueta: "observación DeepSeek",
+    etiqueta: `observación ${nombreProveedor(proveedor)}`,
     presupuesto,
+    proveedor,
+    opciones,
   });
 }
 
@@ -347,40 +353,18 @@ async function observarImagen(
 // FASE 2 — DIAGNÓSTICO
 // ---------------------------------------------------------------------------
 
-function buildDiagnosisPrompt(
-  basePrompt: string,
-  fewShots: string,
-  observacion: Observacion | undefined,
-  contexto: ContextoUsuario | undefined,
-  retroalimentacion: string | undefined
-): string {
-  let prompt = basePrompt;
-
-  if (fewShots) {
-    prompt += `\n\n${fewShots}`;
-  }
-
-  if (observacion) {
-    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA(S) IMAGEN(ES) (hechos verificados, úsalos como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
-  }
-
-  if (retroalimentacion) {
-    prompt += `\n\nRETROALIMENTACIÓN DEL REVISOR (corrige tu diagnóstico anterior):\n${retroalimentacion}`;
-  }
-
-  return conContextoUsuario(prompt, contexto);
-}
-
 export async function analizarImagenDeepSeek(
   imagenes: ImagenAnalisis[],
   isRetry = false,
   contexto?: ContextoUsuario,
   observacion?: Observacion,
   retroalimentacion?: string,
-  presupuesto?: Presupuesto
+  presupuesto?: Presupuesto,
+  proveedor: ProveedorVision = "deepseek",
+  opciones?: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
   const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
-  const prompt = buildDiagnosisPrompt(
+  const prompt = construirPromptDiagnostico(
     isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
     fewShots,
     observacion,
@@ -391,8 +375,10 @@ export async function analizarImagenDeepSeek(
     prompt: buildPromptWithSchema(prompt, RESPONSE_SCHEMA),
     maxTokens: 6144,
     imagenes,
-    etiqueta: "diagnóstico DeepSeek",
+    etiqueta: `diagnóstico ${nombreProveedor(proveedor)}`,
     presupuesto,
+    proveedor,
+    opciones,
   });
 }
 
@@ -404,8 +390,11 @@ async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
   observacion: Observacion,
   imagenes: ImagenAnalisis[],
-  presupuesto?: Presupuesto
+  presupuesto: Presupuesto | undefined,
+  proveedor: ProveedorVision,
+  opciones: OpcionesAnalisis
 ): Promise<Verificacion> {
+  opciones.onPhase?.("verificacion");
   const prompt = `${VERIFICATION_PROMPT}
 
 HECHOS OBSERVADOS:
@@ -419,10 +408,14 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     maxTokens: 2048,
     // El verificador ve la foto principal: la coherencia se comprueba contra
     // la imagen, no solo contra el texto de la observación.
-    imagenes: imagenes.length > 0 ? [imagenes[0]] : [],
+    imagenes: imagenes.length > 0
+      ? [observacion.parte_visible === "enves" && imagenes.length > 1 ? imagenes[1] : imagenes[0]]
+      : [],
     conImagenes: true,
-    etiqueta: "verificación DeepSeek",
+    etiqueta: `verificación ${nombreProveedor(proveedor)}`,
     presupuesto,
+    proveedor,
+    opciones,
   });
 }
 
@@ -435,17 +428,22 @@ async function analizarConVerificacion(
   contexto: ContextoUsuario | undefined,
   observacion: Observacion,
   isRetry: boolean,
-  presupuesto: Presupuesto
+  presupuesto: Presupuesto,
+  proveedor: ProveedorVision,
+  opciones: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
+  opciones.onPhase?.(isRetry ? "reintento" : "hipotesis");
   const diag = await analizarImagenDeepSeek(
     imagenes,
     isRetry,
     contexto,
     observacion,
     undefined,
-    presupuesto
+    presupuesto,
+    proveedor,
+    opciones
   );
-  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto);
+  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto, proveedor, opciones);
 
   // El cuarto turno solo aporta si la verificación aporta algo que corregir y
   // si queda presupuesto: son dos llamadas más.
@@ -466,9 +464,11 @@ async function analizarConVerificacion(
         contexto,
         observacion,
         verificacion.inconsistencias.join("; "),
-        presupuesto
+        presupuesto,
+        proveedor,
+        opciones
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto);
+      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto, proveedor, opciones);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -479,7 +479,7 @@ async function analizarConVerificacion(
         return diag2;
       }
     } catch {
-      console.warn("Reintento DeepSeek con retroalimentación fallido, usando diagnóstico original");
+      console.warn(`Reintento ${nombreProveedor(proveedor)} con retroalimentación fallido; se conserva el diagnóstico original.`);
     }
   }
 
@@ -491,41 +491,73 @@ async function analizarConVerificacion(
   return diag;
 }
 
-export async function analizarConReintentoDeepSeek(
+async function analizarConProveedorVision(
   imagenes: ImagenAnalisis[],
-  contexto?: ContextoUsuario
+  contexto: ContextoUsuario | undefined,
+  proveedor: ProveedorVision,
+  opcionesInput?: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
+  const opciones = opcionesInput ?? { deadlineAt: Date.now() + 100_000 };
   const presupuesto = new Presupuesto(PRESUPUESTO_LLAMADAS);
   // La observación se comparte entre ambos intentos y, si las fotos son las
   // mismas que un reintento reciente, también entre peticiones (caché por hash).
-  const claveCache = claveObservacion("deepseek", imagenes);
+  const claveCache = claveObservacion(proveedor, imagenes);
   const enCache = obtenerObservacion(claveCache);
-  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto));
+  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto, proveedor, opciones));
   if (!enCache) guardarObservacion(claveCache, observacion);
-  else console.info("Observación DeepSeek reutilizada de la caché.");
+  else console.info(`Observación ${nombreProveedor(proveedor)} reutilizada de la caché.`);
   try {
     const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       false,
-      presupuesto
+      presupuesto,
+      proveedor,
+      opciones
     );
     propagarCalidadImagen(resultado, observacion);
     return resultado;
   } catch (error) {
-    if (error instanceof PresupuestoAgotadoError) throw error;
+    if (error instanceof PresupuestoAgotadoError || error instanceof DeadlineDiagnosticoError) throw error;
     console.warn(
-      `Primer intento DeepSeek fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
+      `Primer intento ${nombreProveedor(proveedor)} fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
     const resultado = await analizarConVerificacion(
       imagenes,
       contexto,
       observacion,
       true,
-      presupuesto
+      presupuesto,
+      proveedor,
+      opciones
     );
     propagarCalidadImagen(resultado, observacion);
     return resultado;
+  }
+}
+
+export async function analizarConReintentoDeepSeek(
+  imagenes: ImagenAnalisis[],
+  contexto?: ContextoUsuario
+): Promise<DiagnosticoResponse> {
+  try {
+    return await analizarConProveedorVision(imagenes, contexto, "deepseek");
+  } catch (error) {
+    if (error instanceof ErrorProveedorIA) throw error;
+    throw new ErrorProveedorIA("DeepSeek", error);
+  }
+}
+
+export async function analizarConReintentoOpenAI(
+  imagenes: ImagenAnalisis[],
+  contexto?: ContextoUsuario,
+  opciones?: OpcionesAnalisis
+): Promise<DiagnosticoResponse> {
+  try {
+    return await analizarConProveedorVision(imagenes, contexto, "openai", opciones);
+  } catch (error) {
+    if (error instanceof ErrorProveedorIA) throw error;
+    throw new ErrorProveedorIA("OpenAI", error);
   }
 }

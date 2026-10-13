@@ -4,7 +4,6 @@ import {
   RETRY_PROMPT,
   OBSERVATION_PROMPT,
   VERIFICATION_PROMPT,
-  conContextoUsuario,
   selectFewShots,
   type Observacion,
   type Verificacion,
@@ -16,6 +15,10 @@ import {
   obtenerObservacion,
   guardarObservacion,
 } from "./observacion-cache";
+import { DeadlineDiagnosticoError } from "./errores-proveedor";
+import { tiempoRestanteMs, type OpcionesAnalisis } from "./opciones-analisis";
+import { PRESUPUESTO_LLAMADAS, Presupuesto, PresupuestoAgotadoError } from "./presupuesto-llamadas";
+import { construirPromptDiagnostico } from "./construir-prompt-diagnostico";
 
 export interface ImagenAnalisis {
   base64: string;
@@ -75,28 +78,6 @@ const TIMEOUT_LLAMADA_MS = 45_000;
  * (tres fases, sin errores) el presupuesto no llega a tocarse ni de lejos:
  * tres llamadas de tres.
  */
-const PRESUPUESTO_LLAMADAS = 6;
-
-/** Contador de llamadas del análisis en curso. Vive por petición, no global. */
-class Presupuesto {
-  private usadas = 0;
-
-  constructor(private readonly maximo: number) {}
-
-  /** true si queda al menos una llamada libre. */
-  disponible(): boolean {
-    return this.usadas < this.maximo;
-  }
-
-  restantes(): number {
-    return Math.max(0, this.maximo - this.usadas);
-  }
-
-  consumir(): void {
-    this.usadas++;
-  }
-}
-
 function parteImagenes(imagenes: ImagenAnalisis[], conImagenes = true) {
   if (!conImagenes) return [];
   return imagenes.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } }));
@@ -125,13 +106,7 @@ interface LlamadaOpts {
   etiqueta: string;
   /** Presupuesto del análisis en curso. Sin él, la llamada no se reintenta. */
   presupuesto?: Presupuesto;
-}
-
-class PresupuestoAgotadoError extends Error {
-  constructor() {
-    super("Presupuesto de llamadas agotado");
-    this.name = "PresupuestoAgotadoError";
-  }
+  opciones?: OpcionesAnalisis;
 }
 
 async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
@@ -154,7 +129,9 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
       // Cada intento lleva su propio AbortController: si se agota el tiempo,
       // el error depende del intento, no del ciclo de vida de la petición.
       const controlador = new AbortController();
-      const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_LLAMADA_MS);
+      const tiempoRestante = tiempoRestanteMs(opts.opciones);
+      if (tiempoRestante <= 0) throw new DeadlineDiagnosticoError();
+      const temporizador = setTimeout(() => controlador.abort(), Math.min(TIMEOUT_LLAMADA_MS, tiempoRestante));
       let response;
       try {
         response = await ai.models.generateContent({
@@ -194,7 +171,9 @@ async function llamarConReintento<T>(opts: LlamadaOpts): Promise<T> {
       // Un JSON truncado no mejora reintentando: es un problema de formato.
       const esJson = /JSON inválido/.test(String((error as Error)?.message ?? ""));
       if (esJson || !esReintentable(error) || intento === MAX_INTENTOS) break;
-      await dormir(ESPERA_REINTENTO_MS[intento - 1]);
+      const restante = tiempoRestanteMs(opts.opciones);
+      if (restante <= 0) throw new DeadlineDiagnosticoError();
+      await dormir(Math.min(ESPERA_REINTENTO_MS[intento - 1], restante));
     }
   }
 
@@ -352,8 +331,10 @@ const VERIFICATION_SCHEMA = {
 
 async function observarImagen(
   imagenes: ImagenAnalisis[],
-  presupuesto: Presupuesto
+  presupuesto: Presupuesto,
+  opciones: OpcionesAnalisis
 ): Promise<Observacion> {
+  opciones.onPhase?.("observacion");
   return llamarConReintento<Observacion>({
     prompt: OBSERVATION_PROMPT,
     schema: OBSERVATION_SCHEMA,
@@ -361,6 +342,7 @@ async function observarImagen(
     imagenes,
     etiqueta: "observación",
     presupuesto,
+    opciones,
   });
 }
 
@@ -368,40 +350,17 @@ async function observarImagen(
 // FASE 2 — DIAGNÓSTICO
 // ---------------------------------------------------------------------------
 
-function buildDiagnosisPrompt(
-  basePrompt: string,
-  fewShots: string,
-  observacion: Observacion | undefined,
-  contexto: ContextoUsuario | undefined,
-  retroalimentacion: string | undefined
-): string {
-  let prompt = basePrompt;
-
-  if (fewShots) {
-    prompt += `\n\n${fewShots}`;
-  }
-
-  if (observacion) {
-    prompt += `\n\nOBSERVACIÓN PREVIA EXTRAÍDA DE LA(S) IMAGEN(ES) (hechos verificados, úsalos como base para tu diagnóstico):\n${JSON.stringify(observacion, null, 2)}`;
-  }
-
-  if (retroalimentacion) {
-    prompt += `\n\nRETROALIMENTACIÓN DEL REVISOR (corrige tu diagnóstico anterior):\n${retroalimentacion}`;
-  }
-
-  return conContextoUsuario(prompt, contexto);
-}
-
 export async function analizarImagen(
   imagenes: ImagenAnalisis[],
   isRetry = false,
   contexto?: ContextoUsuario,
   observacion?: Observacion,
   retroalimentacion?: string,
-  presupuesto?: Presupuesto
+  presupuesto?: Presupuesto,
+  opciones?: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
   const fewShots = selectFewShots(contexto?.variedad || contexto?.cultivo, observacion?.organo_detectado);
-  const prompt = buildDiagnosisPrompt(
+  const prompt = construirPromptDiagnostico(
     isRetry ? RETRY_PROMPT : SYSTEM_PROMPT,
     fewShots,
     observacion,
@@ -416,6 +375,7 @@ export async function analizarImagen(
     imagenes,
     etiqueta: "diagnóstico",
     presupuesto,
+    opciones,
   });
 }
 
@@ -427,8 +387,10 @@ async function verificarDiagnostico(
   diagnostico: DiagnosticoResponse,
   observacion: Observacion,
   imagenes: ImagenAnalisis[],
-  presupuesto?: Presupuesto
+  presupuesto: Presupuesto | undefined,
+  opciones: OpcionesAnalisis
 ): Promise<Verificacion> {
+  opciones.onPhase?.("verificacion");
   const prompt = `${VERIFICATION_PROMPT}
 
 HECHOS OBSERVADOS:
@@ -445,10 +407,13 @@ ${JSON.stringify(diagnostico, null, 2)}`;
     // con el texto de la observación validaba la coherencia del razonamiento,
     // no la realidad fotográfica. Si la observación fue deficitaria, texto y
     // hipótesis podían estar de acuerdo... con el mismo error.
-    imagenes: imagenes.length > 0 ? [imagenes[0]] : [],
+    imagenes: imagenes.length > 0
+      ? [observacion.parte_visible === "enves" && imagenes.length > 1 ? imagenes[1] : imagenes[0]]
+      : [],
     conImagenes: true,
     etiqueta: "verificación",
     presupuesto,
+    opciones,
   });
 }
 
@@ -461,17 +426,20 @@ async function analizarConVerificacion(
   contexto: ContextoUsuario | undefined,
   observacion: Observacion,
   isRetry: boolean,
-  presupuesto: Presupuesto
+  presupuesto: Presupuesto,
+  opciones: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
+  opciones.onPhase?.(isRetry ? "reintento" : "hipotesis");
   const diag = await analizarImagen(
     imagenes,
     isRetry,
     contexto,
     observacion,
     undefined,
-    presupuesto
+    presupuesto,
+    opciones
   );
-  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto);
+  const verificacion = await verificarDiagnostico(diag, observacion, imagenes, presupuesto, opciones);
 
   // El cuarto turno solo aporta si la verificación aporta algo que corregir.
   // Antes se disparaba con "no validado", que es el caso habitual en fotos
@@ -495,9 +463,10 @@ async function analizarConVerificacion(
         contexto,
         observacion,
         verificacion.inconsistencias.join("; "),
-        presupuesto
+        presupuesto,
+        opciones
       );
-      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto);
+      const ver2 = await verificarDiagnostico(diag2, observacion, imagenes, presupuesto, opciones);
 
       if (ver2.confianza_ajustada >= verificacion.confianza_ajustada) {
         diag2.requiere_experto = !ver2.diagnostico_validado;
@@ -522,8 +491,10 @@ async function analizarConVerificacion(
 
 export async function analizarConReintento(
   imagenes: ImagenAnalisis[],
-  contexto?: ContextoUsuario
+  contexto?: ContextoUsuario,
+  opcionesInput?: OpcionesAnalisis
 ): Promise<DiagnosticoResponse> {
+  const opciones = opcionesInput ?? { deadlineAt: Date.now() + 100_000 };
   // Un presupuesto por análisis, compartido por las tres fases y por el
   // reintento general. Es lo que impide que un caso problemático multiplique el
   // gasto: antes, el peor caso eran 56 llamadas desde una sola petición.
@@ -534,7 +505,7 @@ export async function analizarConReintento(
   // imágenes permite saltarse la fase 1 completa (una llamada menos y ~2,4 s).
   const claveCache = claveObservacion("gemini", imagenes);
   const enCache = obtenerObservacion(claveCache);
-  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto));
+  const observacion = enCache ?? (await observarImagen(imagenes, presupuesto, opciones));
   if (!enCache) guardarObservacion(claveCache, observacion);
   else console.info("Observación reutilizada de la caché (misma foto en reintento).");
   try {
@@ -543,14 +514,15 @@ export async function analizarConReintento(
       contexto,
       observacion,
       false,
-      presupuesto
+      presupuesto,
+      opciones
     );
     propagarCalidadImagen(resultado, observacion);
     return resultado;
   } catch (error) {
     // Si el fallo es que se acabaron las llamadas, reintentar no puede
     // funcionar por definición. Se propaga para que la ruta decida.
-    if (error instanceof PresupuestoAgotadoError) throw error;
+    if (error instanceof PresupuestoAgotadoError || error instanceof DeadlineDiagnosticoError) throw error;
     console.warn(
       `Primer intento fallido (presupuesto ${PRESUPUESTO_LLAMADAS - presupuesto.restantes()}/${PRESUPUESTO_LLAMADAS}), reintentando...`
     );
@@ -559,7 +531,8 @@ export async function analizarConReintento(
       contexto,
       observacion,
       true,
-      presupuesto
+      presupuesto,
+      opciones
     );
     propagarCalidadImagen(resultado, observacion);
     return resultado;

@@ -71,6 +71,22 @@ describe.skipIf(!disponible)("cuotas móviles", () => {
     expect(resultados.filter((resultado) => resultado.permitido)).toHaveLength(2);
   });
 
+  it("reembolsa idempotentemente las filas de visitante, IP y global del intento", async () => {
+    const uid = randomUUID();
+    const ip = "7.7.7.7";
+    const consumo = await mod.consumirUso("diag", uid, ip);
+    expect(consumo.permitido).toBe(true);
+    expect(consumo.requestId).toBeTruthy();
+
+    const antes = await sql`SELECT COUNT(*)::int AS total FROM cuota_usos WHERE request_id = ${consumo.requestId}::uuid`;
+    expect(Number(antes[0]?.total)).toBe(3);
+    await mod.reembolsarConsumoDiagnostico(consumo.requestId!);
+    await mod.reembolsarConsumoDiagnostico(consumo.requestId!);
+    const despues = await sql`SELECT COUNT(*)::int AS total FROM cuota_usos WHERE request_id = ${consumo.requestId}::uuid`;
+    expect(Number(despues[0]?.total)).toBe(0);
+    expect((await mod.consumirUso("diag", uid, ip)).permitido).toBe(true);
+  });
+
   it("aplica también un límite móvil por IP", async () => {
     const ip = "9.9.9.9";
     let permitidos = 0;
