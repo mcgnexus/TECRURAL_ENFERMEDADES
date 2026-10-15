@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -17,6 +18,13 @@ import { defineConfig } from "vitest/config";
  * verificar es su código de salida, no una función interna.
  */
 export default defineConfig({
+  resolve: {
+    // Mismo alias que tsconfig (@/* -> ./src/*), para poder importar módulos de
+    // la app desde las pruebas igual que lo hace el código.
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],

@@ -51,13 +51,25 @@ El esquema se aplica con `npm run db:migrate` (idempotente: `CREATE TABLE IF NOT
 
 ## Variables de entorno
 
-Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback multimodal opcional), `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_GA_ID`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
+Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback multimodal opcional), `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
 
 ## Analítica de conversión
 
-`src/lib/analitica.ts` emite los eventos del embudo: `portada_vista` → `captura_realizada` → `analisis_iniciado` → `analisis_completado` → `resultado_visto` → `cta_revision_abierto` → `lead_enviado` (más `analisis_error`, `lead_error` y `whatsapp_click`). Se reenvían a GA4 si `NEXT_PUBLIC_GA_ID` está definida, quedan en `localStorage` (`tr-eventos`, solo depuración, nunca sale del dispositivo) y se persisten en la tabla `eventos` vía `POST /api/eventos`, que es la fuente que usa el panel.
+`src/lib/analitica.ts` emite los eventos del embudo: `portada_vista` → `captura_realizada` → `analisis_iniciado` → `analisis_completado` → `resultado_visto` → `cta_revision_abierto` → `lead_enviado` (más `analisis_error`, `lead_error` y `whatsapp_click`). No se carga Google Analytics ni se envían eventos a servicios de terceros. Los eventos quedan además en `localStorage` (`tr-eventos`, solo depuración, nunca sale del dispositivo) y se persisten en la tabla first-party `eventos` vía `POST /api/eventos`, que es la fuente que usa el panel.
 
 **Embudo medido por visitas, no por análisis.** La tasa de conversión usa como denominador las visitas únicas a la portada (`portada_vista`), no los diagnósticos: si no, las visitas que se marchan sin analizar no cuentan en ninguna parte y la tasa queda inflada. Cada paso se cuenta por personas, con un índice único en `(visitor_id, evento, día)`: seis análisis del mismo agricultor en un día son un visitante, no seis oportunidades. Los eventos van en first party, así que el embudo se cuenta aunque no se acepten cookies de terceros, y sin datos personales (ni IP, ni user agent, ni ubicación: solo un UUID aleatorio por dispositivo). Métrica principal: **coste por lead cualificado**, no formularios brutos.
+
+## Compartido social (og:image)
+
+La imagen que aparece al compartir enlaces por WhatsApp o redes se define una sola vez en `src/lib/seo.ts` (`OG_IMAGE`, 1200×630) y la usan el layout y las páginas públicas. Como una página que declara su propio `openGraph` reemplaza el del layout, cada página pública incluye la imagen explícitamente; `og.test.ts` protege esa regresión.
+
+El activo `public/og-tecrural.jpg` está versionado. Solo hay que regenerarlo si cambia la foto o el logotipo:
+
+```bash
+node scripts/generar-og.mjs   # recompone public/og-tecrural.jpg desde hoja olivo.jpg + TecRural_icono.png
+```
+
+Se mantiene por debajo de 300 KB, el límite práctico de WhatsApp para mostrar miniatura.
 
 ## Pruebas
 

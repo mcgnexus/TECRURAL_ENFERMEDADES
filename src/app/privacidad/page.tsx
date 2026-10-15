@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { openGraphDeRuta } from "@/lib/seo";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/privacidad" },
+  openGraph: openGraphDeRuta("/privacidad"),
   title: "Política de privacidad",
   description: "Información sobre el tratamiento de datos personales en TecRural.",
 };
@@ -26,7 +29,7 @@ export default function PrivacidadPage() {
         <h2 className={h2}>5. Conservación</h2>
         <p className={p}>Las fotografías adjuntas se conservarán un máximo de 12 meses desde la fecha de envío de la solicitud. El responsable revisará mensualmente los registros vencidos y eliminará las imágenes de la base de datos; hasta completar esa revisión podrían permanecer almacenadas brevemente después del plazo. Los datos de la solicitud se conservarán mientras sean necesarios para atenderla y, posteriormente, durante los plazos necesarios para cumplir obligaciones legales o atender responsabilidades. Los datos de control de uso (sección 9) se conservan como máximo 180 días la huella del teléfono y 31 días los registros de uso con IP. Puedes solicitar acceso, rectificación o supresión escribiendo a <a className="underline" href="mailto:mcgnexus@gmail.com">mcgnexus@gmail.com</a>.</p>
         <h2 className={h2}>6. Destinatarios y proveedores</h2>
-        <p className={p}>Para prestar el servicio se utilizan proveedores tecnológicos: Neon (base de datos), Vercel (alojamiento/despliegue, si la aplicación se sirve desde esa plataforma), Google (Google Analytics cuando se configura y Google Gemini para análisis) y DeepSeek (análisis alternativo). Cuando se realiza un análisis, las imágenes y el contexto agronómico necesario pueden comunicarse al proveedor de inteligencia artificial que procese la solicitud. Estos proveedores pueden tratar datos desde fuera del Espacio Económico Europeo; en ese caso se aplicarán las garantías previstas por la normativa, como las cláusulas contractuales tipo cuando corresponda. El servicio también puede apoyarse en proveedores de correo o notificaciones configurados para la aplicación.</p>
+        <p className={p}>Para prestar el servicio se utilizan proveedores tecnológicos: Neon (base de datos), Vercel (alojamiento/despliegue, si la aplicación se sirve desde esa plataforma), Google Gemini y DeepSeek (análisis de imágenes, según el proveedor disponible). No se utiliza Google Analytics. Los eventos limitados del embudo se registran en la base de datos propia y no se envían a Google. Cuando se realiza un análisis, las imágenes y el contexto agronómico necesario pueden comunicarse al proveedor de inteligencia artificial que procese la solicitud. Estos proveedores pueden tratar datos desde fuera del Espacio Económico Europeo; en ese caso se aplicarán las garantías previstas por la normativa, como las cláusulas contractuales tipo cuando corresponda. El servicio también puede apoyarse en proveedores de correo o notificaciones configurados para la aplicación.</p>
         <h2 className={h2}>7. Derechos</h2>
         <p className={p}>Puedes solicitar acceso, rectificación, supresión, oposición, limitación o portabilidad, así como retirar el consentimiento comercial, escribiendo a <a className="underline" href="mailto:mcgnexus@gmail.com">mcgnexus@gmail.com</a>. También puedes reclamar ante la Agencia Española de Protección de Datos. Para tramitar la solicitud podremos pedir información razonable para verificar tu identidad. Como el teléfono de la sección 9 no se conserva en claro, la supresión consiste en eliminar la huella seudonimizada y su asociación con el dispositivo; si necesitas acreditarlo, indícanos el identificador que corresponda.</p>
         <h2 className={h2}>8. Comunicaciones comerciales</h2>

@@ -1,9 +1,8 @@
 /**
  * Analítica de conversión en el cliente.
  *
- * Reenvía eventos a gtag (GA4) si está instalado (ver NEXT_PUBLIC_GA_ID en
- * layout.tsx) y guarda además un buffer local en localStorage para depuración
- * sin dependencias externas.
+ * Guarda un buffer local en localStorage para depuración y persiste eventos
+ * permitidos en first-party, sin enviar datos a servicios de analítica externos.
  *
  * Eventos del embudo, en el orden en que ocurren:
  * - portada_vista: llegada a la portada. Es el denominador real de la tasa de
@@ -30,10 +29,6 @@ export type NombreEvento =
   | "whatsapp_click";
 
 const CLAVE_BUFFER = "tr-eventos";
-
-interface GtagWindow {
-  gtag?: (...args: unknown[]) => void;
-}
 
 /** Eventos pendientes de enviar al servidor, para agruparlos en una llamada. */
 let cola: { nombre: NombreEvento; params: Record<string, unknown> }[] = [];
@@ -66,11 +61,6 @@ export function trackEvento(nombre: NombreEvento, params: Record<string, unknown
   if (typeof window === "undefined") return;
 
   try {
-    const w = window as unknown as GtagWindow;
-    if (typeof w.gtag === "function") {
-      w.gtag("event", nombre, params);
-    }
-
     // Buffer local: solo para depurar en las herramientas del navegador. Este
     // contenido NUNCA sale del dispositivo.
     const buffer = JSON.parse(localStorage.getItem(CLAVE_BUFFER) || "[]");

@@ -39,9 +39,10 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 
 ## 7. Aviso legal y cookies
 - Se crearon `/aviso-legal` y `/cookies`.
-- El código carga Google Analytics en producción si existe `NEXT_PUBLIC_GA_ID`, sin
-  consentimiento previo. No activar esa configuración para tráfico sujeto a consentimiento
-  hasta incorporar una solución de consentimiento; completar además inventario y duración.
+- Decisión: no usar Google Analytics ni cargar scripts de analítica de terceros. El
+  embudo se mide con eventos first-party guardados en la tabla `eventos`; la página
+  `/cookies` informa de esta práctica. Mantener revisado el inventario de almacenamiento
+  técnico y las bases jurídicas de medición first-party.
 
 ## 8. Baja de comunicaciones
 - Implementado: página `/baja` y endpoint `POST /api/baja` (baja por teléfono).

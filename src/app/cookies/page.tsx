@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { openGraphDeRuta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Política de cookies", description: "Información sobre cookies y analítica en TecRural." };
+export const metadata: Metadata = {
+  title: "Política de cookies",
+  description: "Información sobre cookies y analítica en TecRural.",
+  alternates: { canonical: "/cookies" },
+  openGraph: openGraphDeRuta("/cookies"),
+};
 const p = "text-tr-muted leading-relaxed";
 
 export default function CookiesPage() {
@@ -13,8 +19,8 @@ export default function CookiesPage() {
         <h2 className="mb-3 mt-8 font-heading text-xl font-semibold text-tr-forest">Cookies técnicas</h2>
         <p className={p}>El sitio puede utilizar almacenamiento técnico necesario para prestar funciones solicitadas (por ejemplo, funcionamiento de la aplicación web progresiva). Esta política debe actualizarse con el inventario real de cookies/almacenamiento y sus duraciones.</p>
         <h2 className="mb-3 mt-8 font-heading text-xl font-semibold text-tr-forest">Analítica</h2>
-        <p className={p}>La aplicación puede cargar Google Analytics cuando está configurada la variable de entorno <code>NEXT_PUBLIC_GA_ID</code> en producción. En ese caso se transmiten datos de uso a Google para medición. La implementación actual no muestra un mecanismo de consentimiento previo para analítica no esencial. Debe configurarse el consentimiento y completarse la información sobre cookies, proveedor, duración y transferencias antes de activar esa analítica para visitantes sujetos a consentimiento.</p>
-        <p className={`${p} mt-4`}>No se puede afirmar que el sitio no use cookies o analítica sin comprobar la configuración activa del despliegue. Para consultas: <a className="underline" href="mailto:mcgnexus@gmail.com">mcgnexus@gmail.com</a>.</p>
+        <p className={p}>No se carga Google Analytics ni se envían eventos a servicios de analítica de terceros. La aplicación registra eventos limitados del embudo en su propia base de datos para mostrar métricas agregadas en el panel; no se envían a Google. También mantiene un buffer local de depuración en el dispositivo. El sitio puede usar almacenamiento técnico necesario para prestar las funciones solicitadas.</p>
+        <p className={`${p} mt-4`}>Para consultas: <a className="underline" href="mailto:mcgnexus@gmail.com">mcgnexus@gmail.com</a>.</p>
         <p className="mt-10 border-t border-tr-line pt-5 text-small text-tr-muted"><Link className="underline" href="/privacidad">Privacidad</Link> · <Link className="underline" href="/aviso-legal">Aviso legal</Link> · <Link className="underline" href="/contacto">Contacto</Link></p>
       </article>
     </main>

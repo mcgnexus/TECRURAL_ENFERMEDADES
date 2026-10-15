@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { SITE_URL, TWITTER_IMAGES, openGraphDeRuta } from "@/lib/seo";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  alternates: { canonical: "/" },
   title: {
     default: "TECRURAL | Orientación fitosanitaria por foto",
     template: "%s | TECRURAL",
@@ -11,10 +14,15 @@ export const metadata: Metadata = {
   keywords: ["agricultura", "fitosanidad", "síntomas cultivo", "orientación", "revisión técnica", "Andalucía"],
   authors: [{ name: "TECRURAL" }],
   openGraph: {
+    ...openGraphDeRuta("/"),
     title: "TECRURAL | Orientación fitosanitaria por foto",
     description: "Orientación inicial sobre los síntomas de tu cultivo a partir de una foto.",
-    type: "website",
-    locale: "es_ES",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TECRURAL | Orientación fitosanitaria por foto",
+    description: "Orientación inicial sobre los síntomas de tu cultivo a partir de una foto.",
+    images: TWITTER_IMAGES,
   },
   robots: "index, follow",
   other: {
@@ -31,7 +39,6 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production";
-  const gaId = process.env.NEXT_PUBLIC_GA_ID || "G-HS7JRSYE0T";
 
   return (
     <html lang="es" className="h-full antialiased">
@@ -50,21 +57,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </>
         )}
         <meta name="mobile-web-app-capable" content="yes" />
-        {gaId && (
-          <>
-            <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `
-                  window.dataLayer = window.dataLayer || [];
-                  function gtag(){dataLayer.push(arguments);}
-                  gtag('js', new Date());
-                  gtag('config', '${gaId}');
-                `,
-              }}
-            />
-          </>
-        )}
       </head>
       <body className="min-h-full flex flex-col bg-tr-paper">
       {isProduction && (

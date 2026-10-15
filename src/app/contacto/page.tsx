@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LeadForm } from "@/components/LeadForm";
+import { openGraphDeRuta } from "@/lib/seo";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/contacto" },
+  openGraph: openGraphDeRuta("/contacto"),
   title: "Contacto",
   description:
     "Solicita asesoramiento agronómico para tus cultivos en el Altiplano de Granada y la Costa Tropical. Un técnico de TecRural te contactará por el canal que elijas.",
