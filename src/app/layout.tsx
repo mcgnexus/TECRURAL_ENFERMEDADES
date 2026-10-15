@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { DM_Sans, Manrope } from "next/font/google";
 import { SITE_URL, TWITTER_IMAGES, openGraphDeRuta } from "@/lib/seo";
 import "./globals.css";
+
+const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"], display: "swap" });
+const dmSans = DM_Sans({ variable: "--font-dm-sans", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -41,11 +45,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production";
 
   return (
-    <html lang="es" className="h-full antialiased">
+    <html lang="es" className={`h-full antialiased ${manrope.variable} ${dmSans.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
         <meta name="color-scheme" content="light" />
         {isProduction && (
           <>

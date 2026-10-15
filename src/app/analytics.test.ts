@@ -3,6 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./globals.css", () => ({}));
+vi.mock("next/font/google", () => ({
+  Manrope: () => ({ variable: "font-manrope" }),
+  DM_Sans: () => ({ variable: "font-dm-sans" }),
+}));
 
 import RootLayout from "./layout";
 

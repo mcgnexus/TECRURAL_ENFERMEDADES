@@ -5,6 +5,10 @@ import type { Metadata } from "next";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./globals.css", () => ({}));
+vi.mock("next/font/google", () => ({
+  Manrope: () => ({ variable: "font-manrope" }),
+  DM_Sans: () => ({ variable: "font-dm-sans" }),
+}));
 
 import { metadata as layoutMetadata } from "./layout";
 import { metadata as adminMetadata } from "./admin/layout";

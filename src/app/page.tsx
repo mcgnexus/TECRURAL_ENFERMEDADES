@@ -1,20 +1,40 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
-import logoTecRural from "../../TecRural_icono.png";
-import { CameraCapture, type FotosEstado, type FotoCapturada } from "@/components/CameraCapture";
-import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
-import { Results } from "@/components/Results";
-import { PWAProviders } from "@/components/PWA/Providers";
-import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
-import { trackEvento, volcarEventos } from "@/lib/analitica";
-import { mensajeAmigable, ErrorAnalisis } from "@/lib/error-analisis";
 import { debeSugerirEnves } from "@/lib/sugerir-fotos";
 import type { DiagnosticoWithMeta } from "@/types/diagnostico";
 import { leerProgresoAnalisis } from "@/lib/progreso-analisis";
 import type { FaseAnalisis } from "@/lib/opciones-analisis";
+import logoTecRural from "../../TecRural_icono.png";
+import type { FotosEstado, FotoCapturada } from "@/components/CameraCapture";
+import { CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/lib/contexto-cultivo";
+import { PWAProviders } from "@/components/PWA/Providers";
+import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
+import { trackEvento, volcarEventos } from "@/lib/analitica";
+import { mensajeAmigable, ErrorAnalisis } from "@/lib/error-analisis";
+
+const CameraCapture = dynamic(
+  () => import("@/components/CameraCapture").then((mod) => mod.CameraCapture),
+  {
+    ssr: false,
+    loading: () => <p className="text-small text-tr-muted" role="status">Preparando la cámara…</p>,
+  },
+);
+const ContextoCultivo = dynamic(
+  () => import("@/components/ContextoCultivo").then((mod) => mod.ContextoCultivo),
+  {
+    loading: () => <p className="text-small text-tr-muted" role="status">Cargando opciones de cultivo…</p>,
+  },
+);
+const Results = dynamic(
+  () => import("@/components/Results").then((mod) => mod.Results),
+  {
+    loading: () => <p className="text-small text-tr-muted" role="status">Preparando la orientación…</p>,
+  },
+);
 
 type Vista = "portada" | "captura" | "resultado";
 
@@ -274,9 +294,10 @@ function HomeContent() {
                 <Image
                   src="/aguacate.jpg"
                   alt="Hoja de aguacate con lesiones y punteado oscuro por chinches del aguacate."
-                  priority
+                  preload
                   sizes="(max-width: 1024px) 100vw, 50vw"
                   fill
+                  quality={70}
                   className="object-cover"
                 />
               </div>

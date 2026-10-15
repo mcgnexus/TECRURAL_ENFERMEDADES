@@ -6,28 +6,7 @@ import {
   SINTOMAS_FRECUENTES,
   DURACIONES,
 } from "@/lib/datos-zona";
-
-export interface ContextoForm {
-  cultivo: string;
-  cultivoOtro: string;
-  municipio: string;
-  municipioOtro: string;
-  sintoma: string;
-  sintomaOtro: string;
-  duracion: string;
-  variedad: string;
-}
-
-export const CONTEXTO_INICIAL: ContextoForm = {
-  cultivo: "",
-  cultivoOtro: "",
-  municipio: "",
-  municipioOtro: "",
-  sintoma: "",
-  sintomaOtro: "",
-  duracion: "",
-  variedad: "",
-};
+import { VALOR_OTRO, VALOR_NO_LO_SE, type ContextoForm } from "@/lib/contexto-cultivo";
 
 interface ContextoCultivoProps {
   valor: ContextoForm;
@@ -39,23 +18,7 @@ const labelCls = "block font-body font-semibold text-tr-forest text-small mb-1.5
 const selectCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
 const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper text-tr-ink font-body text-body placeholder:text-tr-muted focus:border-tr-brand-green focus:bg-tr-surface disabled:opacity-50";
 
-const VALOR_OTRO = "__otro__";
-const VALOR_NO_LO_SE = "__no_lo_se__";
-
 const cardStyles = "bg-tr-surface rounded-[var(--tr-radius-card)] border border-tr-line shadow-[var(--tr-shadow-card)]";
-
-export function resumenContexto(c: ContextoForm) {
-  return {
-    cultivo:
-      c.cultivo === VALOR_OTRO ? c.cultivoOtro.trim() : c.cultivo === VALOR_NO_LO_SE ? "" : c.cultivo.trim(),
-    municipio:
-      c.municipio === VALOR_OTRO ? c.municipioOtro.trim() : c.municipio === VALOR_NO_LO_SE ? "" : c.municipio.trim(),
-    sintoma:
-      c.sintoma === VALOR_OTRO ? c.sintomaOtro.trim() : c.sintoma === VALOR_NO_LO_SE ? "" : c.sintoma.trim(),
-    duracion: c.duracion === VALOR_NO_LO_SE ? "" : c.duracion.trim(),
-    variedad: c.variedad.trim(),
-  };
-}
 
 export function ContextoCultivo({ valor, onChange, disabled = false }: ContextoCultivoProps) {
   const set = <K extends keyof ContextoForm>(campo: K, v: ContextoForm[K]) =>
