@@ -45,10 +45,19 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 
 ## 7. Aviso legal y cookies
 - Se crearon `/aviso-legal` y `/cookies`.
-- Decisión: no usar Google Analytics ni cargar scripts de analítica de terceros. El
+- Decisión original: no usar Google Analytics ni cargar scripts de analítica de terceros. El
   embudo se mide con eventos first-party guardados en la tabla `eventos`; la página
   `/cookies` informa de esta práctica. Mantener revisado el inventario de almacenamiento
   técnico y las bases jurídicas de medición first-party.
+- Actualización (2026-10-15): se instaló el **Meta Pixel** (ID 2175598836026526) en
+  `src/components/MetaPixel.tsx`, cargado solo cuando el entorno es producción. `/cookies`
+  y `/privacidad` (sección 6) se han actualizado para declararlo, y el test
+  `src/app/analytics.test.ts` comprueba que solo aparece en producción y que Google
+  Analytics sigue ausente.
+- Pendiente: revisión legal de la base jurídica del píxel publicitario (el art. 22.2 LSSI
+  y el RGPD suelen exigir consentimiento previo para cookies de publicidad). Valorar un
+  banner de consentimiento o el cargado condicional del píxel tras aceptar. No es
+  asesoramiento legal.
 
 ## 8. Baja de comunicaciones
 - Implementado: página `/baja` y endpoint `POST /api/baja` (baja por teléfono).

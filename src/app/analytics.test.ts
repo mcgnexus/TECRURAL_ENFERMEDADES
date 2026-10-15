@@ -11,28 +11,49 @@ vi.mock("next/font/google", () => ({
 import RootLayout from "./layout";
 
 const originalGaId = process.env.NEXT_PUBLIC_GA_ID;
+const originalVercelEnv = process.env.VERCEL_ENV;
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   if (originalGaId === undefined) delete process.env.NEXT_PUBLIC_GA_ID;
   else process.env.NEXT_PUBLIC_GA_ID = originalGaId;
+  if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
+  else process.env.VERCEL_ENV = originalVercelEnv;
 });
 
-describe("analítica sin terceros", () => {
+const htmlDeLayout = () =>
+  renderToStaticMarkup(
+    createElement(RootLayout, { children: createElement("main", null, "Inicio") }),
+  );
+
+describe("scripts de terceros", () => {
   it("no incluye Google Analytics en el HTML con o sin ID configurado", () => {
     for (const gaId of [undefined, "G-TEST123456"]) {
       if (gaId === undefined) delete process.env.NEXT_PUBLIC_GA_ID;
       else process.env.NEXT_PUBLIC_GA_ID = gaId;
 
-      const html = renderToStaticMarkup(
-        createElement(RootLayout, { children: createElement("main", null, "Inicio") }),
-      );
+      const html = htmlDeLayout();
 
       expect(html).not.toContain("googletagmanager.com");
       expect(html).not.toContain("gtag/js");
       expect(html).not.toContain("dataLayer");
       expect(html).not.toContain("gtag('config'");
     }
+  });
+
+  it("carga el Meta Pixel solo en entorno de producción", () => {
+    delete process.env.VERCEL_ENV;
+    expect(htmlDeLayout()).not.toContain("facebook.com/tr");
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const html = htmlDeLayout();
+
+    // next/script con afterInteractive inyecta el script en el cliente tras la
+    // hidratación; en el HTML del servidor solo se observa la imagen <noscript>.
+    expect(html).toContain("facebook.com/tr?id=2175598836026526");
+    expect(html).not.toContain("googletagmanager.com");
   });
 
   it("mantiene el envío first-party y el buffer local sin invocar gtag", async () => {
