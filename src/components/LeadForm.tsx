@@ -172,8 +172,8 @@ export function LeadForm({
             <p className="font-heading font-semibold text-tr-forest">{textos.encabezadoExito}</p>
             <p className="mt-1 text-body text-tr-muted">{textos.cuerpoExito}</p>
             <p className="mt-2 text-small text-tr-muted">
-              No podemos comprometer un plazo concreto de respuesta; depende de la demanda del
-              servicio.
+              Un técnico de TecRural te responderá en un plazo máximo de 48 horas desde el envío de
+              la solicitud.
             </p>
             {whatsappDisponible && (
               <a

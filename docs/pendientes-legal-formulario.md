@@ -23,13 +23,19 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
   (`src/app/api/leads/route.ts`) para poder auditar qué versión aceptó cada contacto.
 
 ## 4. Canal oficial de contacto
-- Falta: número oficial de WhatsApp (`NEXT_PUBLIC_TECRURAL_WHATSAPP`). Los botones de
-  WhatsApp permanecen ocultos hasta configurarlo. No se ha inventado ningún número.
+- Resuelto: número configurado en el entorno de producción de Vercel
+  (`NEXT_PUBLIC_TECRURAL_WHATSAPP`); `whatsappDisponible = true` y los botones de WhatsApp
+  activos en sus flujos (post-formulario y post-diagnóstico).
+- El número no se versiona en el repositorio: se deriva de la variable
+  (`src/lib/contacto.ts`). No debe hardcodearse; se verifica en Vercel/CLI, no en el código.
+- Si queda revisión legal del canal comercial, corresponde a §3 (consentimiento comercial),
+  no a este apartado.
 
 ## 5. Plazos y compromisos de respuesta
-- La confirmación de envío indica deliberadamente que **no se compromete un plazo**
-  concreto. Si TecRural quiere prometer un plazo (p. ej. "48 h laborables"), debe
-  definirse internamente y actualizarse el texto de confirmación en `LeadForm.tsx`.
+- Decidido: la confirmación de envío compromete un plazo máximo de **48 horas naturales**
+  desde el envío de la solicitud (horas corridas: incluye fines de semana y festivos).
+  El texto vive en `LeadForm.tsx` (estado `ok`) y es común a los dos orígenes.
+- Es un compromiso comercial firme: TecRural debe responder dentro de ese plazo.
 
 ## 6. Plazos de conservación y supresión de fotos
 - Las fotos solo se almacenan cuando el usuario envía una solicitud de revisión

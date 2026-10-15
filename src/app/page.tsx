@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import logoTecRural from "../../TecRural_icono.png";
-import fotoOlivo from "../../hoja olivo.jpg";
 import { CameraCapture, type FotosEstado, type FotoCapturada } from "@/components/CameraCapture";
 import { ContextoCultivo, CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/components/ContextoCultivo";
 import { Results } from "@/components/Results";
@@ -271,13 +270,16 @@ function HomeContent() {
             </div>
 
             <figure className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl">
-              <Image
-                src={fotoOlivo}
-                alt="Rama de olivo con manchas en una hoja y un olivar desenfocado al fondo."
-                priority
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                className="aspect-[3/2] h-auto w-full object-cover"
-              />
+              <div className="relative aspect-[3/2]">
+                <Image
+                  src="/aguacate.jpg"
+                  alt="Hoja de aguacate con lesiones y punteado oscuro por chinches del aguacate."
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  fill
+                  className="object-cover"
+                />
+              </div>
             </figure>
           </section>
 

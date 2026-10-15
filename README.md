@@ -43,7 +43,7 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 
 ## ⚠ Pendientes legales antes de promocionar el formulario
 
-Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política de privacidad publicada, plazos de respuesta, número oficial de WhatsApp y revisión del texto de consentimiento. No se han inventado estos datos.
+Ver `docs/pendientes-legal-formulario.md`: identidad del responsable, política de privacidad publicada y revisión del texto de consentimiento. No se han inventado estos datos.
 
 ## Migraciones
 
