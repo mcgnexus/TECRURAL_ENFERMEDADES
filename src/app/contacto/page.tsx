@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: "Contacto",
   description:
     "Solicita asesoramiento agronómico para tus cultivos en el Altiplano de Granada y la Costa Tropical. Un técnico de TecRural te contactará por el canal que elijas.",
+  alternates: { canonical: "https://diagnostico.tecrural.es/contacto" },
 };
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";

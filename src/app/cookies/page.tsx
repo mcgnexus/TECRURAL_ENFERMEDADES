@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Política de cookies", description: "Información sobre cookies y analítica en TecRural." };
+export const metadata: Metadata = {
+  title: "Política de cookies",
+  description: "Información sobre cookies y analítica en TecRural.",
+  alternates: { canonical: "https://diagnostico.tecrural.es/cookies" },
+};
 const p = "text-tr-muted leading-relaxed";
 
 export default function CookiesPage() {

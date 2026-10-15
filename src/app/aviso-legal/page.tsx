@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Aviso legal", description: "Información legal del sitio web TecRural." };
+export const metadata: Metadata = {
+  title: "Aviso legal",
+  description: "Información legal del sitio web TecRural.",
+  alternates: { canonical: "https://diagnostico.tecrural.es/aviso-legal" },
+};
 const p = "text-tr-muted leading-relaxed";
 
 export default function AvisoLegalPage() {

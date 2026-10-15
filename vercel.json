@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "tecrural-diagnostico.vercel.app"
+        }
+      ],
+      "destination": "https://diagnostico.tecrural.es/:path*",
+      "permanent": true
+    }
+  ]
+}

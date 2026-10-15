@@ -4,6 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Política de privacidad",
   description: "Información sobre el tratamiento de datos personales en TecRural.",
+  alternates: { canonical: "https://diagnostico.tecrural.es/privacidad" },
 };
 
 const p = "text-tr-muted leading-relaxed";

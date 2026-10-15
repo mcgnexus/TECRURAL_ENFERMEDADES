@@ -10,6 +10,8 @@ export const metadata: Metadata = {
     "Toma una foto de tu cultivo y obtén una orientación inicial sobre los síntomas observados, con recomendaciones de manejo. No es un diagnóstico fitosanitario definitivo.",
   keywords: ["agricultura", "fitosanidad", "síntomas cultivo", "orientación", "revisión técnica", "Andalucía"],
   authors: [{ name: "TECRURAL" }],
+  metadataBase: new URL("https://diagnostico.tecrural.es"),
+  alternates: { canonical: "/" },
   openGraph: {
     title: "TECRURAL | Orientación fitosanitaria por foto",
     description: "Orientación inicial sobre los síntomas de tu cultivo a partir de una foto.",
@@ -31,7 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production";
-  const gaId = process.env.NEXT_PUBLIC_GA_ID || "G-HS7JRSYE0T";
+  const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
   return (
     <html lang="es" className="h-full antialiased">

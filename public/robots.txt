@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://tecrural-diagnostico.vercel.app/sitemap.xml
+Sitemap: https://diagnostico.tecrural.es/sitemap.xml
