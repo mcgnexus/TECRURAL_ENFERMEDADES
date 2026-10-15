@@ -1,4 +1,4 @@
-const CACHE_NAME = "tecrural-pwa-v2";
+const CACHE_NAME = "tecrural-pwa-v3";
 const APP_SHELL = ["/", "/offline", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -47,7 +47,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || /\.(?:png|jpg|jpeg|svg|webp|ico|css|js|woff2?)$/i.test(url.pathname)) {
+  if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
@@ -60,5 +60,22 @@ self.addEventListener("fetch", (event) => {
         });
       })
     );
+    return;
+  }
+
+  if (/\.(?:png|jpg|jpeg|svg|webp|ico|css|js|woff2?)$/i.test(url.pathname)) {
+    const networkResponse = fetch(request).then((response) => {
+      if (response.ok) {
+        return caches.open(CACHE_NAME)
+          .then((cache) => cache.put(request, response.clone()))
+          .then(() => response);
+      }
+      return response;
+    });
+
+    event.respondWith(
+      caches.match(request).then((cached) => cached || networkResponse)
+    );
+    event.waitUntil(networkResponse.then(() => undefined, () => undefined));
   }
 });

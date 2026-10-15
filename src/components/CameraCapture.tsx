@@ -195,7 +195,9 @@ export function CameraCapture({
   const abrirCamara = (slot: SlotFoto) => {
     slotActivoRef.current = slot;
     origenRef.current = "camara";
-    if (camaraNativaFallback) {
+    const dispositivoTactil = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+    // La cámara del sistema ofrece zoom, enfoque y flash mejor integrados en móviles.
+    if (dispositivoTactil || camaraNativaFallback) {
       cameraInputRef.current?.click();
       return;
     }
@@ -338,8 +340,8 @@ export function CameraCapture({
       </div>
 
       {camaraAbierta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-label="Captura guiada">
-          <div className="w-full max-w-lg rounded-2xl bg-tr-surface p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/90 p-4" role="dialog" aria-modal="true" aria-label="Captura guiada">
+          <div className="my-auto w-full max-w-lg rounded-2xl bg-tr-surface p-4">
             <p className="mb-3 text-small text-tr-ink">Acerca el síntoma, busca luz natural y mantén la hoja enfocada dentro del marco.</p>
             <div className="relative overflow-hidden rounded-xl bg-black">
               <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
