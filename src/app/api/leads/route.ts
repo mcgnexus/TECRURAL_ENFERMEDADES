@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos } from "@/lib/database";
+import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos, borrarLead, borrarLeads } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
@@ -327,5 +327,49 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error("Error actualizando lead.");
     return NextResponse.json({ error: "Error actualizando lead" }, { status: 500 });
+  }
+}
+
+// Borrado definitivo de leads desde el panel. Es la única operación destructiva
+// de la API: por eso exige el mismo ADMIN_TOKEN que el resto y se limita a
+// identificadores UUID validados (nunca SQL dinámico). Las fotos se van con la
+// fila (viven en leads.imagenes) y el diagnóstico asociado no se borra (la FK
+// usa ON DELETE SET NULL).
+const borradoSchema = z.object({
+  ids: z
+    .array(z.string().regex(UUID_REGEX, "id no válido"))
+    .min(1, "No se indicó ningún lead")
+    .max(500, "Demasiados leads en una sola operación"),
+});
+
+export async function DELETE(request: NextRequest) {
+  const token = process.env.ADMIN_TOKEN;
+  const recibido = request.headers.get("x-admin-token");
+
+  if (!token) {
+    return NextResponse.json({ error: "No disponible" }, { status: 404 });
+  }
+  if (recibido !== token) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  try {
+    const parsed = borradoSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Datos no válidos" },
+        { status: 400 }
+      );
+    }
+
+    const borrados =
+      parsed.data.ids.length === 1
+        ? Number(await borrarLead(parsed.data.ids[0]))
+        : await borrarLeads(parsed.data.ids);
+
+    return NextResponse.json({ success: true, borrados });
+  } catch (error) {
+    console.error("Error borrando leads.");
+    return NextResponse.json({ error: "Error borrando leads" }, { status: 500 });
   }
 }

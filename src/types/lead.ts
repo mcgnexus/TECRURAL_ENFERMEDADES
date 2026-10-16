@@ -95,13 +95,24 @@ export interface LeadFila {
   created_at: string;
 }
 
+/**
+ * Métricas agregadas del panel comercial. Fuente única de verdad: `database.ts`
+ * la importa de aquí para que el cliente y el servidor compartan exactamente el
+ * mismo tipo y no puedan divergir en el borde JSON.
+ */
 export interface MetricasCaptacion {
+  /** Visitantes distintos que han hecho al menos un diagnóstico. */
   visitantes: number;
+  /** Análisis completados, con independencia de quién los pidiera. */
   diagnosticos: number;
+  /** Análisis por visitante. Alto = uso repetido, no más oportunidades. */
   diagnosticosPorVisitante: number;
   leads: number;
+  /** Visitantes distintos que han dejado contacto. */
   visitantesConLead: number;
+  /** Porcentaje de visitantes que han convertido. Es la cifra de negocio. */
   tasaConversion: number | null;
+  /** Leads por análisis. Complementario, no sustituye a la tasa anterior. */
   leadsPorDiagnostico: number | null;
   porEstado: { estado: EstadoLead; total: number }[];
   porPrioridad: { prioridad: PrioridadLead; total: number }[];
@@ -111,4 +122,15 @@ export interface MetricasCaptacion {
   leadsSinResponder: number;
   conversionComercial: number;
   porCampana: { campana: string; total: number }[];
+  /** Top municipios por número de leads (para dirigir la acción comercial). */
+  porMunicipio: { municipio: string; total: number }[];
+  /** Top cultivos por número de leads. */
+  porCultivo: { cultivo: string; total: number }[];
+  /** Reparto por canal de contacto solicitado (llamada / WhatsApp). */
+  porCanal: { canal: string; total: number }[];
+  /**
+   * Mapa de calor de llegada de leads: filas = día de la semana (0=domingo),
+   * columnas = hora local (Europe/Madrid). Solo la ventana de la serie.
+   */
+  porHoraDia: { dow: number; hora: number; total: number }[];
 }

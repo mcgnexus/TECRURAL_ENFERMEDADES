@@ -6,6 +6,7 @@ import type {
   ContextoDiagnosticoLead,
   EstadoLead,
   LeadFila,
+  MetricasCaptacion,
   OrigenLead,
   PrioridadLead,
 } from "@/types/lead";
@@ -688,6 +689,38 @@ export async function guardarNotaLead(id: string, notas: string): Promise<boolea
   return rows.length > 0;
 }
 
+/**
+ * Borra un lead (y sus fotos) de forma definitiva.
+ *
+ * El borrado es real y no hay papelera, a propósito: es la vía para atender una
+ * supresión de datos. Las fotos de la revisión viven en `leads.imagenes` (JSONB
+ * de la propia fila), así que desaparecen con ella. `diagnosticos` no se toca:
+ * su clave foránea declara `ON DELETE SET NULL`, de modo que el diagnóstico
+ * queda huérfano de lead, no se borra.
+ *
+ * Estas funciones NO se llaman desde `aplicarMigraciones()` ni en el arranque:
+ * solo desde la ruta DELETE del panel, tras autorización y confirmación. Por eso
+ * no rompen el guard de `scripts/comprobar-esquema-sin-borrados.mjs`, que
+ * comprueba únicamente el cuerpo de esa función.
+ */
+export async function borrarLead(id: string): Promise<boolean> {
+  const db = getSql();
+  const rows = await db`
+    DELETE FROM leads WHERE id = ${id} RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+/** Borra varios leads en una sola sentencia. Devuelve cuántas filas se borraron. */
+export async function borrarLeads(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const db = getSql();
+  const rows = await db`
+    DELETE FROM leads WHERE id = ANY(${ids}) RETURNING id
+  `;
+  return rows.length;
+}
+
 export async function bajaComercial(telefonoNormalizada: string): Promise<number> {
   const db = getSql();
   const rows = await db`
@@ -753,10 +786,11 @@ export async function obtenerLeads(
   }
 
   const rows = await db`
-    SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, hectareas,
-           mensaje, origen, prioridad, puntuacion, estado, contexto_diagnostico,
+    SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+           mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
            consentimiento_comercial, consentimiento_texto_version, canal_comercial,
            baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
+           origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
            primera_response_at, notas, created_at
     FROM leads
     ORDER BY puntuacion DESC, created_at DESC
@@ -769,31 +803,14 @@ export async function obtenerLeads(
 // MÉTRICAS DE CAPTACIÓN
 // ============================================================================
 
-export interface MetricasCaptacion {
-  /** Visitantes distintos que han hecho al menos un diagnóstico. */
-  visitantes: number;
-  /** Análisis completados, con independencia de quién los pidiera. */
-  diagnosticos: number;
-  /** Análisis por visitante. Alto = uso repetido, no más oportunidades. */
-  diagnosticosPorVisitante: number;
-  leads: number;
-  /** Visitantes distintos que han dejado contacto. */
-  visitantesConLead: number;
-  /** Porcentaje de visitantes que han convertido. Es la cifra de negocio. */
-  tasaConversion: number | null;
-  /** Leads por análisis. Complementario, no sustituye a la tasa anterior. */
-  leadsPorDiagnostico: number | null;
-  porEstado: { estado: EstadoLead; total: number }[];
-  porPrioridad: { prioridad: PrioridadLead; total: number }[];
-  porOrigen: { origen: OrigenLead; total: number }[];
-  porDia: { dia: string; visitantes: number; diagnosticos: number; leads: number }[];
-  tiempoMedioRespuestaHoras: number | null;
-  leadsSinResponder: number;
-  conversionComercial: number;
-  porCampana: { campana: string; total: number }[];
-}
+// El tipo de las métricas vive en `@/types/lead` (fuente única para cliente y
+// servidor) y se reexporta aquí para no romper a quien lo importaba de este
+// módulo. Antes había una copia local que podía divergir de la del cliente.
+export type { MetricasCaptacion } from "@/types/lead";
 
-const DIAS_SERIE = 30;
+// La serie temporal se calcula a 90 días: el panel deja filtrar 7/30/90 y así
+// una sola consulta sirve para los tres rangos (el cliente recorta la cola).
+const DIAS_SERIE = 90;
 
 /**
  * Embudo por personas, no por análisis.
@@ -816,7 +833,7 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
   // temporal salía vacía. Con make_interval(days => 30) no hay ambigüedad.
   const rangoDias = DIAS_SERIE;
 
-  const [diagRows, visitantesRows, leadRows, leadUidRows, estadoRows, prioridadRows, origenRows, serieRows, respuestaRows, campanaRows] =
+  const [diagRows, visitantesRows, leadRows, leadUidRows, estadoRows, prioridadRows, origenRows, serieRows, respuestaRows, campanaRows, municipioRows, cultivoRows, canalRows, horaDiaRows] =
     await Promise.all([
       db`SELECT COUNT(*)::int AS total FROM diagnosticos`,
       db`SELECT COUNT(DISTINCT usuario_id)::int AS total FROM diagnosticos WHERE usuario_id IS NOT NULL`,
@@ -865,6 +882,42 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
         FROM leads
         GROUP BY 1 ORDER BY total DESC
       `,
+      // Top municipios y cultivos: acotados a la ventana de la serie para no
+      // escanear toda la tabla histórica, y sin NULL ni cadenas vacías, que no
+      // son zonas accionables y ensuciarían el ranking.
+      db`
+        SELECT municipio, COUNT(*)::int AS total
+        FROM leads
+        WHERE municipio IS NOT NULL AND btrim(municipio) <> ''
+          AND created_at >= NOW() - make_interval(days => ${rangoDias}::int)
+        GROUP BY municipio ORDER BY total DESC LIMIT 15
+      `,
+      db`
+        SELECT cultivo, COUNT(*)::int AS total
+        FROM leads
+        WHERE cultivo IS NOT NULL AND btrim(cultivo) <> ''
+          AND created_at >= NOW() - make_interval(days => ${rangoDias}::int)
+        GROUP BY cultivo ORDER BY total DESC LIMIT 15
+      `,
+      db`
+        SELECT canal_contacto AS canal, COUNT(*)::int AS total
+        FROM leads
+        WHERE canal_contacto IS NOT NULL AND btrim(canal_contacto) <> ''
+          AND created_at >= NOW() - make_interval(days => ${rangoDias}::int)
+        GROUP BY canal_contacto ORDER BY total DESC LIMIT 15
+      `,
+      // El heatmap usa la hora local de España, no UTC: el técnico decide su
+      // horario de atención con estas cifras y un desfase de una o dos horas
+      // las falsea.
+      db`
+        SELECT
+          EXTRACT(DOW FROM created_at AT TIME ZONE 'Europe/Madrid')::int AS dow,
+          EXTRACT(HOUR FROM created_at AT TIME ZONE 'Europe/Madrid')::int AS hora,
+          COUNT(*)::int AS total
+        FROM leads
+        WHERE created_at >= NOW() - make_interval(days => ${rangoDias}::int)
+        GROUP BY 1, 2 ORDER BY 1, 2
+      `,
     ]);
 
   const diagnosticos = Number(diagRows[0]?.total ?? 0);
@@ -905,6 +958,23 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
     porCampana: campanaRows
       .filter((r) => r.campana)
       .map((r) => ({ campana: String(r.campana), total: Number(r.total) })),
+    porMunicipio: municipioRows.map((r) => ({
+      municipio: String(r.municipio),
+      total: Number(r.total),
+    })),
+    porCultivo: cultivoRows.map((r) => ({
+      cultivo: String(r.cultivo),
+      total: Number(r.total),
+    })),
+    porCanal: canalRows.map((r) => ({
+      canal: String(r.canal),
+      total: Number(r.total),
+    })),
+    porHoraDia: horaDiaRows.map((r) => ({
+      dow: Number(r.dow),
+      hora: Number(r.hora),
+      total: Number(r.total),
+    })),
   };
 }
 
