@@ -6,16 +6,18 @@ import type { EstadoLead, OrigenLead, PrioridadLead } from "@/types/lead";
 import { usePanelAdmin } from "./_components/usePanelAdmin";
 import { ResumenTab } from "./_components/ResumenTab";
 import { LeadsTab } from "./_components/LeadsTab";
+import { DiagnosticosTab } from "./_components/DiagnosticosTab";
 import { AccesosTab } from "./_components/AccesosTab";
 import { FILTROS_VACIOS, ORDEN_POR_DEFECTO } from "./_components/filtros";
 import type { Filtros, Orden } from "./_components/filtros";
 import { btnPrimary, btnSecondary, cardStyles, inputCls } from "./_components/ui";
 
-type Pestana = "resumen" | "leads" | "accesos";
+type Pestana = "resumen" | "leads" | "diagnosticos" | "accesos";
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: "resumen", nombre: "Resumen" },
   { id: "leads", nombre: "Leads" },
+  { id: "diagnosticos", nombre: "Diagnósticos" },
   { id: "accesos", nombre: "Accesos" },
 ];
 
@@ -126,6 +128,12 @@ export default function AdminPage() {
                         {panel.leads.length}
                       </span>
                     )}
+                    {p.id === "diagnosticos" &&
+                      (panel.diagnosticos?.totales.diagnosticos ?? 0) > 0 && (
+                        <span className="ml-2 text-caption rounded-full bg-tr-lime text-tr-forest px-1.5 py-0.5">
+                          {panel.diagnosticos?.totales.diagnosticos}
+                        </span>
+                      )}
                   </button>
                 );
               })}
@@ -168,6 +176,18 @@ export default function AdminPage() {
                 onGuardarNotas={panel.guardarNotas}
                 onBorrar={panel.borrar}
               />
+            )}
+
+            {pestana === "diagnosticos" && (
+              <>
+                {panel.diagnosticos ? (
+                  <DiagnosticosTab datos={panel.diagnosticos} />
+                ) : (
+                  <div className={`${cardStyles} p-6 text-center text-tr-muted`}>
+                    Cargando diagnósticos…
+                  </div>
+                )}
+              </>
             )}
 
             {pestana === "accesos" && (

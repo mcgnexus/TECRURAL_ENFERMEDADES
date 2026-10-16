@@ -140,8 +140,9 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`.
 - **Panel:** `/admin` con `ADMIN_TOKEN`; pestañas de resumen (KPIs y gráficos
   interactivos con drill-down), leads (tabla ordenable, filtros, búsqueda y
-  borrado definitivo vía `DELETE /api/leads`) y accesos (visitas anónimas, IPs
-  enmascaradas y embudo diario).
+  borrado definitivo vía `DELETE /api/leads`), diagnósticos (cada análisis con
+  su resultado y el recuento de intentos y errores) y accesos (visitas anónimas,
+  IPs enmascaradas y embudo diario).
 
 ## Decisiones abiertas
 

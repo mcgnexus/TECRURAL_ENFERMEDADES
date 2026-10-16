@@ -1,7 +1,13 @@
 import { neon } from "@neondatabase/serverless";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { enmascararIp } from "./accesos-ip";
-import type { DiagnosticoResponse, DiagnosticoWithMeta, ContextoUsuario } from "@/types/diagnostico";
+import type {
+  ContextoUsuario,
+  DiagnosticoPanelFila,
+  DiagnosticoResponse,
+  DiagnosticoWithMeta,
+  DiagnosticosPanel,
+} from "@/types/diagnostico";
 import type {
   ContextoDiagnosticoLead,
   EstadoLead,
@@ -1258,4 +1264,132 @@ export async function obtenerAccesos(dias: number = 30): Promise<AccesosResumen>
       ips: ips.length,
     },
   };
+}
+
+// ============================================================================
+// DIAGNÓSTICOS (pestaña «Diagnósticos» del panel)
+// ============================================================================
+
+// Los tipos del panel viven en `@/types/diagnostico` (fuente única para cliente
+// y servidor) y se reexportan aquí para no romper a quien los importaba de aquí.
+export type { DiagnosticoPanelFila, DiagnosticosPanel } from "@/types/diagnostico";
+
+/**
+ * Diagnósticos del panel.
+ *
+ * `diagnosticos` solo contiene análisis que TERMINARON con éxito: si un análisis
+ * falló, no hay fila, y su rastro está en `eventos` (`analisis_error`). Por eso
+ * se devuelven las dos lecturas por separado (totales exactos frente a intentos
+ * por visitante y día) y el panel no las suma ni presenta una como si fuera la
+ * otra.
+ */
+export async function obtenerDiagnosticosPanel(
+  dias: number = 90,
+  limit: number = 200
+): Promise<DiagnosticosPanel> {
+  const db = getSql();
+  const rango = Math.min(Math.max(Math.trunc(dias), 1), 365);
+  const maxFilas = Math.min(Math.max(Math.trunc(limit), 1), 500);
+
+  const [itemsRows, resumenRows, intentosRows, proveedorRows, tipoRows, gravedadRows] =
+    await Promise.all([
+      db`
+        SELECT id, usuario_id, organo, especie, nombre_planta, proveedor,
+               feedback_usuario, contexto_usuario, diagnostico_json, created_at
+        FROM diagnosticos
+        ORDER BY created_at DESC
+        LIMIT ${maxFilas}
+      `,
+      db`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE (diagnostico_json->>'requiere_experto')::boolean IS TRUE)::int AS requiere_experto,
+          COUNT(*) FILTER (WHERE feedback_usuario IS NOT NULL AND btrim(feedback_usuario) <> '')::int AS con_feedback,
+          AVG((diagnostico_json->'diagnostico'->>'confianza')::numeric) AS confianza_media
+        FROM diagnosticos
+      `,
+      db`
+        SELECT
+          COUNT(*) FILTER (WHERE evento = 'analisis_iniciado')::int AS iniciados,
+          COUNT(*) FILTER (WHERE evento = 'analisis_completado')::int AS completados,
+          COUNT(*) FILTER (WHERE evento = 'analisis_error')::int AS errores
+        FROM eventos
+        WHERE evento IN ('analisis_iniciado', 'analisis_completado', 'analisis_error')
+          AND created_at >= NOW() - make_interval(days => ${rango}::int)
+      `,
+      db`
+        SELECT proveedor, COUNT(*)::int AS total
+        FROM diagnosticos
+        WHERE proveedor IS NOT NULL AND btrim(proveedor) <> ''
+        GROUP BY proveedor ORDER BY total DESC
+      `,
+      db`
+        SELECT diagnostico_json->'diagnostico'->>'tipo' AS tipo, COUNT(*)::int AS total
+        FROM diagnosticos
+        WHERE diagnostico_json->'diagnostico'->>'tipo' IS NOT NULL
+        GROUP BY 1 ORDER BY total DESC
+      `,
+      db`
+        SELECT diagnostico_json->'diagnostico'->>'gravedad' AS gravedad, COUNT(*)::int AS total
+        FROM diagnosticos
+        WHERE diagnostico_json->'diagnostico'->>'gravedad' IS NOT NULL
+        GROUP BY 1 ORDER BY total DESC
+      `,
+    ]);
+
+  const items: DiagnosticoPanelFila[] = itemsRows.map((r) => ({
+    id: String(r.id),
+    usuario_id: r.usuario_id != null ? String(r.usuario_id) : null,
+    organo: (r.organo as string | null) ?? null,
+    especie: (r.especie as string | null) ?? null,
+    nombre_planta: (r.nombre_planta as string | null) ?? null,
+    proveedor: (r.proveedor as string | null) ?? null,
+    feedback_usuario: (r.feedback_usuario as string | null) ?? null,
+    contexto_usuario: (r.contexto_usuario as ContextoUsuario | null) ?? null,
+    created_at: String(r.created_at),
+    diagnostico: parsearDiagnostico(r.diagnostico_json),
+  }));
+
+  const resumen = resumenRows[0] ?? {};
+  const intentos = intentosRows[0] ?? {};
+
+  return {
+    dias: rango,
+    items,
+    intentos: {
+      iniciados: Number(intentos.iniciados ?? 0),
+      completados: Number(intentos.completados ?? 0),
+      errores: Number(intentos.errores ?? 0),
+    },
+    totales: {
+      diagnosticos: Number(resumen.total ?? 0),
+      requiereExperto: Number(resumen.requiere_experto ?? 0),
+      conFeedback: Number(resumen.con_feedback ?? 0),
+    },
+    confianzaMedia: resumen.confianza_media != null ? Number(resumen.confianza_media) : null,
+    porProveedor: proveedorRows.map((r) => ({
+      proveedor: String(r.proveedor),
+      total: Number(r.total),
+    })),
+    porTipo: tipoRows.map((r) => ({ tipo: String(r.tipo), total: Number(r.total) })),
+    porGravedad: gravedadRows.map((r) => ({
+      gravedad: String(r.gravedad),
+      total: Number(r.total),
+    })),
+  };
+}
+
+/**
+ * `diagnostico_json` es JSONB confiable, pero una fila deforme no debería tumbar
+ * el panel entero: se devuelve null y la tabla muestra el fallo de esa fila.
+ */
+function parsearDiagnostico(valor: unknown): DiagnosticoResponse | null {
+  if (valor && typeof valor === "object") return valor as DiagnosticoResponse;
+  if (typeof valor !== "string") return null;
+  try {
+    const parseado = JSON.parse(valor);
+    return parseado && typeof parseado === "object" ? (parseado as DiagnosticoResponse) : null;
+  } catch {
+    return null;
+  }
 }

@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos, borrarLead, borrarLeads } from "@/lib/database";
+import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obtenerMetricasCaptacion, obtenerMetricasEmbudo, obtenerAccesos, borrarLead, borrarLeads, obtenerDiagnosticosPanel } from "@/lib/database";
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
@@ -269,6 +269,17 @@ export async function GET(request: NextRequest) {
       const dias = Number(request.nextUrl.searchParams.get("dias")) || 30;
       const accesos = await obtenerAccesos(dias);
       return NextResponse.json({ accesos });
+    }
+
+    // ?diagnosticos=1&dias=90&limit=200 devuelve los análisis con su resultado
+    // (tipo, enfermedad, gravedad, confianza, recomendación) más el recuento de
+    // intentos, iniciados y errores. Nunca trae la foto: `imagen_url` se guarda
+    // vacío porque las imágenes no se persisten.
+    if (request.nextUrl.searchParams.get("diagnosticos")) {
+      const dias = Number(request.nextUrl.searchParams.get("dias")) || 90;
+      const limit = Number(request.nextUrl.searchParams.get("limit")) || 200;
+      const diagnosticos = await obtenerDiagnosticosPanel(dias, limit);
+      return NextResponse.json({ diagnosticos });
     }
 
     const leads = await obtenerLeads({

@@ -62,3 +62,41 @@ export interface DiagnosticoWithMeta extends DiagnosticoResponse {
   angulo_usado?: "haz" | "enves" | "planta_completa";
   contexto_usuario?: ContextoUsuario;
 }
+
+/**
+ * Fila de diagnóstico para la pestaña del panel. Fuente única para cliente y
+ * servidor; `database.ts` la importa de aquí para que no puedan divergir.
+ *
+ * No lleva la foto: `imagen_url` se guarda siempre vacío porque las imágenes no
+ * se persisten, solo se adjuntan al lead si el agricultor pide revisión.
+ */
+export interface DiagnosticoPanelFila {
+  id: string;
+  usuario_id: string | null;
+  organo: string | null;
+  especie: string | null;
+  nombre_planta: string | null;
+  proveedor: string | null;
+  feedback_usuario: string | null;
+  contexto_usuario: ContextoUsuario | null;
+  created_at: string;
+  /** Contenido de `diagnostico_json`, o null si estaba mal formado. */
+  diagnostico: DiagnosticoResponse | null;
+}
+
+export interface DiagnosticosPanel {
+  dias: number;
+  items: DiagnosticoPanelFila[];
+  /**
+   * Intentos registrados en `eventos`. Esa tabla deduplica por
+   * (visitante, evento, día), así que son visitantes que iniciaron un análisis
+   * en la ventana, no intentos crudos; no es comparable uno a uno con el número
+   * de filas de `diagnosticos`.
+   */
+  intentos: { iniciados: number; completados: number; errores: number };
+  totales: { diagnosticos: number; requiereExperto: number; conFeedback: number };
+  confianzaMedia: number | null;
+  porProveedor: { proveedor: string; total: number }[];
+  porTipo: { tipo: string; total: number }[];
+  porGravedad: { gravedad: string; total: number }[];
+}

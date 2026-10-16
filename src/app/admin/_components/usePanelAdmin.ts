@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { EstadoLead, LeadFila, MetricasCaptacion } from "@/types/lead";
+import type { DiagnosticosPanel } from "@/types/diagnostico";
 import type { CuotaGlobal } from "@/lib/cuota";
 import type { MetricasEmbudo, AccesosResumen } from "@/lib/database";
 
@@ -22,6 +23,7 @@ export function usePanelAdmin() {
   const [cuotas, setCuotas] = useState<CuotaGlobal | null>(null);
   const [embudo, setEmbudo] = useState<MetricasEmbudo | null>(null);
   const [accesos, setAccesos] = useState<AccesosResumen | null>(null);
+  const [diagnosticos, setDiagnosticos] = useState<DiagnosticosPanel | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actualizando, setActualizando] = useState<string | null>(null);
@@ -45,11 +47,12 @@ export function usePanelAdmin() {
     }
   }, []);
 
-  /** Recarga métricas, cuota, embudo y accesos (agregados del Resumen). */
+  /** Recarga las agregaciones: métricas, cuota, embudo, accesos y diagnósticos. */
   const cargarResumen = useCallback(async (t: string) => {
-    const [resMetricas, resAccesos] = await Promise.all([
+    const [resMetricas, resAccesos, resDiagnosticos] = await Promise.all([
       fetch("/api/leads?metricas=1", { headers: { "x-admin-token": t } }),
       fetch("/api/leads?accesos=1", { headers: { "x-admin-token": t } }),
+      fetch("/api/leads?diagnosticos=1", { headers: { "x-admin-token": t } }),
     ]);
     if (resMetricas.ok) {
       const d = await resMetricas.json();
@@ -60,6 +63,10 @@ export function usePanelAdmin() {
     if (resAccesos.ok) {
       const d = await resAccesos.json();
       setAccesos(d.accesos ?? null);
+    }
+    if (resDiagnosticos.ok) {
+      const d = await resDiagnosticos.json();
+      setDiagnosticos(d.diagnosticos ?? null);
     }
   }, []);
 
@@ -177,6 +184,7 @@ export function usePanelAdmin() {
     cuotas,
     embudo,
     accesos,
+    diagnosticos,
     cargando,
     error,
     actualizando,
