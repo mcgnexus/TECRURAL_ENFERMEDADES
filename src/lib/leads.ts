@@ -69,10 +69,7 @@ export function calcularPrioridadLead(
   return { prioridad, puntuacion };
 }
 
-/** Decide si tras un diagnóstico conviene ofrecer el siguiente paso comercial. */
-export function debeOfrecerRevision(ctx: ContextoDiagnosticoLead): boolean {
-  if (ctx.requiere_experto) return true;
-  if (ctx.gravedad === "severa") return true;
-  if (ctx.gravedad === "moderada" && ctx.tipo && ctx.tipo !== "sano") return true;
-  return false;
-}
+// Nota: antes existía `debeOfrecerRevision()`, que decidía si tras un diagnóstico
+// convenía ofrecer la revisión técnica. Se eliminó cuando la pantalla final pasó
+// a ofrecer siempre el informe completo con tratamiento: ya no hay nada que
+// decidir y cualquier umbral habría dejado fuera casos con interés.

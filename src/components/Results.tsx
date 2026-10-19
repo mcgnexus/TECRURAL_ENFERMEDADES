@@ -3,9 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { DiagnosticoWithMeta, ContextoUsuario } from "@/types/diagnostico";
-import { debeOfrecerRevision } from "@/lib/leads";
 import { LeadForm } from "@/components/LeadForm";
-import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
 import { trackEvento } from "@/lib/analitica";
 import type { ContextoDiagnosticoLead } from "@/types/lead";
 import {
@@ -91,6 +89,7 @@ export function Results({
   } = diagnostico;
 
   const [ctaAbierto, setCtaAbierto] = useState(false);
+  const [informeDesbloqueado, setInformeDesbloqueado] = useState(false);
   const [feedbackEstado, setFeedbackEstado] = useState<"idle" | "enviando" | "ok" | "error">("idle");
   const [compartido, setCompartido] = useState<"idle" | "ok" | "error">("idle");
 
@@ -105,11 +104,14 @@ export function Results({
     sintoma: contextoUsuario?.sintoma,
   };
 
-  const mostrarCTA = debeOfrecerRevision(contexto);
   const esSano = diag.tipo === "sano";
   const nivel = nivelSenal(diag.confianza);
   const nivelBadge =
     diag.confianza >= 0.7 ? badgeGreen : diag.confianza >= 0.4 ? badgeYellow : badgeRed;
+
+  const tratamiento = diagnostico.tratamiento;
+  const tieneTratamiento = Boolean(tratamiento && tratamiento.medida.trim() && tratamiento.dosis.trim());
+  const advertencias = tratamiento?.advertencias?.filter(Boolean) ?? [];
 
   const enviarFeedback = async (feedback: string) => {
     if (!diagnostico.id || !feedback) return;
@@ -141,6 +143,20 @@ export function Results({
       requiere_experto,
       tipo: diag.tipo,
     });
+  };
+
+  const desbloquearInforme = () => {
+    setInformeDesbloqueado(true);
+    trackEvento("informe_desbloqueado", {
+      gravedad: diag.gravedad,
+      tipo: diag.tipo,
+      tiene_tratamiento: tieneTratamiento,
+    });
+  };
+
+  const guardarPDF = () => {
+    trackEvento("informe_pdf", { tipo: diag.tipo });
+    window.print();
   };
 
   const textoCompartir = [
@@ -180,7 +196,7 @@ export function Results({
   })();
 
   return (
-    <div className="space-y-5" role="region" aria-label="Resultado de la orientación">
+    <div className="space-y-5" id="informe-print" role="region" aria-label="Resultado de la orientación">
       <div className="relative aspect-[4/3] rounded-[var(--tr-radius-card)] overflow-hidden border border-tr-line">
         <img
           src={imagenPreview}
@@ -239,6 +255,148 @@ export function Results({
         </div>
         <p className="mt-2 text-caption text-tr-muted">{nivel.ayuda}</p>
       </div>
+
+      {/* Informe completo: imán suave. Se revela tras dejar el teléfono. */}
+      {informeDesbloqueado ? (
+        <div className={`${cardStyles} p-5 border-l-4 border-tr-brand-green`} aria-label="Informe completo">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={badgeGreen}>Informe completo</span>
+            {tieneTratamiento && <span className={badgeSecondary}>Tratamiento orientativo</span>}
+          </div>
+
+          <h3 className="mt-3 font-heading font-semibold text-tr-forest">
+            {esSano ? "Qué hacer a partir de ahora" : "Tratamiento y dosis"}
+          </h3>
+
+          {tieneTratamiento && tratamiento ? (
+            <dl className="mt-3 space-y-3">
+              <div>
+                <dt className="text-caption font-semibold uppercase tracking-wide text-tr-muted">Medida o materia activa</dt>
+                <dd className="text-body font-semibold text-tr-ink">{tratamiento.medida}</dd>
+              </div>
+              <div>
+                <dt className="text-caption font-semibold uppercase tracking-wide text-tr-muted">Dosis</dt>
+                <dd className="text-body text-tr-ink">{tratamiento.dosis}</dd>
+              </div>
+              <div>
+                <dt className="text-caption font-semibold uppercase tracking-wide text-tr-muted">Momento y forma de aplicación</dt>
+                <dd className="text-body text-tr-ink">{tratamiento.momento}</dd>
+              </div>
+              {tratamiento.plazo_seguridad_dias != null && (
+                <div>
+                  <dt className="text-caption font-semibold uppercase tracking-wide text-tr-muted">Plazo de seguridad</dt>
+                  <dd className="text-body text-tr-ink">
+                    {clave(`${tratamiento.plazo_seguridad_dias} días`)} antes de la recolección.
+                  </dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="mt-2 text-body text-tr-muted">
+              Con esta foto no procede proponer un tratamiento concreto. Mantén las labores habituales y
+              vuelve a analizar si aparecen síntomas nuevos.
+            </p>
+          )}
+
+          {advertencias.length > 0 && (
+            <div className="mt-4 p-4 bg-tr-warning/5 border border-tr-line rounded-[var(--tr-radius-control)]">
+              <p className="text-small font-semibold text-tr-forest">Antes de aplicarlo, ten en cuenta</p>
+              <ul className="mt-2 space-y-1.5" role="list">
+                {advertencias.map((a, i) => (
+                  <li key={i} className="text-small text-tr-muted flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-tr-warning mt-2 flex-shrink-0" />
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {diagnostico.validacion_segunda_foto && (
+            <div className="mt-4 p-4 bg-tr-paper border border-tr-line rounded-[var(--tr-radius-control)]">
+              <p className="text-small font-semibold text-tr-forest">Confirma el diagnóstico con una segunda foto</p>
+              <p className="mt-1 text-small text-tr-muted">{diagnostico.validacion_segunda_foto}</p>
+            </div>
+          )}
+
+          <div className="mt-4 no-print">
+            <button onClick={guardarPDF} type="button" className={`${btnPrimary} w-full`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+              </svg>
+              Descargar el informe en PDF
+            </button>
+          </div>
+
+          <p className="mt-3 text-small text-tr-muted leading-relaxed">
+            El informe es orientativo: parte de una foto y puede contener errores. Confirma que el producto
+            está autorizado para tu cultivo y respeta siempre la etiqueta y el plazo de seguridad.
+            Hemos registrado tu caso: un técnico de TecRural te responderá en un plazo máximo de 48 horas.
+          </p>
+        </div>
+      ) : (
+        <div className={`${cardStyles} p-5 border-l-4 border-tr-brand-green`}>
+          <h3 className="font-heading font-semibold text-tr-forest">
+            {esSano ? "Llévate el informe completo de tu cultivo" : "Llévate el informe con el tratamiento concreto"}
+          </h3>
+          <p className="mt-1 text-body text-tr-muted">
+            Lo que acabas de ver es la orientación inicial. El informe completo añade lo que de verdad
+            cambia la decisión:
+          </p>
+          <ul className="mt-3 space-y-2" role="list">
+            {(esSano
+              ? [
+                  "Qué vigilar y en qué épocas de riesgo",
+                  "Cuándo merece la pena preocuparse",
+                  "Qué foto repetir para confirmar que el cultivo sigue sano",
+                ]
+              : [
+                  "Materia activa y dosis recomendada (en rango)",
+                  "Momento de aplicación y plazo de seguridad antes de cosechar",
+                  "Qué segunda foto confirma que el diagnóstico es correcto",
+                ]
+            ).map((t, i) => (
+              <li key={i} className="text-body text-tr-ink flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-tr-brand-green mt-2 flex-shrink-0" />
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-body text-tr-muted">
+            Déjanos tu teléfono y verás el informe al momento en pantalla, listo para descargar en PDF. Un
+            técnico puede además revisar tu caso contigo.
+          </p>
+
+          {!ctaAbierto ? (
+            <div className="mt-4 no-print">
+              <button onClick={abrirCTA} type="button" className={`${btnPrimary} w-full`}>
+                Ver mi informe completo
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 no-print">
+              <LeadForm
+                origen="post_diagnostico"
+                diagnosticoId={diagnostico.id}
+                contexto={contexto}
+                prefill={{
+                  cultivo: contextoUsuario?.cultivo,
+                  municipio: contextoUsuario?.municipio,
+                  variedad: diagnostico.nombre_planta || contextoUsuario?.variedad,
+                  sintoma: contextoUsuario?.sintoma,
+                }}
+                mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
+                adjuntarFotos={fotosDataUrl}
+                onEnviado={desbloquearInforme}
+              />
+            </div>
+          )}
+          <p className="mt-3 text-small text-tr-muted leading-relaxed">
+            La foto se comparte con el técnico solo si envías la solicitud. No tiene coste ni compromiso
+            de contratación; el tiempo de respuesta depende de la demanda.
+          </p>
+        </div>
+      )}
 
       {seccion("1. Qué se observa en la foto", (
         diag.sintomas_observados.length > 0 ? (
@@ -340,76 +498,16 @@ export function Results({
         </div>
       )}
 
-      {mostrarCTA && (
-        <div className={`${cardStyles} p-5 border-l-4 ${diag.gravedad === "severa" ? "border-red-500" : "border-tr-brand-green"}`}>
-          <h3 className="font-heading font-semibold text-tr-forest">¿Quieres que revisemos este caso contigo?</h3>
-          <p className="mt-1 text-body text-tr-muted">
-            Un técnico de TecRural valorará la foto y el contexto del cultivo para proponerte el
-            siguiente paso. Al solicitarlo, podrás indicar tu teléfono y elegir llamada o WhatsApp.
-          </p>
-          {!ctaAbierto ? (
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <button onClick={abrirCTA} type="button" className={`${btnPrimary} flex-1`}>
-                Pedir revisión técnica
-              </button>
-              {whatsappDisponible && (
-                <a
-                  href={urlWhatsApp(`Hola, he hecho un diagnóstico con la app de TecRural sobre ${especie_identificada} y quiero que revisen mi caso.`)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => trackEvento("whatsapp_click", { origen: "post_diagnostico" })}
-                  className={`${btnSecondary} flex-1`}
-                >
-                  WhatsApp
-                </a>
-              )}
-            </div>
-          ) : (
-            <div className="mt-4">
-              <LeadForm
-                origen="post_diagnostico"
-                diagnosticoId={diagnostico.id}
-                contexto={contexto}
-                prefill={{
-                  cultivo: contextoUsuario?.cultivo,
-                  municipio: contextoUsuario?.municipio,
-                  variedad: diagnostico.nombre_planta || contextoUsuario?.variedad,
-                  sintoma: contextoUsuario?.sintoma,
-                }}
-                mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
-                adjuntarFotos={fotosDataUrl}
-              />
-            </div>
-          )}
-          <p className="mt-3 text-small text-tr-muted leading-relaxed">
-            La foto se comparte con el técnico solo si envías la solicitud. No tiene coste ni
-            compromiso de contratación; el tiempo de respuesta depende de la demanda.
-          </p>
-        </div>
-      )}
-
-      {!mostrarCTA && (
-        <div className={`${cardStyles} p-4 text-center`}>
-          <p className="text-small text-tr-muted">
-            {esSano
-              ? "El cultivo se ve bien en esta foto. Vigílalo y repite el análisis si notas cambios."
-              : "Vigila la evolución y repite el análisis en unos días."}{" "}
-            <Link href="/contacto" className="text-tr-green-strong font-semibold hover:underline">
-              ¿Dudas? Contacta con TecRural
-            </Link>
-          </p>
-        </div>
-      )}
-
       <div className={`${cardStyles} p-4 bg-tr-paper`}>
         <p className="text-caption text-tr-muted leading-relaxed">
-          <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación se genera
-          automáticamente a partir de tu foto y puede contener errores. Es una hipótesis inicial,
-          no un diagnóstico definitivo, y no sustituye una inspección profesional ni una
-          prescripción de tratamientos. El nivel de certeza describe cuánto encajan los síntomas
-          de la foto con la causa propuesta, no la probabilidad de que sea correcta. Tu foto se
-          envía a un servicio de IA externo para el análisis y no se guarda, salvo que solicites
-          una revisión (en ese caso se comparte con el técnico, informándote antes).
+          <span className="font-semibold text-tr-ink">Aviso:</span> esta orientación y el tratamiento
+          propuesto se generan automáticamente a partir de tu foto y pueden contener errores. El
+          tratamiento es una sugerencia orientativa, no una prescripción: confirma que el producto está
+          autorizado para tu cultivo y respeta la etiqueta y el plazo de seguridad, o valóralo con un
+          técnico agronómico. El nivel de certeza describe cuánto encajan los síntomas de la foto con la
+          causa propuesta, no la probabilidad de que sea correcta. Tu foto se envía a un servicio de IA
+          externo para el análisis y no se guarda, salvo que solicites una revisión (en ese caso se
+          comparte con el técnico, informándote antes).
         </p>
       </div>
 
@@ -424,7 +522,7 @@ export function Results({
         </p>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row gap-3 pt-2 no-print">
         {diagnostico.calidad_imagen && (diagnostico.calidad_imagen.nitidez === "baja" || diagnostico.calidad_imagen.encuadre === "insuficiente" || diagnostico.calidad_imagen.iluminacion !== "adecuada") && (
           <button
             onClick={onImprovePhoto}
@@ -460,6 +558,17 @@ export function Results({
           Nuevo análisis
         </button>
       </div>
+
+      {!informeDesbloqueado && (
+        <p className="text-small text-tr-muted text-center">
+          {esSano
+            ? "El cultivo se ve bien en esta foto. Vigílalo y repite el análisis si notas cambios."
+            : "Vigila la evolución y repite el análisis en unos días."}{" "}
+          <Link href="/contacto" className="text-tr-green-strong font-semibold hover:underline">
+            ¿Dudas? Contacta con TecRural
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

@@ -4,6 +4,20 @@ Este informe registra lo que **falta y no debe inventarse** antes de promocionar
 formulario de solicitud de revisión. La aplicación no afirma por sí sola el cumplimiento
 de la normativa de protección de datos: son necesarios estos contenidos y decisiones.
 
+## 0. Entrega de tratamiento y dosis en el informe (nuevo, prioritario)
+- La pantalla final ya no ofrece solo "revisar tu caso": entrega un **informe completo con
+  tratamiento orientativo, dosis y plazo de seguridad**, y lo desbloquea a cambio del
+  teléfono (imán suave). La app lo presenta como **sugerencia**, no como prescripción.
+- Implementado en `src/lib/system-prompt.ts` (campo `tratamiento`) y
+  `src/components/Results.tsx`; textos en `src/lib/textos-lead.ts`.
+- **Riesgo a revisar con asesoría jurídica:** recomendar productos fitosanitarios y dosis
+  puede considerarse asesoramiento/venta de fitosanitarios (RD 1311/2012 y normativa
+  autonómica) y exige, según el caso, que lo emita un **asesor fitosanitario autorizado**.
+  Antes de promocionarlo, decidir si basta el aviso actual ("orientativo") o si conviene que
+  el informe lo firme/valide un técnico. No es asesoramiento legal.
+- Si cambia el texto del aviso, revisar también el bloque "Aviso" de `Results.tsx` y el
+  apartado "Tratamiento y límites legales" de `docs/flujo-app.md`.
+
 ## 1. Identidad del responsable del tratamiento
 - Facilitados: Manuel Carrasco García, DNI/NIF 76143911L, Barrio Los Reyes 113,
   18830 Huéscar (Granada), y correo `mcgnexus@gmail.com`.

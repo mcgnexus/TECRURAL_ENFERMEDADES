@@ -28,6 +28,28 @@ export interface CalidadImagen {
   encuadre: "adecuado" | "parcial" | "insuficiente";
 }
 
+/**
+ * Pauta orientativa de tratamiento. Es lo que la app entrega en el informe
+ * completo y lo que Google no da: una propuesta concreta de actuación.
+ *
+ * Sigue siendo una hipótesis a partir de una foto, no una prescripción: por eso
+ * la dosis es siempre un rango/orden de magnitud, `plazo_seguridad_dias` es
+ * obligatorio cuando hay producto y las advertencias recuerdan confirmar el
+ * registro del producto para el cultivo y leer la etiqueta.
+ */
+export interface TratamientoOrientativo {
+  /** Materia activa o medida propuesta (p. ej. "azufre micronizado", "trampas cromáticas"). */
+  medida: string;
+  /** Dosis orientativa con su unidad (p. ej. "2-3 g por litro de agua"). */
+  dosis: string;
+  /** Cuándo y cómo aplicarlo (momento fenológico, cobertura, número de pases). */
+  momento: string;
+  /** Días de plazo de seguridad antes de cosecha; null si la medida no lo tiene. */
+  plazo_seguridad_dias: number | null;
+  /** Condiciones, incompatibilidades y precauciones de uso. */
+  advertencias: string[];
+}
+
 export interface DiagnosticoResponse {
   organo_detectado: OrganoDetectado;
   especie_identificada: string;
@@ -35,6 +57,16 @@ export interface DiagnosticoResponse {
   diagnostico: Diagnostico;
   estado_madurez: EstadoMadurez;
   recomendacion: string;
+  /**
+   * Pauta orientativa que solo se entrega en el informe completo, tras dejar el
+   * teléfono. Ausente cuando no procede proponer nada (tipo "sano").
+   */
+  tratamiento?: TratamientoOrientativo;
+  /**
+   * Qué foto o dato concreto ayudaría a confirmar que la hipótesis es correcta
+   * (validación con una segunda imagen).
+   */
+  validacion_segunda_foto?: string;
   requiere_experto: boolean;
   razonamiento?: string;
   hallazgos_negativos?: string[];

@@ -1,6 +1,6 @@
 # TECRURAL Diagnóstico
 
-PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash con respaldo multimodal opcional OpenAI `gpt-4o-mini`) → solicitud de revisión técnica de TecRural.
+PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash con respaldo multimodal opcional OpenAI `gpt-4o-mini`) → orientación inicial gratuita y, al dejar el teléfono, informe completo con tratamiento orientativo.
 
 ## Flujo de usuario
 
@@ -10,8 +10,8 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 2. **Contexto del cultivo**: cultivo (selector + "Otro"/"No lo sé"), municipio o comarca (Altiplano/Costa Tropical + "Otro"), síntoma observado, desde cuándo (opcional), variedad (opcional). Sin GPS.
 3. **Fotos**: modo simple por defecto (1 foto nítida del síntoma). Modo avanzado opcional añade envés y planta completa. Vista previa, reemplazo y eliminación por foto. Validación de tipo real (magic bytes), tamaño (≤12 MB) y formato en frontend y backend. Compresión a JPEG/WebP ~1536px/1MB (elimina EXIF y optimiza móvil manteniendo detalle para manchas y síntomas pequeños).
 4. **Análisis**: botón «Analizar foto»; desactivado solo si falta la foto principal. Estados de espera claros sin porcentajes falsos; datos y fotos se conservan si hay error; reintentos permitidos. Errores amigables (red, límite de uso, proveedor, imagen no interpretable, servicio caído) sin trazas ni claves.
-5. **Resultado**: en lenguaje claro — qué se observa; posibles causas como hipótesis; qué falta para afinar; próximos pasos prudentes; cuándo pedir revisión técnica; aviso visible de que la IA no sustituye inspección profesional. Fiabilidad mostrada cualitativamente (señales claras / indicios moderados / señales poco claras), sin porcentajes no calibrados. Sin prescripciones de productos, marcas ni dosis. Compartible (Web Share API con fallback a portapapeles).
-6. **Revisión de TecRural**: CTA tras el resultado sin ocultarlo; formulario con nombre opcional, teléfono/canal, municipio y cultivo precargados y editables, mensaje opcional, confirmación de solicitud y consentimiento comercial **separado y desmarcado por defecto**. Las fotos se comparten solo al enviar la revisión, informando antes.
+5. **Resultado**: en lenguaje claro — qué se observa; posibles causas como hipótesis; qué falta para afinar; próximos pasos prudentes; y, tras dejar un teléfono, el **informe completo** con tratamiento orientativo (materia activa, dosis en rango, momento de aplicación y plazo de seguridad) y qué segunda foto confirma el diagnóstico. Aviso visible de que es orientativo y de que la IA no sustituye una inspección profesional. Fiabilidad mostrada cualitativamente (señales claras / indicios moderados / señales poco claras), sin porcentajes no calibrados. Guardable en PDF y compartible (Web Share API con fallback a portapapeles).
+6. **Revisión de TecRural**: el informe completo se desbloquea dejando un teléfono, sin ocultar la orientación inicial; formulario con nombre opcional, teléfono/canal, municipio y cultivo precargados y editables, mensaje opcional, confirmación de solicitud y consentimiento comercial **separado y desmarcado por defecto**. Las fotos se comparten solo al enviar la revisión, informando antes.
 
 ## Arquitectura
 
@@ -20,7 +20,7 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
   - `src/lib/gemini.ts` — pipeline de 4 capas: observación → hipótesis (few-shots por cultivo) → verificación adversarial de la foto relevante → reintento. Acepta varias fotos (principal + envés + planta completa), limita cada llamada a 45 s y comparte un deadline de 105 s con el fallback.
   - `src/lib/openai.ts` — respaldo multimodal `gpt-4o-mini`, solo activo con `OPENAI_API_KEY`. DeepSeek Chat no se usa como respaldo visual porque no admite imágenes.
   - Las fases llegan al cliente por NDJSON para mostrar progreso real. Observación y resultado final tienen cachés efímeras en memoria por instancia; no almacenan fotos.
-  - `src/lib/system-prompt.ts` — prompts (hipótesis, sin prescripciones), esquemas y ejemplos.
+  - `src/lib/system-prompt.ts` — prompts (hipótesis + tratamiento orientativo con salvaguardas), esquemas y ejemplos.
   - Selección automática Gemini → OpenAI; el proveedor usado se registra en BD para comparar coste y calidad. El deadline total es compartido entre fases y proveedores.
 - **Base de datos:** Neon Postgres serverless (`src/lib/database.ts`). Tablas:
   - `diagnosticos` — hipótesis y contexto. Las fotos NO se guardan por defecto (política de datos); solo en el lead si el usuario pide revisión.
@@ -60,7 +60,7 @@ Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback
 
 ## Analítica de conversión
 
-`src/lib/analitica.ts` emite los eventos del embudo: `portada_vista` → `captura_realizada` → `analisis_iniciado` → `analisis_completado` → `resultado_visto` → `cta_revision_abierto` → `lead_enviado` (más `analisis_error`, `lead_error` y `whatsapp_click`). No se carga Google Analytics: los eventos del embudo permanecen en first party. El único script de terceros es el **Meta Pixel** (`src/components/MetaPixel.tsx`), cargado solo en producción para medición publicitaria y declarado en `/cookies` y `/privacidad`. Los eventos quedan además en `localStorage` (`tr-eventos`, solo depuración, nunca sale del dispositivo) y se persisten en la tabla first-party `eventos` vía `POST /api/eventos`, que es la fuente que usa el panel.
+`src/lib/analitica.ts` emite los eventos del embudo: `portada_vista` → `captura_realizada` → `analisis_iniciado` → `analisis_completado` → `resultado_visto` → `cta_revision_abierto` → `informe_desbloqueado` → `lead_enviado` (más `informe_pdf`, `analisis_error`, `lead_error` y `whatsapp_click`). No se carga Google Analytics: los eventos del embudo permanecen en first party. El único script de terceros es el **Meta Pixel** (`src/components/MetaPixel.tsx`), cargado solo en producción para medición publicitaria y declarado en `/cookies` y `/privacidad`. Los eventos quedan además en `localStorage` (`tr-eventos`, solo depuración, nunca sale del dispositivo) y se persisten en la tabla first-party `eventos` vía `POST /api/eventos`, que es la fuente que usa el panel.
 
 **Embudo medido por visitas, no por análisis.** La tasa de conversión usa como denominador las visitas únicas a la portada (`portada_vista`), no los diagnósticos: si no, las visitas que se marchan sin analizar no cuentan en ninguna parte y la tasa queda inflada. Cada paso se cuenta por personas, con un índice único en `(visitor_id, evento, día)`: seis análisis del mismo agricultor en un día son un visitante, no seis oportunidades. Los eventos van en first party, así que el embudo se cuenta aunque no se acepten cookies de terceros, y sin datos personales (ni IP, ni user agent, ni ubicación: solo un UUID aleatorio por dispositivo). Métrica principal: **coste por lead cualificado**, no formularios brutos.
 

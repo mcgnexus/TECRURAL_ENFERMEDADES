@@ -554,6 +554,7 @@ const ORDEN_EMBUDO = [
   "analisis_completado",
   "resultado_visto",
   "cta_revision_abierto",
+  "informe_desbloqueado",
   "lead_enviado",
 ];
 

@@ -41,7 +41,20 @@ describe("posterior al diagnóstico", () => {
   it("menciona la orientación y las fotos", () => {
     const t = textosLead("post_diagnostico", 1);
     expect(t.cuerpoExito).toContain("orientación y la foto del análisis");
-    expect(t.cabecera).toBe("Solicitar revisión de TecRural");
+    expect(t.cabecera).toBe("Recibe el informe completo");
+  });
+
+  it("promete el informe con tratamiento y dosis", () => {
+    const t = textosLead("post_diagnostico", 0);
+    expect(t.intro).toMatch(/tratamiento/i);
+    expect(t.intro).toMatch(/dosis/i);
+    expect(t.cuerpoExito).toMatch(/tratamiento y la dosis/i);
+    expect(t.encabezadoExito).toBe("Informe completo desbloqueado");
+  });
+
+  it("pide el teléfono como contrapartida, no una revisión a ciegas", () => {
+    const t = textosLead("post_diagnostico", 1);
+    expect(t.intro).toMatch(/teléfono/i);
   });
 
   it("concuerda en número: singular con una foto", () => {

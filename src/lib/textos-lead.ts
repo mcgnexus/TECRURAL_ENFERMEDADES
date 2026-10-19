@@ -47,10 +47,10 @@ export function textosLead(
   const fotosTxt = singular ? "la foto del análisis" : "las fotos del análisis";
 
   return {
-    cabecera: "Solicitar revisión de TecRural",
-    intro: `Con tus datos y ${fotosTxt}, un técnico revisará este caso contigo.`,
-    encabezadoExito: "Solicitud de revisión enviada",
-    cuerpoExito: `Hemos registrado tu caso junto con la orientación y ${fotosTxt}. Un técnico de TecRural lo revisará y ${canal}.`,
+    cabecera: "Recibe el informe completo",
+    intro: `Déjanos un teléfono y verás al momento el informe completo: el tratamiento orientativo con su dosis y el momento de aplicación, y qué foto nos confirma el diagnóstico. Con tus datos y ${fotosTxt}, además, un técnico puede revisar este caso contigo.`,
+    encabezadoExito: "Informe completo desbloqueado",
+    cuerpoExito: `Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Hemos registrado tu caso junto con la orientación y ${fotosTxt}; un técnico de TecRural lo revisará y ${canal}.`,
     // El consentimiento enumera los datos que de verdad se tratan: sostiene el
     // consentimiento, así que no puede mencionar fotos que no se envían.
     datosTratados:

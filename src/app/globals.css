@@ -195,3 +195,29 @@
   .shadow-card { box-shadow: var(--tr-shadow-card); }
   .focus-ring { outline: var(--tr-focus); }
 }
+
+/* Impresión del informe: se oculta la interfaz y se imprime solo el resultado.
+   "Guardar en PDF" del informe completo usa window.print(); sin esto saldrían
+   los botones, el formulario y el resto de la página. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #informe-print,
+  #informe-print * {
+    visibility: visible;
+  }
+
+  #informe-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

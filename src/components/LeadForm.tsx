@@ -24,6 +24,8 @@ interface LeadFormProps {
   mensajeInicial?: string;
   /** Fotos del análisis como data URL completo (WebP o JPEG) para adjuntar a la revisión */
   adjuntarFotos?: string[];
+  /** Se llama cuando el lead se ha guardado: permite revelar el informe completo. */
+  onEnviado?: () => void;
 }
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
@@ -42,6 +44,7 @@ export function LeadForm({
   prefill,
   mensajeInicial = "",
   adjuntarFotos,
+  onEnviado,
 }: LeadFormProps) {
   const [estado, setEstado] = useState<EstadoEnvio>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +156,7 @@ export function LeadForm({
 
       setEstado("ok");
       trackEvento("lead_enviado", { origen, cultivo: form.cultivo || undefined });
+      onEnviado?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       setError(message);
@@ -377,7 +381,11 @@ export function LeadForm({
           />
           <div className="flex-1">
             <label htmlFor={`lead-solicitud-${origen}`} className="block text-small text-tr-ink leading-relaxed">
-              <span className="block font-semibold">Solicito que TecRural revise este caso y me responda al teléfono indicado. *</span>
+              <span className="block font-semibold">
+                {esDirecto
+                  ? "Solicito que TecRural revise este caso y me responda al teléfono indicado. *"
+                  : "Solicito ver el informe completo y que TecRural revise este caso, y autorizo que me respondáis al teléfono indicado. *"}
+              </span>
               <span className="mt-1 block text-tr-muted">Usaremos tus datos ({textos.datosTratados}) para gestionar la solicitud. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.</span>
             </label>
             {errores.solicitud && (
@@ -414,8 +422,10 @@ export function LeadForm({
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
               Enviando...
             </>
-          ) : (
+          ) : esDirecto ? (
             "Enviar solicitud de revisión"
+          ) : (
+            "Ver mi informe completo"
           )}
         </button>
 

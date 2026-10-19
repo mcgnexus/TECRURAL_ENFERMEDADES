@@ -72,6 +72,18 @@ function normalizarTextoPaciente(diagnostico: DiagnosticoResponse): void {
   if (diagnostico.datos_faltantes) {
     diagnostico.datos_faltantes = diagnostico.datos_faltantes.map(normalizarTextoVisible);
   }
+  if (diagnostico.validacion_segunda_foto) {
+    diagnostico.validacion_segunda_foto = normalizarTextoVisible(diagnostico.validacion_segunda_foto);
+  }
+  if (diagnostico.tratamiento) {
+    const t = diagnostico.tratamiento;
+    if (t.medida) t.medida = normalizarTextoVisible(t.medida);
+    if (t.dosis) t.dosis = normalizarTextoVisible(t.dosis);
+    if (t.momento) t.momento = normalizarTextoVisible(t.momento);
+    if (Array.isArray(t.advertencias)) {
+      t.advertencias = t.advertencias.map(normalizarTextoVisible).filter(Boolean);
+    }
+  }
 }
 
 function validarCoherencia(diagnostico: DiagnosticoResponse): { valido: boolean; errores: string[] } {

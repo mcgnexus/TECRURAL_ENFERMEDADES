@@ -308,7 +308,7 @@ function HomeContent() {
             <ul className="mx-auto grid max-w-6xl gap-3 px-4 py-5 text-center text-small font-semibold text-tr-forest sm:grid-cols-3 sm:gap-6 sm:px-6" role="list">
               <li>Orientación inicial</li>
               <li>Contexto local</li>
-              <li>Revisión técnica opcional</li>
+              <li>Informe con tratamiento</li>
             </ul>
           </section>
 
@@ -335,8 +335,8 @@ function HomeContent() {
               <li className="flex gap-4">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">3</span>
                 <div>
-                  <h3 className="font-heading font-semibold text-tr-forest">Solicita revisión técnica</h3>
-                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Si lo necesitas, un técnico de TecRural puede revisar tu caso.</p>
+                  <h3 className="font-heading font-semibold text-tr-forest">Llévate el informe completo</h3>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Con tu teléfono desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto.</p>
                 </div>
               </li>
             </ol>
@@ -375,7 +375,7 @@ function HomeContent() {
           <section className="bg-tr-forest px-4 py-12 text-center sm:py-14" aria-labelledby="cta-final-title">
             <div className="mx-auto max-w-2xl">
               <h2 id="cta-final-title" className="home-section-title font-heading font-bold text-white">Empieza con una foto de tu cultivo</h2>
-              <p className="mt-3 text-body leading-relaxed text-white/90">Recibe una orientación inicial y decide después si quieres pedir una revisión técnica.</p>
+              <p className="mt-3 text-body leading-relaxed text-white/90">Recibe una orientación inicial gratuita y desbloquea el informe completo con el tratamiento recomendado.</p>
               <button onClick={() => setVista("captura")} type="button" className={`${btnBase} mt-6 bg-tr-lime px-6 text-tr-forest hover:bg-[#c7dc83]`}>
                 Analizar mi planta
               </button>
@@ -413,8 +413,9 @@ function HomeContent() {
         </header>
 
         <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
-          Al terminar verás una orientación inicial. Si quieres una revisión técnica, podrás
-          solicitarla después; la foto solo se comparte con el técnico cuando envías esa solicitud.
+          Al terminar verás una orientación inicial gratuita. Si quieres el informe completo con el
+          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu teléfono; la
+          foto solo se comparte con el técnico cuando envías esa solicitud.
         </p>
 
         {error && (

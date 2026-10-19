@@ -96,6 +96,18 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         "historial de tratamientos de la campaña anterior",
       ],
       recomendacion: "Hipótesis compatible con repilo, un hongo frecuente en otoños húmedos. Vigila si las manchas se extienden y anota cuántas hojas caen. Evita mojar el follaje en riegos. Antes de los periodos de lluvia, valora con un técnico agronómico si procede un tratamiento preventivo autorizado para tu zona y variedad.",
+      tratamiento: {
+        medida: "cobre (caldo bordelés o hidróxido de cobre)",
+        dosis: "2-3 g de producto por litro de agua, en pulverización foliar hasta mojar bien el envés",
+        momento: "antes de los periodos de lluvia otoñales-amorrados de primavera, con temperaturas suaves; repetir tras lluvias fuertes sin superar 2-3 pases por campaña",
+        plazo_seguridad_dias: 15,
+        advertencias: [
+          "Confirma en la etiqueta que el formulado está autorizado para olivar y respeta el plazo de seguridad.",
+          "Evita aplicar con sol fuerte o por encima de 28 grados para no dañar el follaje.",
+          "Alterna materias activas para no favorecer resistencias si repites el tratamiento.",
+        ],
+      },
+      validacion_segunda_foto: "Una foto de cerca del envés de una hoja con manchas, a contraluz, para ver si aparecen las fructificaciones negruzcas.",
       requiere_experto: false,
       razonamiento: "Las manchas circulares con halo amarillo y fructificaciones en envés son compatibles con repilo. La distribución en hojas de distinta edad sugiere infección activa. No parece antracnosis (manchas irregulares, bordes definidos) ni clorosis férrica (clorosis internerval simétrica sin manchas), pero solo la confirmación en campo o laboratorio lo valida.",
     },
@@ -145,6 +157,18 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         "foto del árbol completo para valorar extensión",
       ],
       recomendacion: "Patrón compatible con una carencia de hierro, frecuente en suelos calizos de la zona. Es una hipótesis: conviene confirmarla con análisis de suelo u hoja. Revisa que el riego no encharque y consulta con un técnico la corrección más adecuada (quelatos o enmiendas) según tu suelo.",
+      tratamiento: {
+        medida: "quelato de hierro EDDHA, aplicado al suelo con el riego",
+        dosis: "10-20 g por árbol joven y 30-60 g por árbol adulto, repartidos en el riego localizado",
+        momento: "al inicio del brote de primavera, cuando la demanda de hierro es mayor; repetir una sola vez si la clorosis persiste",
+        plazo_seguridad_dias: null,
+        advertencias: [
+          "El quelato solo corrige el síntoma: si el pH del suelo sigue alto, la clorosis puede volver.",
+          "Confirma la dosis con el análisis de suelo antes de aplicarla a toda la parcela.",
+          "No mezcles el quelato con aguas muy calcáreas si el fabricante lo desaconseja.",
+        ],
+      },
+      validacion_segunda_foto: "Una foto de una hoja nueva y otra vieja del mismo árbol, a la sombra, para comprobar si la clorosis avanza hacia hojas jóvenes.",
       requiere_experto: false,
       razonamiento: "Clorosis internerval en hojas jóvenes con nervios verdes es un patrón clásico de deficiencia de Fe (nutriente inmóvil). No parece Mn (clorosis más difusa, manchas necróticas) ni Zn (hojas pequeñas, entrenudos cortos). El pH alcalino típico de la zona puede limitar la disponibilidad de Fe, pero requiere confirmación analítica.",
     },
@@ -194,6 +218,18 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         "condiciones de humedad y temperatura del invernadero/cultivo",
       ],
       recomendacion: "Señales compatibles con araña roja, que prospera con calor y ambiente seco. Vigila las hojas basales y marca 2-3 plantas para seguir la evolución. Consulta con un técnico el manejo más adecuado (control biológico o tratamientos autorizados respetando plazos de seguridad) antes de actuar.",
+      tratamiento: {
+        medida: "jabón potásico o aceite de parafina; en invernadero, suelta del ácaro depredador Phytoseiulus persimilis",
+        dosis: "jabón potásico al 1-2 por ciento o aceite de parafina al 1 por ciento, mojando bien el envés",
+        momento: "aplicar a primera hora de la mañana o al atardecer, con temperaturas por debajo de 30 grados; repetir cada 5-7 días hasta cortar la progresión",
+        plazo_seguridad_dias: 3,
+        advertencias: [
+          "La araña roja genera resistencias rápido: alterna materias activas y evita repetir la misma.",
+          "Mojar el envés es imprescindible; una aplicación solo en el haz no sirve.",
+          "Respeta el plazo de seguridad del formulado que elijas antes de recolectar.",
+        ],
+      },
+      validacion_segunda_foto: "Una foto macro del envés de una hoja afectada, con buena luz, para confirmar la presencia de ácaros y telarañas.",
       requiere_experto: false,
       razonamiento: "Punteado fino + telarañas + puntos móviles en envés son compatibles con araña roja. No parece trips (rayas plateadas, excrementos negros) ni mosca blanca (ninfas en envés, melaza). La progresión basal-apical y condiciones secas/calurosas favorecen a Tetranychus.",
     },
@@ -238,6 +274,18 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         "presencia de hojas caídas recientes en el suelo",
       ],
       recomendacion: "En esta foto no se aprecian síntomas de problema. Mantén el manejo habitual y vigila en las épocas de riesgo (primavera-otoño por hongos, verano por araña). Repite una foto si notas cambios.",
+      tratamiento: {
+        medida: "",
+        dosis: "",
+        momento: "",
+        plazo_seguridad_dias: null,
+        advertencias: [
+          "No procede ningún tratamiento: la hoja no muestra síntomas en esta foto.",
+          "Aplicar productos sin un problema confirmado solo añade coste y residuos.",
+          "Repite el análisis si aparecen manchas, decoloración o insectos.",
+        ],
+      },
+      validacion_segunda_foto: "Una foto del conjunto del árbol y de las hojas más viejas, para descartar un problema que no aparece en la hoja analizada.",
       requiere_experto: false,
       razonamiento: "La hoja presenta un fenotipo típico de olivo sano: color, textura, tricomas en envés, ausencia de lesiones. No se descarta un problema en otras partes del árbol que no aparecen en la foto.",
     },
@@ -287,6 +335,18 @@ const FEW_SHOT_EXAMPLES: FewShotExample[] = [
         "fase fenológica del viñedo",
       ],
       recomendacion: "Señales muy compatibles con mildiu, que puede avanzar rápido con humedad. Revisa toda la parcela y marca las cepas afectadas para seguir su evolución. Dada la gravedad potencial, contacta cuanto antes con un técnico para valorar un tratamiento autorizado: actuar a tiempo importa más que el producto concreto.",
+      tratamiento: {
+        medida: "cobre (caldo bordelés) para las primeras manchas, o metiram/fosetil-aluminio si la infección ya está extendida",
+        dosis: "cobre a 2-3 g por litro; metiram o fosetil-aluminio a la dosis de etiqueta para vid (orientativa, 2-2,5 kg por hectárea)",
+        momento: "en cuanto aparezcan las primeras manchas y antes de lluvias anunciadas; repetir cada 10-14 días mientras duren las condiciones de humedad",
+        plazo_seguridad_dias: 21,
+        advertencias: [
+          "Confirma que el formulado está autorizado en vid y respeta su plazo de seguridad antes de vendimiar.",
+          "El mildiu avanza muy rápido: si dudas, la primera aplicación no debería esperar.",
+          "Evita el cobre en exceso (acumula en suelo) y respeta el máximo legal por campaña.",
+        ],
+      },
+      validacion_segunda_foto: "Una foto del envés de una hoja con mancha reciente, a la sombra, para confirmar la esporulación blanca algodonosa.",
       requiere_experto: false,
       razonamiento: "Manchas de aceite en haz + esporulación blanca en envés son patognomónicas de mildiu. No parece oídio (polvo blanco en ambas caras, sin manchas aceitosas) ni antracnosis (lesiones angulares, bordes rojizos). Humedad y temperatura recientes habrían favorecido la epidemia.",
     },
@@ -398,7 +458,15 @@ ESQUEMA JSON REQUERIDO:
     }
   ],
   "datos_faltantes": ["string: 2-4 datos o fotos concretas que permitirían afinar la orientación (ej: foto del envés, análisis de suelo, régimen de riego)"],
-  "recomendacion": "string (próximos pasos PRUDENTES y generales para el agricultor: vigilancia, manejo cultural, qué observar, cuándo preocuparse. SIN productos, SIN dosis, SIN tratamientos químicos concretos: para eso se remite al técnico)",
+  "recomendacion": "string (próximos pasos PRUDENTES y generales para el agricultor: vigilancia, manejo cultural, qué observar, cuándo preocuparse. Es la parte gratuita, así que NO repitas aquí la pauta concreta del campo 'tratamiento')",
+  "tratamiento": {
+    "medida": "string (medida o materia activa ORIENTATIVA, por su nombre común, sin marcas comerciales; ej: 'azufre micronizado', 'aceite de parafina', 'quelato de hierro EDDHA'. Si no procede proponer nada, cadena vacía)",
+    "dosis": "string (dosis orientativa con unidad y referencia, SIEMPRE como rango o dosis por hectárea/litro; ej: '2-3 g por litro de agua', '20-30 kg por hectárea'. Cadena vacía si no procede)",
+    "momento": "string (cuándo y cómo aplicarlo: momento fenológico, condiciones de temperatura/humedad, número de pases y cobertura)",
+    "plazo_seguridad_dias": "number o null (días de plazo de seguridad antes de cosecha; null si la medida no tiene plazo o no procede)",
+    "advertencias": ["string: 2-3 precauciones concretas (registro del producto para este cultivo, compatibilidades, resistencia, protección del aplicador)"]
+  },
+  "validacion_segunda_foto": "string (qué foto o dato concreto permitiría confirmar la hipótesis: ej: 'una foto de cerca del envés, con luz natural, para ver si hay telarañas')",
   "requiere_experto": "boolean (true si la confianza es baja <0.5, la imagen es deficiente o el caso es ambiguo)",
   "razonamiento": "string (tu análisis paso a paso: qué ves, cómo lo interpretas, por qué unas hipótesis son más probables que otras)"
 }
@@ -413,8 +481,9 @@ FORMATO Y ESTILO DE REDACCIÓN (obligatorio):
 
 REGLAS CRÍTICAS:
 1. Formula SIEMPRE hipótesis, nunca certezas. Una foto no confirma una enfermedad, plaga o carencia. Usa expresiones como "compatible con", "sugiere", "patrón típico de".
-2. NO recomiendes productos fitosanitarios concretos, marcas, dosis ni calendarios de tratamiento químico. Si el caso parece requerir tratamiento, indica que lo valore un técnico agronómico. Las acciones generales de vigilancia y manejo cultural sí son adecuadas.
-3. Si la confianza de identificación < 0.5 O la confianza de diagnóstico < 0.5, pon "requiere_experto": true y en "recomendacion" indica qué otra foto ayudaría (ej: envés de hoja, detalle de mancha, planta completa).
+2. En "recomendacion" da solo pasos generales de vigilancia y manejo cultural. La pauta concreta (materia activa, dosis, momento) va en "tratamiento" y debe ser ORIENTATIVA, sin marcas comerciales: usa el nombre común de la materia activa o la medida. Cuando no haya nada sensato que proponer (tipo "sano" o información insuficiente), deja "medida" y "dosis" como cadena vacía y explica la cautela en "advertencias".
+2b. En "tratamiento" dosifica SIEMPRE como rango y con unidad ("2-3 g por litro de agua", "20-30 kg por hectárea"), indica el "momento" y rellena "plazo_seguridad_dias" con el valor típico autorizado (null solo si la medida no tiene plazo). En "advertencias" recuerda confirmar que el producto está registrado para ese cultivo y leer la etiqueta. Nunca prescribas con tono de certeza: es una propuesta basada en una foto.
+3. Si la confianza de identificación < 0.5 O la confianza de diagnóstico < 0.5, pon "requiere_experto": true y en "recomendacion" indica qué otra foto ayudaría (ej: envés de hoja, detalle de mancha, planta completa). Rellena "validacion_segunda_foto" en todos los casos, no solo cuando falte información.
 4. NO inventes diagnósticos. Si no ves síntomas claros, usa tipo "sano" con confianza baja y requiere_experto: true, indicando que la foto podría no capturar el problema.
 5. Para "sintomas_observados", describe lo que VES específicamente (ej: "manchas circulares marrón oscuro con halo amarillo"), no interpretaciones.
 6. "gravedad" expresa el impacto potencial si la hipótesis se confirmara: leve = estético/sin impacto productivo; moderada = posible reducción de calidad/rendimiento; severa = posible riesgo de pérdida de cosecha o daño importante.
@@ -422,7 +491,8 @@ REGLAS CRÍTICAS:
 8. "hallazgos_negativos" debe incluir al menos 2-3 ausencias relevantes que apoyen tu hipótesis.
 9. "diagnosticos_diferenciales" debe incluir al menos 1-2 alternativas con su evidencia.
 10. "datos_faltantes" debe listar 2-4 elementos concretos y accionables para el agricultor.
-11. USA los ejemplos como guía de formato y nivel de detalle. Tu "razonamiento" debe mostrar tu proceso como hipótesis contrastada.`;
+11. USA los ejemplos como guía de formato y nivel de detalle. Tu "razonamiento" debe mostrar tu proceso como hipótesis contrastada.
+12. "tratamiento" y "validacion_segunda_foto" son SIEMPRE obligatorios en el JSON. Si no procede tratamiento, envía "medida" y "dosis" vacíos, "plazo_seguridad_dias": null y advertencias explicando por qué.`;
 
 // ============================================================================
 // CAPA 4 — PROMPT DE VERIFICACIÓN ADVERSARIAL
@@ -432,14 +502,15 @@ export const VERIFICATION_PROMPT = `Eres un revisor crítico de orientaciones fi
 1. Los hechos observados en la(s) imagen(es) (extraídos por otro evaluador)
 2. La hipótesis propuesta
 
-Tu trabajo: verificar que la hipótesis es CONSISTENTE con los hechos observados y que su redacción es prudente (hipótesis, no certeza; sin prescripciones de productos o dosis).
+Tu trabajo: verificar que la hipótesis es CONSISTENTE con los hechos observados, que la redacción es prudente (hipótesis, no certeza) y que la pauta de "tratamiento" es coherente, está dosificada como rango con unidad y no se presenta como certeza.
 
 Comprueba:
 - ¿Los síntomas declarados están realmente en los hechos observados?
 - ¿La hipótesis explica TODOS los síntomas relevantes?
 - ¿Hay síntomas observados que la hipótesis NO explica?
 - ¿La confianza declarada es apropiada para la evidencia disponible?
-- ¿La recomendación es prudente, general y coherente con la gravedad (sin productos ni dosis)?
+- ¿La "recomendacion" es prudente, general y coherente con la gravedad, sin repetir la pauta concreta?
+- ¿El "tratamiento" es coherente con la hipótesis, usa nombre común sin marcas, dosis como rango con unidad y "plazo_seguridad_dias" informado?
 - ¿Las causas alternativas están valoradas con evidencia válida?
 
 ESQUEMA JSON:
@@ -464,11 +535,12 @@ Reanaliza la(s) imagen(es) siendo MÁS ESPECÍFICO en:
 - Si es hoja: indica si ves envés; si hay fotos del envés, prioriza plagas/ácaros
 - Si hay múltiples síntomas: prioriza el más evidente
 - Si la especie es incierta: indica "desconocida" y enfócate en síntomas
-- Formula la hipótesis principal como "compatible con..." y NO prescribas productos ni dosis
+- Formula la hipótesis principal como "compatible con..." y presenta el "tratamiento" como pauta orientativa, con dosis en rango y sin marcas comerciales
 - INCLUYE "razonamiento" paso a paso obligatorio
 - INCLUYE "hallazgos_negativos" con al menos 2-3 ausencias relevantes
 - INCLUYE "diagnosticos_diferenciales" con al menos 1-2 alternativas
 - INCLUYE "datos_faltantes" con 2-4 elementos accionables
+- INCLUYE "tratamiento" y "validacion_segunda_foto" completos
 
 Devuelve SOLO el JSON válido según el esquema.`;
 

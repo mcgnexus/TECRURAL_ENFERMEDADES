@@ -127,6 +127,7 @@ export const ETIQUETAS_EMBUDO: Record<string, string> = {
   analisis_completado: "Reciben el análisis",
   resultado_visto: "Ven el resultado",
   cta_revision_abierto: "Abren el formulario",
+  informe_desbloqueado: "Ven el informe completo",
   lead_enviado: "Envían el contacto",
 };
 
@@ -138,6 +139,8 @@ export const ETIQUETAS_EVENTO: Record<string, string> = {
   analisis_error: "Error",
   resultado_visto: "Resultado",
   cta_revision_abierto: "Formulario",
+  informe_desbloqueado: "Informe",
+  informe_pdf: "PDF",
   lead_enviado: "Contacto",
   lead_error: "Error contacto",
   whatsapp_click: "WhatsApp",

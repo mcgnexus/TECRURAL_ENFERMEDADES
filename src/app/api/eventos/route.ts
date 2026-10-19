@@ -39,6 +39,8 @@ const PERMITIDOS: NombreEvento[] = [
   "analisis_error",
   "resultado_visto",
   "cta_revision_abierto",
+  "informe_desbloqueado",
+  "informe_pdf",
   "lead_enviado",
   "lead_error",
   "whatsapp_click",

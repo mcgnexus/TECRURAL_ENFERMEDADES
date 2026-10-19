@@ -12,6 +12,8 @@
  * - analisis_iniciado / analisis_completado / analisis_error
  * - resultado_visto: con gravedad y si requiere experto (calidad del lead)
  * - cta_revision_abierto: abrió el formulario de contacto tras diagnóstico
+ * - informe_desbloqueado: dejó el teléfono y vio el informe completo
+ * - informe_pdf: guardó o imprimió el informe en PDF
  * - lead_enviado / lead_error: formulario enviado
  * - whatsapp_click: contacto por WhatsApp
  */
@@ -24,6 +26,8 @@ export type NombreEvento =
   | "analisis_error"
   | "resultado_visto"
   | "cta_revision_abierto"
+  | "informe_desbloqueado"
+  | "informe_pdf"
   | "lead_enviado"
   | "lead_error"
   | "whatsapp_click";

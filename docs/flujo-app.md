@@ -61,12 +61,20 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
    - El resultado se normaliza y se valida su coherencia; se marca
      `requiere_experto` cuando procede.
 6. **Resultado**.
-   - Lenguaje claro, sin porcentajes de confianza no calibrados ni
-     prescripciones de productos. Aviso de que no sustituye a un técnico.
-   - Las fotos **no se guardan** por defecto.
-7. **Revisión técnica opcional**.
-   - Si el usuario la solicita, se adjuntan las fotos al lead y se avisa al
-     técnico (Telegram o webhook). Es independiente del análisis.
+   - Orientación inicial gratuita: hechos observados, otras posibilidades,
+     próximos pasos prudentes. Lenguaje claro, sin porcentajes de confianza no
+     calibrados.
+   - El **informe completo** (tratamiento con materia activa y dosis en rango,
+     momento de aplicación y plazo de seguridad, y qué segunda foto confirma el
+     diagnóstico) queda tras dejar un teléfono: es el imán suave que convierte.
+     Se muestra al instante en pantalla y se puede guardar en PDF.
+   - El tratamiento es una **sugerencia orientativa, no una prescripción**: la
+     app recuerda confirmar el registro del producto y respetar la etiqueta y el
+     plazo de seguridad. Las fotos **no se guardan** por defecto.
+7. **Revisión técnica**.
+   - Al dejar el teléfono se registra un lead (con las fotos adjuntas si las hay)
+     y se avisa al técnico (Telegram o webhook). La revisión es independiente del
+     análisis y no tiene coste.
 8. **Historial** (`/historial`).
    - Se guarda por dispositivo (cookie), no por cuenta. Se avisa de que borrar
      cookies o cambiar de móvil puede impedir recuperarlo.
@@ -128,8 +136,18 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
 - Eventos first-party en la tabla `eventos`, contados por visitante único y día:
   `portada_vista` → `captura_realizada` → `analisis_iniciado` →
   `analisis_completado` → `resultado_visto` → `cta_revision_abierto` →
-  `lead_enviado`.
+  `informe_desbloqueado` → `lead_enviado`. Se añade `informe_pdf` cuando se
+  guarda el informe.
 - La conversión se mide sobre visitas a la portada, no sobre análisis.
+
+## Tratamiento y límites legales
+
+- El informe incluye una **pauta orientativa** (materia activa por nombre común,
+  dosis en rango, momento y plazo de seguridad). No es una receta: la app avisa
+  de que partió de una foto, de que puede contener errores y de que hay que
+  confirmar el registro del producto y leer la etiqueta.
+- Pendiente: revisión legal de este cambio (antes la app no prescribía nada). Ver
+  `docs/pendientes-legal-formulario.md`.
 
 ## Operación
 
