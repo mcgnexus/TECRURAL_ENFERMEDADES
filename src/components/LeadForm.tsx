@@ -48,10 +48,11 @@ export function LeadForm({
 }: LeadFormProps) {
   const [estado, setEstado] = useState<EstadoEnvio>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [errores, setErrores] = useState<{ telefono?: string; solicitud?: string }>({});
+  const [errores, setErrores] = useState<{ telefono?: string; email?: string; contacto?: string; solicitud?: string }>({});
   const [form, setForm] = useState({
     nombre: "",
     telefono: "",
+    email: "",
     municipio: prefill?.municipio ?? "",
     cultivo: prefill?.cultivo ?? "",
     sintoma: "",
@@ -66,11 +67,24 @@ export function LeadForm({
     setForm((f) => ({ ...f, [campo]: valor }));
 
   const TELEFONO_REGEX = /^[+]?[\d\s().-]{9,20}$/;
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  const telefono = form.telefono.trim();
+  const correo = form.email.trim();
+  /** Solo se pidió correo: no tiene sentido ofrecer llamada ni WhatsApp. */
+  const soloCorreo = !telefono && Boolean(correo);
 
   const validar = (): boolean => {
-    const nuevos: { telefono?: string; solicitud?: string } = {};
-    if (!TELEFONO_REGEX.test(form.telefono.trim())) {
+    const nuevos: { telefono?: string; email?: string; contacto?: string; solicitud?: string } = {};
+    if (telefono && !TELEFONO_REGEX.test(telefono)) {
       nuevos.telefono = "Introduce un teléfono válido (9-15 dígitos).";
+    }
+    if (correo && !EMAIL_REGEX.test(correo)) {
+      nuevos.email = "Introduce un correo válido (por ejemplo: nombre@dominio.com).";
+    }
+    // Informe completo y revisión: basta con UNO de los dos canales.
+    if (!telefono && !correo) {
+      nuevos.contacto = "Déjanos tu teléfono o tu correo: con uno de los dos basta para ver el informe completo.";
     }
     if (!form.solicitudRespuesta) {
       nuevos.solicitud = "Confirma que solicitas una respuesta sobre este caso.";
@@ -131,16 +145,21 @@ export function LeadForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: form.nombre.trim() || undefined,
-          telefono: form.telefono.trim(),
+          telefono: form.telefono.trim() || undefined,
+          email: form.email.trim() || undefined,
           municipio: form.municipio.trim() || undefined,
           cultivo: form.cultivo.trim() || undefined,
           sintoma: sintomaFinal,
           mensaje: form.mensaje.trim() || undefined,
           diagnostico_id: diagnosticoId,
           origen,
-          canal_contacto: form.canalContacto,
+          // Sin teléfono no se puede llamar ni escribir por WhatsApp: el canal
+          // efectivo pasa a ser el correo.
+          canal_contacto: soloCorreo ? "correo" : form.canalContacto,
           solicitud_respuesta: form.solicitudRespuesta,
-          consentimiento_comercial: form.consentimientoComercial,
+          // El consentimiento comercial es de WhatsApp, así que solo procede
+          // cuando hay número.
+          consentimiento_comercial: form.consentimientoComercial && Boolean(form.telefono.trim()),
           web: form.web,
           contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
@@ -248,16 +267,19 @@ export function LeadForm({
             />
           </div>
           <div>
-            <label htmlFor={`lead-telefono-${origen}`} className={labelCls}>Teléfono / WhatsApp *</label>
+            <label htmlFor={`lead-telefono-${origen}`} className={labelCls}>
+              Teléfono / WhatsApp <span className="font-normal text-tr-muted">(opcional si dejas el correo)</span>
+            </label>
             <input
               id={`lead-telefono-${origen}`}
               type="tel"
-              required
               inputMode="tel"
               value={form.telefono}
               onChange={(e) => {
                 set("telefono", e.target.value);
-                if (errores.telefono) setErrores((x) => ({ ...x, telefono: undefined }));
+                if (errores.telefono || errores.contacto) {
+                  setErrores((x) => ({ ...x, telefono: undefined, contacto: undefined }));
+                }
               }}
               disabled={estado === "enviando"}
               autoComplete="tel"
@@ -276,6 +298,34 @@ export function LeadForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
+            <label htmlFor={`lead-email-${origen}`} className={labelCls}>
+              Correo electrónico <span className="font-normal text-tr-muted">(opcional si dejas el teléfono)</span>
+            </label>
+            <input
+              id={`lead-email-${origen}`}
+              type="email"
+              inputMode="email"
+              value={form.email}
+              onChange={(e) => {
+                set("email", e.target.value);
+                if (errores.email || errores.contacto) {
+                  setErrores((x) => ({ ...x, email: undefined, contacto: undefined }));
+                }
+              }}
+              disabled={estado === "enviando"}
+              autoComplete="email"
+              aria-invalid={errores.email ? "true" : undefined}
+              aria-describedby={errores.email ? `lead-email-error-${origen}` : undefined}
+              className={`${inputCls} ${errores.email ? "border-tr-warning-text" : ""}`}
+              placeholder="Ej: nombre@correo.com"
+            />
+            {errores.email && (
+              <p id={`lead-email-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+                {errores.email}
+              </p>
+            )}
+          </div>
+          <div>
             <label htmlFor={`lead-municipio-${origen}`} className={labelCls}>Municipio</label>
             <input
               id={`lead-municipio-${origen}`}
@@ -287,6 +337,17 @@ export function LeadForm({
               placeholder="Tu zona"
             />
           </div>
+        </div>
+
+        {/* Falta el canal de contacto: se avisa aquí y no bajo un campo
+            concreto, porque no es culpa del teléfono ni del correo. */}
+        {errores.contacto && (
+          <p className="text-small text-tr-warning-text" role="alert">
+            {errores.contacto}
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor={`lead-cultivo-${origen}`} className={labelCls}>Cultivo</label>
             <input
@@ -299,20 +360,20 @@ export function LeadForm({
               placeholder="Tu cultivo"
             />
           </div>
-        </div>
-
-        <div>
-          <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
-          <select
-            id={`lead-canal-${origen}`}
-            value={form.canalContacto}
-            onChange={(e) => set("canalContacto", e.target.value)}
-            disabled={estado === "enviando"}
-            className={inputCls}
-          >
-            <option value="llamada">Llamada telefónica</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
+          <div>
+            <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
+            <select
+              id={`lead-canal-${origen}`}
+              value={soloCorreo ? "correo" : form.canalContacto}
+              onChange={(e) => set("canalContacto", e.target.value)}
+              disabled={estado === "enviando"}
+              className={inputCls}
+            >
+              <option value="llamada" disabled={soloCorreo}>Llamada telefónica</option>
+              <option value="whatsapp" disabled={soloCorreo}>WhatsApp</option>
+              <option value="correo">Correo electrónico</option>
+            </select>
+          </div>
         </div>
 
         {/* Sin diagnóstico detrás (página de contacto) el técnico no sabe qué
@@ -383,8 +444,8 @@ export function LeadForm({
             <label htmlFor={`lead-solicitud-${origen}`} className="block text-small text-tr-ink leading-relaxed">
               <span className="block font-semibold">
                 {esDirecto
-                  ? "Solicito que TecRural revise este caso y me responda al teléfono indicado. *"
-                  : "Solicito ver el informe completo y que TecRural revise este caso, y autorizo que me respondáis al teléfono indicado. *"}
+                  ? "Solicito que TecRural revise este caso y me responda al teléfono o correo indicado. *"
+                  : "Solicito ver el informe completo y que TecRural revise este caso, y autorizo que me respondáis al teléfono o correo indicado. *"}
               </span>
               <span className="mt-1 block text-tr-muted">Usaremos tus datos ({textos.datosTratados}) para gestionar la solicitud. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.</span>
             </label>
@@ -396,21 +457,25 @@ export function LeadForm({
           </div>
         </div>
 
-        {/* Consentimiento comercial: opcional, desmarcado por defecto */}
-        <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
-          <input
-            id={`lead-comercial-${origen}`}
-            type="checkbox"
-            checked={form.consentimientoComercial}
-            onChange={(e) => set("consentimientoComercial", e.target.checked)}
-            disabled={estado === "enviando"}
-            className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
-          />
-          <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
-            Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
-            <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
-          </label>
-        </div>
+        {/* Consentimiento comercial: opcional, desmarcado por defecto. Solo se
+            ofrece cuando hay teléfono: es un consentimiento para WhatsApp y,
+            sin número, no hay nada que enviar. */}
+        {Boolean(form.telefono.trim()) && (
+          <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+            <input
+              id={`lead-comercial-${origen}`}
+              type="checkbox"
+              checked={form.consentimientoComercial}
+              onChange={(e) => set("consentimientoComercial", e.target.checked)}
+              disabled={estado === "enviando"}
+              className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+            />
+            <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
+              Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
+              <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
+            </label>
+          </div>
+        )}
 
         <button
           type="submit"

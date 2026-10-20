@@ -51,7 +51,9 @@ interface PayloadNotificacion {
   estado: string;
   origen: string;
   nombre: string;
+  /** Vacío cuando la persona solo dejó correo. */
   telefono: string;
+  email: string | null;
   municipio: string | null;
   cultivo: string | null;
   sintoma: string | null;
@@ -84,6 +86,7 @@ function construirPayload(lead: LeadFila): PayloadNotificacion {
     origen: lead.origen,
     nombre: lead.nombre,
     telefono: lead.telefono,
+    email: lead.email ?? null,
     municipio: lead.municipio,
     cultivo: lead.cultivo,
     sintoma: lead.sintoma,
@@ -105,9 +108,10 @@ function resumenTexto(p: PayloadNotificacion): string {
     .filter((v): v is string => Boolean(v))
     .join(" · ");
   const caso = p.sintoma ?? p.mensaje ?? "sin descripción";
+  const contacto = [p.telefono, p.email].filter((v): v is string => Boolean(v)).join(" · ");
   return (
     `Lead ${p.prioridad.toUpperCase()} (${p.puntuacion} pts)\n` +
-    `${p.nombre} · ${p.telefono}\n` +
+    `${p.nombre}${contacto ? ` · ${contacto}` : ""}\n` +
     (donde ? `${donde}\n` : "") +
     `${caso}\n` +
     (p.origen === "post_diagnostico" && p.especie
@@ -156,7 +160,9 @@ function mensajeTelegram(p: PayloadNotificacion): string {
   lineas.push("");
 
   lineas.push(`<b>${escaparHtml(p.nombre)}</b>`);
-  lineas.push(`Tel: <code>${escaparHtml(p.telefono)}</code>`);
+  // El lead puede haber dejado solo correo: se muestra lo que haya.
+  if (p.telefono) lineas.push(`Tel: <code>${escaparHtml(p.telefono)}</code>`);
+  if (p.email) lineas.push(`Correo: <code>${escaparHtml(p.email)}</code>`);
 
   const zona = [p.municipio, p.cultivo]
     .filter((v): v is string => Boolean(v))

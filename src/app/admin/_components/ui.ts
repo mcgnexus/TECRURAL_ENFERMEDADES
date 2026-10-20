@@ -154,6 +154,7 @@ export const ETIQUETAS_ORIGEN: Record<string, string> = {
 export const ETIQUETAS_CANAL: Record<string, string> = {
   whatsapp: "WhatsApp",
   llamada: "Llamada",
+  correo: "Correo",
 };
 
 export function etiquetaCanal(canal: string | null): string {

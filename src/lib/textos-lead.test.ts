@@ -52,9 +52,12 @@ describe("posterior al diagnóstico", () => {
     expect(t.encabezadoExito).toBe("Informe completo desbloqueado");
   });
 
-  it("pide el teléfono como contrapartida, no una revisión a ciegas", () => {
+  it("pide un canal de contacto —teléfono o correo— como contrapartida, no una revisión a ciegas", () => {
     const t = textosLead("post_diagnostico", 1);
     expect(t.intro).toMatch(/teléfono/i);
+    expect(t.intro).toMatch(/correo/i);
+    // Basta con uno de los dos: el texto no puede dar por hecho el teléfono.
+    expect(t.intro).not.toMatch(/solo el teléfono|exclusivamente/i);
   });
 
   it("concuerda en número: singular con una foto", () => {

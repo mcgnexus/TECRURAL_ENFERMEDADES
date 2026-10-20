@@ -127,6 +127,7 @@ export function aplicarFiltros(leads: LeadFila[], filtros: Filtros): LeadFila[] 
       const heno = [
         lead.nombre,
         lead.telefono,
+        lead.email,
         lead.municipio,
         lead.cultivo,
         lead.sintoma,

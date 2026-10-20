@@ -6,8 +6,9 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 
 ## 0. Entrega de tratamiento y dosis en el informe (nuevo, prioritario)
 - La pantalla final ya no ofrece solo "revisar tu caso": entrega un **informe completo con
-  tratamiento orientativo, dosis y plazo de seguridad**, y lo desbloquea a cambio del
-  teléfono (imán suave). La app lo presenta como **sugerencia**, no como prescripción.
+  tratamiento orientativo, dosis y plazo de seguridad**, y lo desbloquea a cambio de un
+  teléfono o un correo (imán suave; basta uno de los dos). La app lo presenta como
+  **sugerencia**, no como prescripción.
 - Implementado en `src/lib/system-prompt.ts` (campo `tratamiento`) y
   `src/components/Results.tsx`; textos en `src/lib/textos-lead.ts`.
 - **Riesgo a revisar con asesoría jurídica:** recomendar productos fitosanitarios y dosis

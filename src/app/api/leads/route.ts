@@ -34,13 +34,19 @@ const utmSchema = z.object({
 });
 
 const leadSchema = z.object({
-  // El nombre es opcional; el teléfono es el canal mínimo de contacto
+  // El nombre es opcional. Del contacto, basta con teléfono O correo: se
+  // exige al menos uno en el superRefine del final, porque el informe completo
+  // solo se revela a cambio de un canal por el que el técnico pueda responder.
   nombre: z.string().trim().max(80).optional(),
   telefono: z
     .string()
     .trim()
     .regex(TELEFONO_REGEX, "Teléfono no válido. Revisa el número indicado.")
-    .transform((t) => t.replace(/[\s().-]/g, "")),
+    .optional()
+    .transform((t) => (t ? t.replace(/[\s().-]/g, "") : undefined)),
+  email: z
+    .email({ message: "Correo no válido. Revisa la dirección indicada." })
+    .transform((e) => e.toLowerCase()),
   municipio: z.string().trim().max(80).optional(),
   cultivo: z.string().trim().max(80).optional(),
   sintoma: z.string().trim().max(200).optional(),
@@ -51,6 +57,7 @@ const leadSchema = z.object({
   diagnostico_id: z.string().regex(UUID_REGEX, "diagnostico_id no válido").optional(),
   origen: z.enum(["post_diagnostico", "contacto_directo"]),
   // Canal de contacto solicitado para responder a la revisión
+  // (llamada | whatsapp | correo)
   canal_contacto: z.string().trim().max(40).optional(),
   // Confirmación explícita de que solicita respuesta sobre este caso
   solicitud_respuesta: z.literal(true, {
@@ -76,6 +83,16 @@ const leadSchema = z.object({
   imagenes: z.array(z.string().max(2_400_000)).max(3).optional(),
   // Campo trampa anti-spam: si llega relleno se ignora la petición
   web: z.string().optional(),
+}).superRefine((datos, ctx) => {
+  // Sin al menos un canal de contacto no hay forma de devolver el informe ni
+  // de responder a la revisión, así que el envío se rechaza aquí.
+  if (!datos.telefono && !datos.email) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["telefono"],
+      message: "Déjanos un teléfono o un correo para recibir el informe y poder contactarte.",
+    });
+  }
 });
 
 // Límite de solicitudes por IP. Antes vivía en un Map del módulo, es decir en
@@ -99,6 +116,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Honeypot relleno: probable bot. Se comprueba antes de validar el resto,
+    // para que un envío automático con el campo de contacto vacío también
+    // reciba un OK silencioso en lugar de un 400 que lo delataría.
+    if (typeof body?.web === "string" && body.web.length > 0) {
+      return NextResponse.json({ success: true });
+    }
+
     const parsed = leadSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -107,11 +132,6 @@ export async function POST(request: NextRequest) {
         { error: primero?.message ?? "Datos no válidos" },
         { status: 400 }
       );
-    }
-
-    // Honeypot relleno: probable bot. Respondemos OK sin guardar nada.
-    if (parsed.data.web && parsed.data.web.length > 0) {
-      return NextResponse.json({ success: true });
     }
 
     const datos = parsed.data;
@@ -149,7 +169,8 @@ export async function POST(request: NextRequest) {
       const prueba = {
         ...datos,
         nombre: datos.nombre || "Prueba de canal",
-        telefono: datos.telefono,
+        telefono: datos.telefono ?? "",
+        email: datos.email ?? null,
         prioridad,
         puntuacion,
         fotos: 0,
@@ -176,7 +197,9 @@ export async function POST(request: NextRequest) {
     const guardado = await guardarLead({
       usuarioId: usuarioId ?? undefined,
       nombre: datos.nombre || "No facilitado",
-      telefono: datos.telefono,
+      // Cadena vacía si solo dejó correo: la columna es NOT NULL (ver migración 0010).
+      telefono: datos.telefono ?? "",
+      email: datos.email,
       municipio: datos.municipio || datos.contexto?.municipio || undefined,
       cultivo: datos.cultivo || datos.contexto?.cultivo || undefined,
       sintoma: datos.sintoma || datos.contexto?.sintoma || undefined,

@@ -39,7 +39,10 @@ export interface ContextoDiagnosticoLead {
 
 export interface DatosLead {
   nombre?: string;
-  telefono: string;
+  /** Teléfono de contacto. Puede faltar si la persona solo deja el correo. */
+  telefono?: string;
+  /** Correo de contacto. Puede faltar si la persona solo deja el teléfono. */
+  email?: string;
   municipio?: string;
   cultivo?: string;
   sintoma?: string;
@@ -66,7 +69,14 @@ export interface LeadFila {
   id: string;
   diagnostico_id: string | null;
   nombre: string;
+  /**
+   * Teléfono de contacto. La columna original es NOT NULL, así que un lead que
+   * solo deja correo se guarda con cadena vacía: comprobar con `lead.email`
+   * antes de asumir que hay número.
+   */
   telefono: string;
+  /** Correo de contacto; null en los leads anteriores al correo. */
+  email: string | null;
   municipio: string | null;
   cultivo: string | null;
   sintoma: string | null;

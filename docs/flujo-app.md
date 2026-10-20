@@ -66,14 +66,16 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
      calibrados.
    - El **informe completo** (tratamiento con materia activa y dosis en rango,
      momento de aplicación y plazo de seguridad, y qué segunda foto confirma el
-     diagnóstico) queda tras dejar un teléfono: es el imán suave que convierte.
+     diagnóstico) queda tras dejar un teléfono o un correo (basta uno de los dos): es el imán suave que convierte.
      Se muestra al instante en pantalla y se puede guardar en PDF.
    - El tratamiento es una **sugerencia orientativa, no una prescripción**: la
      app recuerda confirmar el registro del producto y respetar la etiqueta y el
      plazo de seguridad. Las fotos **no se guardan** por defecto.
 7. **Revisión técnica**.
-   - Al dejar el teléfono se registra un lead (con las fotos adjuntas si las hay)
-     y se avisa al técnico (Telegram o webhook). La revisión es independiente del
+   - Al dejar el teléfono o el correo se registra un lead (con las fotos
+     adjuntas si las hay) y se avisa al técnico (Telegram o webhook). Si solo
+     se dejó correo, el canal registrado es `correo` y no se ofrece el
+     consentimiento de WhatsApp. La revisión es independiente del
      análisis y no tiene coste.
 8. **Historial** (`/historial`).
    - Se guarda por dispositivo (cookie), no por cuenta. Se avisa de que borrar

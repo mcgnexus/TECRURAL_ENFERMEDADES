@@ -175,7 +175,7 @@ export function LeadsTab({
               type="search"
               value={filtros.texto}
               onChange={(e) => setFiltros({ ...filtros, texto: e.target.value })}
-              placeholder="Nombre, teléfono, municipio, cultivo, síntoma…"
+              placeholder="Nombre, teléfono, correo, municipio, cultivo, síntoma…"
               className={inputMini}
             />
           </div>
@@ -279,6 +279,7 @@ export function LeadsTab({
               <option value="">Todos</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="llamada">Llamada</option>
+              <option value="correo">Correo</option>
             </select>
           </div>
           <div>
@@ -465,12 +466,24 @@ export function LeadsTab({
                   </td>
                   <td className="px-3 py-3">
                     <span className="text-tr-ink font-medium">{lead.nombre}</span>
-                    <a
-                      href={`tel:${lead.telefono}`}
-                      className="block text-tr-green-strong hover:underline"
-                    >
-                      {lead.telefono}
-                    </a>
+                    {lead.telefono ? (
+                      <a
+                        href={`tel:${lead.telefono}`}
+                        className="block text-tr-green-strong hover:underline"
+                      >
+                        {lead.telefono}
+                      </a>
+                    ) : (
+                      <span className="block text-caption text-tr-muted">Sin teléfono</span>
+                    )}
+                    {lead.email && (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="block text-tr-green-strong hover:underline break-all"
+                      >
+                        {lead.email}
+                      </a>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-tr-muted">{etiquetaCanal(lead.canal_contacto)}</td>
                   <td className="px-3 py-3 text-tr-muted">

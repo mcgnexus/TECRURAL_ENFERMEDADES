@@ -77,7 +77,7 @@ export function BorrarLeadDialog({
           {leads.slice(0, 20).map((l) => (
             <li key={l.id} className="px-3 py-1.5 flex justify-between gap-2">
               <span className="text-tr-ink truncate">{l.nombre}</span>
-              <span className="whitespace-nowrap">{l.telefono}</span>
+              <span className="whitespace-nowrap">{l.telefono || l.email || "sin contacto"}</span>
             </li>
           ))}
           {leads.length > 20 && (

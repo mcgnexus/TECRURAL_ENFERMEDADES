@@ -17,6 +17,7 @@ function lead(parcial: Partial<LeadFila> & { id: string }): LeadFila {
     diagnostico_id: null,
     nombre: "Sin nombre",
     telefono: "600000000",
+    email: null,
     municipio: null,
     cultivo: null,
     sintoma: null,
@@ -106,6 +107,18 @@ describe("aplicarFiltros", () => {
     expect(aplicarFiltros(leads, { ...FILTROS_VACIOS, texto: "ana" })).toEqual([A]);
     expect(aplicarFiltros(leads, { ...FILTROS_VACIOS, texto: "62" })).toEqual([B]);
     expect(aplicarFiltros(leads, { ...FILTROS_VACIOS, texto: "olivar" })).toEqual([A, C]);
+  });
+
+  it("encuentra por correo un lead que no dejó teléfono", () => {
+    // Caso real: el informe completo se desbloquea con teléfono O correo, así
+    // que el panel tiene que poder buscar por las dos vías.
+    const sinTelefono = lead({ id: "e", telefono: "", email: "campo@correo.es" });
+    expect(aplicarFiltros([sinTelefono], { ...FILTROS_VACIOS, texto: "campo@correo" })).toEqual([
+      sinTelefono,
+    ]);
+    expect(aplicarFiltros([sinTelefono], { ...FILTROS_VACIOS, texto: "correo.es" })).toEqual([
+      sinTelefono,
+    ]);
   });
 
   it("filtra por rango de fechas inclusive", () => {

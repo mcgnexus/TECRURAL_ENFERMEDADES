@@ -336,7 +336,7 @@ function HomeContent() {
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">3</span>
                 <div>
                   <h3 className="font-heading font-semibold text-tr-forest">Llévate el informe completo</h3>
-                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Con tu teléfono desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto.</p>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Con tu teléfono o tu correo desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto.</p>
                 </div>
               </li>
             </ol>
@@ -367,7 +367,7 @@ function HomeContent() {
                 TecRural está a cargo de Manuel Carrasco García y ofrece orientación a agricultores del Altiplano de Granada y la Costa Tropical.
               </p>
               <p className="mt-3 text-body leading-relaxed text-tr-muted">
-                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada o WhatsApp, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. El tiempo de respuesta depende de la demanda; la solicitud no tiene coste ni implica contratar un servicio.
+                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada, WhatsApp o correo, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. El tiempo de respuesta depende de la demanda; la solicitud no tiene coste ni implica contratar un servicio.
               </p>
             </div>
           </section>
@@ -414,8 +414,8 @@ function HomeContent() {
 
         <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
           Al terminar verás una orientación inicial gratuita. Si quieres el informe completo con el
-          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu teléfono; la
-          foto solo se comparte con el técnico cuando envías esa solicitud.
+          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu teléfono o tu
+          correo; la foto solo se comparte con el técnico cuando envías esa solicitud.
         </p>
 
         {error && (

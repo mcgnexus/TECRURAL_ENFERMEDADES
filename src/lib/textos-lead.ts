@@ -30,8 +30,9 @@ export function textosLead(
   const fotos = Math.max(0, Math.trunc(numeroFotos));
 
   // El canal lo elige el usuario en el formulario, así que ningún texto puede
-  // dar por hecho que se le va a llamar.
-  const canal = "te contactará por el canal que has indicado (llamada o WhatsApp al número facilitado)";
+  // dar por hecho que se le va a llamar. Si solo deja correo, el formulario
+  // fuerza el canal "correo".
+  const canal = "te contactará por el canal que has indicado (llamada, WhatsApp o correo)";
 
   if (directo) {
     return {
@@ -48,7 +49,7 @@ export function textosLead(
 
   return {
     cabecera: "Recibe el informe completo",
-    intro: `Déjanos un teléfono y verás al momento el informe completo: el tratamiento orientativo con su dosis y el momento de aplicación, y qué foto nos confirma el diagnóstico. Con tus datos y ${fotosTxt}, además, un técnico puede revisar este caso contigo.`,
+    intro: `Déjanos un teléfono o un correo y verás al momento el informe completo: el tratamiento orientativo con su dosis y el momento de aplicación, y qué foto nos confirma el diagnóstico. Con tus datos y ${fotosTxt}, además, un técnico puede revisar este caso contigo.`,
     encabezadoExito: "Informe completo desbloqueado",
     cuerpoExito: `Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Hemos registrado tu caso junto con la orientación y ${fotosTxt}; un técnico de TecRural lo revisará y ${canal}.`,
     // El consentimiento enumera los datos que de verdad se tratan: sostiene el

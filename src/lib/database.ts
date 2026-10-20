@@ -348,6 +348,24 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_eventos_created
     ON eventos(created_at DESC)
   `;
+
+  // Migración 0010: correo de contacto.
+  //
+  // El informe completo ya no exige teléfono: basta con un teléfono O un correo.
+  // `telefono` se conserva como NOT NULL porque relajar esa restricción exige
+  // una sentencia que el guard de scripts/comprobar-esquema-sin-borrados.mjs
+  // no admite en esta función, así que un lead que solo deja correo se guarda
+  // con cadena vacía en `telefono` (ver src/types/lead.ts y la validación de
+  // src/app/api/leads/route.ts, que exige al menos uno de los dos).
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS email TEXT
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_leads_email
+    ON leads(email)
+  `;
   })();
 }
 
@@ -366,7 +384,10 @@ export interface NuevoLead {
   /** UUID de visitante (cookie httpOnly del proxy). NULL si no se pudo leer. */
   usuarioId?: string;
   nombre: string;
+  /** Cadena vacía cuando la persona solo dejó correo (la columna es NOT NULL). */
   telefono: string;
+  /** Correo de contacto, si lo dejó. */
+  email?: string;
   municipio?: string;
   cultivo?: string;
   sintoma?: string;
@@ -395,7 +416,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
   const db = getSql();
   const [row] = await db`
     INSERT INTO leads (
-      usuario_id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+      usuario_id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
       mensaje, origen, canal_contacto, prioridad, puntuacion, contexto_diagnostico, ip,
       imagenes, consentimiento_comercial, consentimiento_comercial_fecha,
       consentimiento_texto_version, canal_comercial,
@@ -406,6 +427,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
       ${lead.diagnosticoId ?? null},
       ${lead.nombre},
       ${lead.telefono},
+      ${lead.email ?? null},
       ${lead.municipio ?? null},
       ${lead.cultivo ?? null},
       ${lead.sintoma ?? null},
@@ -429,7 +451,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
       ${lead.utmContent ?? null},
       ${lead.utmTerm ?? null}
     )
-    RETURNING id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+    RETURNING id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
               mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
               consentimiento_comercial, consentimiento_texto_version, canal_comercial,
               baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
@@ -749,7 +771,7 @@ export async function obtenerLeads(
 
   if (filtros.estado && filtros.prioridad) {
     const rows = await db`
-      SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+      SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
@@ -764,7 +786,7 @@ export async function obtenerLeads(
 
   if (filtros.estado) {
     const rows = await db`
-      SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+      SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
@@ -779,7 +801,7 @@ export async function obtenerLeads(
 
   if (filtros.prioridad) {
     const rows = await db`
-      SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+      SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
@@ -793,7 +815,7 @@ export async function obtenerLeads(
   }
 
   const rows = await db`
-    SELECT id, diagnostico_id, nombre, telefono, municipio, cultivo, sintoma, hectareas,
+    SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
            mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
            consentimiento_comercial, consentimiento_texto_version, canal_comercial,
            baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
@@ -992,6 +1014,7 @@ function mapearLead(row: LeadRow): LeadFila {
     diagnostico_id: (row.diagnostico_id as string | null) ?? null,
     nombre: row.nombre as string,
     telefono: row.telefono as string,
+    email: (row.email as string | null) ?? null,
     municipio: (row.municipio as string | null) ?? null,
     cultivo: (row.cultivo as string | null) ?? null,
     sintoma: (row.sintoma as string | null) ?? null,

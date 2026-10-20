@@ -256,7 +256,7 @@ export function Results({
         <p className="mt-2 text-caption text-tr-muted">{nivel.ayuda}</p>
       </div>
 
-      {/* Informe completo: imán suave. Se revela tras dejar el teléfono. */}
+      {/* Informe completo: imán suave. Se revela tras dejar un teléfono o un correo. */}
       {informeDesbloqueado ? (
         <div className={`${cardStyles} p-5 border-l-4 border-tr-brand-green`} aria-label="Informe completo">
           <div className="flex flex-wrap items-center gap-2">
@@ -363,8 +363,8 @@ export function Results({
             ))}
           </ul>
           <p className="mt-3 text-body text-tr-muted">
-            Déjanos tu teléfono y verás el informe al momento en pantalla, listo para descargar en PDF. Un
-            técnico puede además revisar tu caso contigo.
+            Déjanos tu teléfono o tu correo y verás el informe al momento en pantalla, listo para
+            descargar en PDF. Un técnico puede además revisar tu caso contigo.
           </p>
 
           {!ctaAbierto ? (
