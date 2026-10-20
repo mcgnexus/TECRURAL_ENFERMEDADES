@@ -33,7 +33,9 @@ const utmSchema = z.object({
   term: z.string().trim().max(190).optional(),
 });
 
-const leadSchema = z.object({
+// Exportado solo para las pruebas (src/app/api/leads/route.test.ts): la regla
+// "teléfono O correo" no se puede comprobar de otra forma sin llamar a la API.
+export const leadSchema = z.object({
   // El nombre es opcional. Del contacto, basta con teléfono O correo: se
   // exige al menos uno en el superRefine del final, porque el informe completo
   // solo se revela a cambio de un canal por el que el técnico pueda responder.
@@ -41,12 +43,18 @@ const leadSchema = z.object({
   telefono: z
     .string()
     .trim()
-    .regex(TELEFONO_REGEX, "Teléfono no válido. Revisa el número indicado.")
     .optional()
-    .transform((t) => (t ? t.replace(/[\s().-]/g, "") : undefined)),
-  email: z
-    .email({ message: "Correo no válido. Revisa la dirección indicada." })
-    .transform((e) => e.toLowerCase()),
+    // Cadena vacía o en blanco = sin teléfono (no rompe el superRefine final).
+    .transform((t) => (t ? t.replace(/[\s().-]/g, "") : undefined))
+    .refine((t) => t === undefined || TELEFONO_REGEX.test(t), {
+      message: "Teléfono no válido. Revisa el número indicado.",
+    }),
+  // En blanco o vacío = sin correo, igual que con el teléfono: no debe tapar
+  // el mensaje del superRefine final.
+  email: z.preprocess(
+    (v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.trim()) : v),
+    z.email({ message: "Correo no válido. Revisa la dirección indicada." }).optional()
+  ).transform((e) => e?.toLowerCase()),
   municipio: z.string().trim().max(80).optional(),
   cultivo: z.string().trim().max(80).optional(),
   sintoma: z.string().trim().max(200).optional(),
