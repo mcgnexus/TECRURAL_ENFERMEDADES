@@ -50,6 +50,8 @@ interface PayloadNotificacion {
   puntuacion: number;
   estado: string;
   origen: string;
+  /** true cuando la persona pidió que un técnico revisara el caso. */
+  solicitud_revision: boolean;
   nombre: string;
   /** Vacío cuando la persona solo dejó correo. */
   telefono: string;
@@ -84,6 +86,7 @@ function construirPayload(lead: LeadFila): PayloadNotificacion {
     puntuacion: lead.puntuacion,
     estado: lead.estado,
     origen: lead.origen,
+    solicitud_revision: lead.solicitud_revision,
     nombre: lead.nombre,
     telefono: lead.telefono,
     email: lead.email ?? null,
@@ -109,8 +112,9 @@ function resumenTexto(p: PayloadNotificacion): string {
     .join(" · ");
   const caso = p.sintoma ?? p.mensaje ?? "sin descripción";
   const contacto = [p.telefono, p.email].filter((v): v is string => Boolean(v)).join(" · ");
+  const revision = p.solicitud_revision ? "PIDE REVISIÓN" : "solo informe";
   return (
-    `Lead ${p.prioridad.toUpperCase()} (${p.puntuacion} pts)\n` +
+    `Lead ${p.prioridad.toUpperCase()} (${p.puntuacion} pts) · ${revision}\n` +
     `${p.nombre}${contacto ? ` · ${contacto}` : ""}\n` +
     (donde ? `${donde}\n` : "") +
     `${caso}\n` +
@@ -157,6 +161,13 @@ function mensajeTelegram(p: PayloadNotificacion): string {
     `${ICONO_PRIORIDAD[p.prioridad]} <b>LEAD ${p.prioridad.toUpperCase()}</b> · ${p.puntuacion} pts`
   );
   lineas.push(`${ICONO_ORIGEN[p.origen] ?? ""} ${ETIQUETA_ORIGEN[p.origen] ?? p.origen}`.trim());
+  // Separar "pide revisión" de "solo informe" es lo que permite organizar el
+  // tiempo: el primero exige respuesta en 48 h; el segundo no promete nada.
+  lineas.push(
+    p.solicitud_revision
+      ? "\u{1F195} Pide revisión técnica: responder en 48 h"
+      : "\u2139 Solo desbloqueó el informe (sin revisión)"
+  );
   lineas.push("");
 
   lineas.push(`<b>${escaparHtml(p.nombre)}</b>`);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { uidDeVisitante } from "@/lib/identidad";
-import { hashContactoCuota, vincularContactoCuota } from "@/lib/cuota";
+import { contactoCuota, hashContactoCuota, vincularContactoCuota } from "@/lib/cuota";
 
 export const runtime = "nodejs";
 
@@ -9,6 +9,10 @@ export const runtime = "nodejs";
  * Ampliación de la cuota semanal a cambio de un contacto: basta un correo (la
  * vía normal desde la pantalla de resultado) y se acepta también un teléfono
  * para quien no use correo. El contacto no se almacena en claro: solo su HMAC.
+ *
+ * El alta de un lead posterior al diagnóstico vincula la cuota en la misma
+ * operación del servidor (ver /api/leads); este endpoint queda para quien
+ * amplía directamente desde la vista de captura.
  */
 const schema = z
   .object({
@@ -19,16 +23,6 @@ const schema = z
   .refine((d) => Boolean(d.email || d.telefono), {
     message: "Indica un correo o un teléfono para ampliar el límite.",
   });
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-function normalizarTelefono(valor: string): string | null {
-  const limpio = valor.replace(/[\s().-]/g, "");
-  if (!/^\+?[\d]{9,15}$/.test(limpio)) return null;
-  if (limpio.startsWith("+")) return limpio;
-  // En este MVP los números locales de 9 cifras se interpretan como españoles.
-  return limpio.length === 9 ? `+34${limpio}` : `+${limpio}`;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,13 +41,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Indica un contacto válido y confirma el uso descrito." }, { status: 400 });
     }
 
-    const contacto = parsed.data.email
-      ? (() => {
-          const correo = parsed.data.email!.toLowerCase();
-          return EMAIL_REGEX.test(correo) ? `correo:${correo}` : null;
-        })()
-      : normalizarTelefono(parsed.data.telefono!);
-
+    const contacto = contactoCuota(parsed.data.email, parsed.data.telefono);
     if (!contacto) {
       return NextResponse.json({ error: parsed.data.email ? "Introduce un correo válido." : "Introduce un teléfono válido." }, { status: 400 });
     }

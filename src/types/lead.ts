@@ -85,6 +85,8 @@ export interface LeadFila {
   mensaje: string | null;
   origen: OrigenLead;
   canal_contacto: string | null;
+  /** true cuando la persona pidió además la revisión técnica (casilla aparte). */
+  solicitud_revision: boolean;
   prioridad: PrioridadLead;
   puntuacion: number;
   estado: EstadoLead;

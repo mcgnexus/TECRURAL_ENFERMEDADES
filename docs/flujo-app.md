@@ -85,6 +85,9 @@ un técnico).
      plazo máximo de 48 horas por el canal elegido. Si solo se dejó correo, el
      canal registrado es `correo` y no se ofrece el consentimiento de
      WhatsApp. La revisión es independiente del análisis y no tiene coste.
+   - La intención queda guardada en `leads.solicitud_revision` (migración
+     0011): el panel muestra una columna "Revisión" y los avisos distinguen
+     "pide revisión" de "solo informe", que no genera promesa de respuesta.
 8. **Historial** (`/historial`).
    - Se guarda por dispositivo (cookie), no por cuenta. Se avisa de que borrar
      cookies o cambiar de móvil puede impedir recuperarlo.
@@ -128,6 +131,10 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   dato se normaliza y se convierte en **HMAC-SHA-256** con
   `CUOTA_TELEFONO_SECRET`; el original **no se almacena** (endpoint
   `POST /api/cuota/contacto`).
+- Al dejar el contacto en el formulario del informe, la vinculación ocurre en
+  la **misma operación del servidor** que guarda el lead (`POST /api/leads`):
+  el éxito que ve la persona confirma informe y ampliación a la vez. El
+  endpoint de cuota queda para quien amplía directamente desde la captura.
 - La huella se asocia al dispositivo y caduca a los **180 días**.
 - **No** se usa para contactar, **no** es publicidad, **no** es una solicitud de
   revisión ni un consentimiento comercial.

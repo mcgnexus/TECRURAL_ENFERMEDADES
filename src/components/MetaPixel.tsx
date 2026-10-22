@@ -6,9 +6,28 @@ import { usePathname } from "next/navigation";
 
 const PIXEL_ID = "2175598836026526";
 
+type ParamsMeta = Record<string, unknown>;
+
 declare global {
   interface Window {
-    fbq?: (accion: string, evento: string) => void;
+    /** El snippet de fbevents acepta argumentos variables (track, trackCustom…). */
+    fbq?: (...args: unknown[]) => void;
+  }
+}
+
+/**
+ * Conversión de Meta desde el cliente. El píxel solo se carga en producción
+ * (ver el montaje condicional del layout), así que en desarrollo es un no-op.
+ * Los eventos estándar (Lead) alimentan las campañas; los personalizados
+ * (RevisionTecnica, SuscripcionCorreo) matizan el valor de cada lead.
+ */
+export function trackMeta(evento: string, params: ParamsMeta = {}): void {
+  if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+  const estandares = ["PageView", "Lead", "CompleteRegistration", "Purchase", "Contact"];
+  if (estandares.includes(evento)) {
+    window.fbq("track", evento, params);
+  } else {
+    window.fbq("trackCustom", evento, params);
   }
 }
 

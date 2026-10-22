@@ -271,10 +271,10 @@ function HomeContent() {
             <div className="text-center lg:text-left">
               <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">ORIENTACIÓN AGRÍCOLA EN GRANADA</p>
               <h1 id="home-title" className="home-hero-title font-heading font-bold text-tr-forest text-balance">
-                Descubre qué puede estar afectando a tu cultivo
+                ¿Manchas o amarilleo en las hojas?
               </h1>
               <p className="mt-4 text-body leading-relaxed text-tr-ink text-pretty">
-                Sube una fotografía y recibe una primera orientación sobre los síntomas de tu planta.
+                Sube una foto y recibe una orientación inicial mediante inteligencia artificial.
                 <span className="mt-2 block text-tr-muted">Disponible para agricultores del Altiplano y la Costa Tropical de Granada.</span>
               </p>
               <button onClick={() => setVista("captura")} type="button" className={`${btnPrimary} mt-6 w-full sm:w-auto sm:min-w-64`}>
@@ -282,10 +282,11 @@ function HomeContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                Analizar mi planta
+                Analizar mi planta gratis
               </button>
               <p className="mt-3 text-small leading-relaxed text-tr-muted">
-                Orientación inicial basada en una fotografía. No sustituye el diagnóstico de un técnico.
+                Primera prueba sin registro · Suele tardar 10-20 segundos.
+                No sustituye el diagnóstico de un técnico.
               </p>
             </div>
 
@@ -367,7 +368,7 @@ function HomeContent() {
                 TecRural está a cargo de Manuel Carrasco García y ofrece orientación a agricultores del Altiplano de Granada y la Costa Tropical.
               </p>
               <p className="mt-3 text-body leading-relaxed text-tr-muted">
-                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada, WhatsApp o correo, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. El tiempo de respuesta depende de la demanda; la solicitud no tiene coste ni implica contratar un servicio.
+                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada, WhatsApp o correo, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. Respondemos como máximo en 48 horas, según demanda; la solicitud no tiene coste ni implica contratar un servicio.
               </p>
             </div>
           </section>
@@ -377,7 +378,7 @@ function HomeContent() {
               <h2 id="cta-final-title" className="home-section-title font-heading font-bold text-white">Empieza con una foto de tu cultivo</h2>
               <p className="mt-3 text-body leading-relaxed text-white/90">Recibe una orientación inicial gratuita y desbloquea el informe completo con el tratamiento recomendado.</p>
               <button onClick={() => setVista("captura")} type="button" className={`${btnBase} mt-6 bg-tr-lime px-6 text-tr-forest hover:bg-[#c7dc83]`}>
-                Analizar mi planta
+                Analizar mi planta gratis
               </button>
             </div>
           </section>

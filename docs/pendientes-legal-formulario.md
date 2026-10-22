@@ -101,3 +101,14 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 - Recomendación: validar la redacción con asesoría jurídica antes de
   promocionar el formulario. No es asesoramiento legal. Si cambia el texto de
   la casilla, revisar también la sección 9 para que no se contradigan.
+
+## 10. Novedades comerciales por correo (nuevo)
+- Implementado: casilla opcional y desmarcada en el formulario del informe
+  ("Quiero recibir por correo consejos y novedades"). Se guarda como
+  `consentimiento_comercial` con `canal_comercial = 'correo'`, separada de la
+  autorización de informe + límite (que no es publicidad).
+- Implementado: la baja (`/baja`, `POST /api/baja`) acepta teléfono **o**
+  correo, con `bajaComercialEmail()` en la base de datos.
+- Pendiente: revisión legal de la frecuencia y el contenido de esos envíos; el
+  píxel de Meta sigue cargándose en producción sin banner de consentimiento
+  (ver sección 7), decidir banner o exclusión.

@@ -59,6 +59,32 @@ export function hashContactoCuota(contacto: string): string {
   return createHmac("sha256", secreto).update(contacto).digest("hex");
 }
 
+/**
+ * Normaliza un teléfono para la huella de cuota: sin espacios ni símbolos y
+ * con prefijo internacional (los números locales de 9 cifras se interpretan
+ * como españoles). Compartida por el endpoint de ampliación y el alta de leads,
+ * para que el mismo número produzca siempre la misma huella.
+ */
+export function normalizarTelefonoCuota(valor: string): string | null {
+  const limpio = valor.replace(/[\s().-]/g, "");
+  if (!/^\+?[\d]{9,15}$/.test(limpio)) return null;
+  if (limpio.startsWith("+")) return limpio;
+  return limpio.length === 9 ? `+34${limpio}` : `+${limpio}`;
+}
+
+/**
+ * Contacto con prefijo de tipo para la huella: un correo y un teléfono nunca
+ * colisionan aunque su texto coincidiera.
+ */
+export function contactoCuota(email?: string, telefono?: string): string | null {
+  const correo = email?.trim().toLowerCase();
+  if (correo) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correo) ? `correo:${correo}` : null;
+  }
+  const limpio = telefono?.trim();
+  return limpio ? normalizarTelefonoCuota(limpio) : null;
+}
+
 export async function contactoCuotaDeVisitante(uid: string): Promise<string | null> {
   const rows = await getSql()`
     SELECT telefono_hash FROM cuota_telefonos

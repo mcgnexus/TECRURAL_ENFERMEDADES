@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
 import { trackEvento } from "@/lib/analitica";
+import { trackMeta } from "@/components/MetaPixel";
 import { obtenerUtm } from "@/lib/utm";
 import { textosLead, avisoFotos } from "@/lib/textos-lead";
 import type {
@@ -68,6 +69,10 @@ export function LeadForm({
     // usar el contacto en el informe y en el límite semanal, separada de la
     // revisión técnica.
     autorizoInforme: false,
+    // Novedades comerciales por correo: opt-in voluntario y desmarcado, separado
+    // de la autorización del informe. Da igual el teléfono: por eso se guarda
+    // con su propio canal (correo) en el servidor.
+    consentimientoCorreo: false,
     web: "",
   });
 
@@ -185,9 +190,11 @@ export function LeadForm({
           // efectivo pasa a ser el correo. Sin revisión pedida no hay canal.
           canal_contacto: form.solicitudRespuesta ? (soloCorreo ? "correo" : form.canalContacto) : undefined,
           solicitud_respuesta: form.solicitudRespuesta,
-          // El consentimiento comercial es de WhatsApp, así que solo procede
-          // cuando hay número.
-          consentimiento_comercial: form.consentimientoComercial && Boolean(form.telefono.trim()),
+          // Consentimiento comercial: en "contacto_directo" es la casilla de
+          // WhatsApp (solo con teléfono); en el informe es la casilla de correo.
+          consentimiento_comercial: esDirecto
+            ? form.consentimientoComercial && Boolean(form.telefono.trim())
+            : form.consentimientoCorreo,
           web: form.web,
           contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
@@ -203,6 +210,13 @@ export function LeadForm({
 
       setEstado("ok");
       trackEvento("lead_enviado", { origen, cultivo: form.cultivo || undefined });
+      // Conversiones de Meta, separadas por valor comercial: Lead cubre el
+      // contacto; los eventos personalizados matizan quién pide revisión y
+      // quién autoriza novedades. Se disparan una sola vez, al confirmarse el
+      // guardado, y sin datos personales en los parámetros.
+      trackMeta("Lead", { origen });
+      if (form.solicitudRespuesta) trackMeta("RevisionTecnica", { origen });
+      if (!esDirecto && form.consentimientoCorreo) trackMeta("SuscripcionCorreo", { origen });
       onEnviado?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
@@ -335,6 +349,7 @@ interface CampoBaseProps {
     mensaje: string;
     solicitudRespuesta: boolean;
     consentimientoComercial: boolean;
+    consentimientoCorreo: boolean;
     autorizoInforme: boolean;
     web: string;
   };
@@ -509,6 +524,26 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
           )}
         </div>
       )}
+
+      {/* Opt-in comercial de correo: voluntario, desmarcado y separado de la
+          autorización del informe. Puedes recibir el informe sin marcarlo. */}
+      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <input
+          id={`lead-correo-comercial-${origen}`}
+          type="checkbox"
+          checked={form.consentimientoCorreo}
+          onChange={(e) => set("consentimientoCorreo", e.target.checked)}
+          disabled={estado === "enviando"}
+          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+        />
+        <label htmlFor={`lead-correo-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
+          Quiero recibir por correo consejos y novedades de TecRural
+          <span className="mt-1 block text-tr-muted">
+            Opcional y desmarcado: no influye en el acceso al informe. Puedes retirarlo cuando
+            quiera desde <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">la página de baja</Link>.
+          </span>
+        </label>
+      </div>
 
       {/* Honeypot anti-spam: oculto para personas */}
       <div className="hidden" aria-hidden="true">

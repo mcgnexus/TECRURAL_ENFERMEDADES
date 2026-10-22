@@ -366,7 +366,21 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_leads_email
     ON leads(email)
   `;
-  })();
+
+  // Migración 0011: solicitud de revisión explícita. En el formulario posterior
+  // al diagnóstico, pedir que un técnico revise el caso es una casilla opcional
+  // y aparte del desbloqueo del informe; guardarla en la fila permite separar
+  // oportunidades reales de envíos "solo informe" en el panel y los avisos.
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS solicitud_revision BOOLEAN NOT NULL DEFAULT FALSE
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_leads_solicitud_revision
+    ON leads(solicitud_revision, created_at DESC)
+  `;
+})();
 }
 
 export async function initDatabase(): Promise<void> {
@@ -395,6 +409,8 @@ export interface NuevoLead {
   mensaje?: string;
   diagnosticoId?: string;
   origen: OrigenLead;
+  /** true solo cuando la persona pidió además la revisión técnica del caso. */
+  solicitudRevision?: boolean;
   canalContacto?: string;
   prioridad: PrioridadLead;
   puntuacion: number;
@@ -417,7 +433,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
   const [row] = await db`
     INSERT INTO leads (
       usuario_id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-      mensaje, origen, canal_contacto, prioridad, puntuacion, contexto_diagnostico, ip,
+      mensaje, origen, solicitud_revision, canal_contacto, prioridad, puntuacion, contexto_diagnostico, ip,
       imagenes, consentimiento_comercial, consentimiento_comercial_fecha,
       consentimiento_texto_version, canal_comercial,
       origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term
@@ -434,6 +450,7 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
       ${lead.hectareas ?? null},
       ${lead.mensaje ?? null},
       ${lead.origen},
+      ${lead.solicitudRevision ?? false},
       ${lead.canalContacto ?? null},
       ${lead.prioridad},
       ${lead.puntuacion},
@@ -452,7 +469,8 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
       ${lead.utmTerm ?? null}
     )
     RETURNING id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-              mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
+              mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
+              contexto_diagnostico,
               consentimiento_comercial, consentimiento_texto_version, canal_comercial,
               baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
               origen_campana, utm_source, utm_medium, utm_campaign,
@@ -763,6 +781,20 @@ export async function bajaComercial(telefonoNormalizada: string): Promise<number
   return rows.length;
 }
 
+/** Baja comercial por correo: cubre el opt-in de novedades del formulario del informe. */
+export async function bajaComercialEmail(email: string): Promise<number> {
+  const db = getSql();
+  const rows = await db`
+    UPDATE leads
+    SET consentimiento_comercial = FALSE,
+        baja_comercial = TRUE,
+        consentimiento_comercial_fecha = NOW()
+    WHERE LOWER(email) = ${email.toLowerCase()} AND baja_comercial = FALSE
+    RETURNING id
+  `;
+  return rows.length;
+}
+
 export async function obtenerLeads(
   filtros: { estado?: EstadoLead; prioridad?: PrioridadLead; limit?: number } = {}
 ): Promise<LeadFila[]> {
@@ -772,7 +804,8 @@ export async function obtenerLeads(
   if (filtros.estado && filtros.prioridad) {
     const rows = await db`
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-             mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
+             mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
+             contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
@@ -787,7 +820,8 @@ export async function obtenerLeads(
   if (filtros.estado) {
     const rows = await db`
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-             mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
+             mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
+             contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
@@ -802,7 +836,8 @@ export async function obtenerLeads(
   if (filtros.prioridad) {
     const rows = await db`
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-             mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
+             mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
+             contexto_diagnostico,
              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
@@ -816,7 +851,8 @@ export async function obtenerLeads(
 
   const rows = await db`
     SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
-           mensaje, origen, canal_contacto, prioridad, puntuacion, estado, contexto_diagnostico,
+           mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
+           contexto_diagnostico,
            consentimiento_comercial, consentimiento_texto_version, canal_comercial,
            baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
            origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
@@ -1022,6 +1058,7 @@ function mapearLead(row: LeadRow): LeadFila {
     mensaje: (row.mensaje as string | null) ?? null,
     origen: row.origen as OrigenLead,
     canal_contacto: (row.canal_contacto as string | null) ?? null,
+    solicitud_revision: Boolean(row.solicitud_revision),
     prioridad: row.prioridad as PrioridadLead,
     puntuacion: Number(row.puntuacion),
     estado: row.estado as EstadoLead,

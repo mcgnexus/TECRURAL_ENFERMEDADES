@@ -9,6 +9,7 @@ const inputCls = "w-full px-3 py-2.5 rounded-[var(--tr-radius-control)] border b
 
 export default function BajaPage() {
   const [telefono, setTelefono] = useState("");
+  const [correo, setCorreo] = useState("");
   const [estado, setEstado] = useState<"idle" | "enviando" | "ok" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +22,10 @@ export default function BajaPage() {
       const response = await fetch("/api/baja", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefono: telefono.trim() }),
+        body: JSON.stringify({
+          telefono: telefono.trim() || undefined,
+          email: correo.trim() || undefined,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo procesar la baja");
@@ -42,7 +46,7 @@ export default function BajaPage() {
             <div>
               <p className="text-body text-tr-ink">
                 Hemos registrado tu solicitud. No recibirás más comunicaciones comerciales de
-                TecRural en este número.
+                TecRural en el contacto indicado.
               </p>
               <Link href="/" className={`${btnPrimary} mt-5 w-full`}>
                 Volver al inicio
@@ -51,8 +55,8 @@ export default function BajaPage() {
           ) : (
             <form onSubmit={enviar}>
               <p className="text-body text-tr-muted mb-4">
-                Indica el teléfono donde recibías las comunicaciones y dejaremos de enviarte
-                consejos y novedades comerciales.
+                Indica el teléfono o el correo donde recibías las comunicaciones y dejaremos de
+                enviarte consejos y novedades comerciales.
               </p>
 
               {estado === "error" && error && (
@@ -67,7 +71,6 @@ export default function BajaPage() {
               <input
                 id="baja-telefono"
                 type="tel"
-                required
                 inputMode="tel"
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
@@ -76,6 +79,24 @@ export default function BajaPage() {
                 className={inputCls}
                 placeholder="Ej: 600 123 456"
               />
+
+              <label htmlFor="baja-email" className="block font-body font-semibold text-tr-forest text-small mb-1.5 mt-4">
+                o correo electrónico
+              </label>
+              <input
+                id="baja-email"
+                type="email"
+                inputMode="email"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                disabled={estado === "enviando"}
+                autoComplete="email"
+                className={inputCls}
+                placeholder="Ej: nombre@correo.com"
+              />
+              <p className="mt-2 text-caption text-tr-muted">
+                Basta con uno de los dos.
+              </p>
 
               <button type="submit" disabled={estado === "enviando"} className={`${btnPrimary} mt-4 w-full`}>
                 {estado === "enviando" ? "Procesando..." : "Darme de baja"}

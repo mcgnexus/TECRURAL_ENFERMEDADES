@@ -25,6 +25,7 @@ function lead(parcial: Partial<LeadFila> & { id: string }): LeadFila {
     mensaje: null,
     origen: "post_diagnostico",
     canal_contacto: null,
+    solicitud_revision: false,
     prioridad: "baja",
     puntuacion: 0,
     estado: "nuevo",

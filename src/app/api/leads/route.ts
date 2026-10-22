@@ -4,7 +4,7 @@ import { guardarLead, obtenerLeads, actualizarEstadoLead, guardarNotaLead, obten
 import { calcularPrioridadLead } from "@/lib/leads";
 import { notificarLeadNuevo } from "@/lib/notificar";
 import { uidDeVisitante } from "@/lib/identidad";
-import { consumirUsoPorClave, estadoCuotas } from "@/lib/cuota";
+import { consumirUsoPorClave, estadoCuotas, contactoCuota, hashContactoCuota, vincularContactoCuota } from "@/lib/cuota";
 import { validarDataUrlImagen } from "@/lib/imagen";
 import { ipCliente } from "@/lib/ip-request";
 import { ESTADOS_LEAD } from "@/types/lead";
@@ -16,7 +16,6 @@ export const maxDuration = 30;
 // Versión del texto del consentimiento comercial mostrado en el formulario.
 // Actualizar si cambia la redacción; se guarda junto al lead.
 const TEXTO_COMERCIAL_VERSION = "v1-2026-09";
-const CANAL_COMERCIAL = "whatsapp";
 
 const TELEFONO_REGEX = /^[+]?[\d\s().-]{9,20}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -177,6 +176,10 @@ export async function POST(request: NextRequest) {
 
     const { prioridad, puntuacion } = calcularPrioridadLead(datos.contexto, datos.origen);
 
+    // Canal comercial del consentimiento: WhatsApp cuando hay teléfono, correo
+    // cuando el opt-in se dio con el formulario del informe (solo correo).
+    const canalComercial = datos.telefono ? "whatsapp" : "correo";
+
     // Aviso de prueba del canal, sin crear lead. ?test_notificacion=1 manda un
     // mensaje de ejemplo al destino configurado para comprobar que Telegram o
     // el webhook están bien puestos. No toca la base de datos.
@@ -222,13 +225,14 @@ export async function POST(request: NextRequest) {
       mensaje: datos.mensaje || undefined,
       diagnosticoId: datos.diagnostico_id,
       origen: datos.origen,
+      solicitudRevision: datos.solicitud_respuesta,
       canalContacto: datos.canal_contacto,
       prioridad,
       puntuacion,
       contexto: datos.contexto,
       consentimientoComercial: datos.consentimiento_comercial,
       consentimientoTextoVersion: datos.consentimiento_comercial ? TEXTO_COMERCIAL_VERSION : undefined,
-      canalComercial: datos.consentimiento_comercial ? CANAL_COMERCIAL : undefined,
+      canalComercial: datos.consentimiento_comercial ? canalComercial : undefined,
       origenCampana: datos.utm?.campaign || undefined,
       utmSource: datos.utm?.source,
       utmMedium: datos.utm?.medium,
@@ -238,6 +242,25 @@ export async function POST(request: NextRequest) {
       imagenes,
       ip,
     });
+
+    // Ampliación de cuota en la misma operación: el formulario del informe
+    // promete "con tu contacto amplías el límite a 6 análisis semanales", así
+    // que la vinculación debe completarse ANTES de confirmar el éxito, no en
+    // una segunda petición. Solo en el flujo posterior al diagnóstico (su
+    // casilla de autorización cubre esta finalidad; el contacto directo no la
+    // menciona). Si falla, el lead ya está guardado: se registra y se sigue,
+    // porque el informe sí se ha entregado.
+    if (datos.origen === "post_diagnostico" && usuarioId) {
+      try {
+        const contacto = contactoCuota(datos.email, datos.telefono);
+        if (contacto) {
+          await vincularContactoCuota(usuarioId, hashContactoCuota(contacto));
+        }
+      } catch (error) {
+        // Un dispositivo con otro contacto ya vinculado no debe romper el envío.
+        console.warn("No se pudo vincular la ampliación de cuota del lead.");
+      }
+    }
 
     // Next mantiene este trabajo dentro del ciclo de vida de la petición aunque
     // la respuesta al agricultor ya se haya enviado (Next `after()`; maxDuration

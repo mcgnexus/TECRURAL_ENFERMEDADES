@@ -406,6 +406,7 @@ export function LeadsTab({
                 </ThOrden>
                 <th className="px-3 py-2">Contacto</th>
                 <th className="px-3 py-2">Canal</th>
+                <th className="px-3 py-2">Revisión</th>
                 <th className="px-3 py-2">Origen</th>
                 <ThOrden campo="municipio" orden={orden} setOrden={setOrden}>
                   Zona
@@ -486,6 +487,13 @@ export function LeadsTab({
                     )}
                   </td>
                   <td className="px-3 py-3 text-tr-muted">{etiquetaCanal(lead.canal_contacto)}</td>
+                  <td className="px-3 py-3">
+                    {lead.solicitud_revision ? (
+                      <span className="font-semibold text-tr-ink">Sí</span>
+                    ) : (
+                      <span className="text-caption text-tr-muted">Solo informe</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-tr-muted">
                     {ETIQUETAS_ORIGEN[lead.origen] ?? "—"}
                     {lead.diagnostico_id && (
