@@ -15,8 +15,13 @@ function getSql(): NeonQueryFunction<false, false> {
 export type Ambito = "diag" | "lead";
 
 export const LIMITES = {
-  /** Análisis sin datos de contacto, por visitante y ventana móvil de 7 días. */
-  anonimos: 2,
+  /**
+   * Análisis sin datos de contacto, por visitante y ventana móvil de 7 días.
+   * Uno solo: demuestra el valor de la orientación; a partir de ahí, la
+   * continuación (informe completo y más análisis) se pide a cambio de un
+   * contacto, no regalando más análisis.
+   */
+  anonimos: 1,
   /** Análisis por teléfono vinculado y ventana móvil de 7 días (incluye los anónimos). */
   telefono: 6,
   /** Tope total de la app cada 24 h, red de seguridad frente a coste desbocado. */
@@ -37,17 +42,24 @@ export interface DecisionCuota {
   motivo?: "visitante" | "global" | "red" | "sin_identificar" | "database";
   mensaje?: string;
   restantes: number;
-  requiereTelefono?: boolean;
+  /** El visitante aún no ha vinculado un contacto para ampliar la cuota. */
+  requiereAmpliacion?: boolean;
   requestId?: string;
 }
 
-export function hashTelefonoCuota(telefono: string): string {
+/**
+ * Huella seudonimizada del contacto (correo o teléfono) que amplía la cuota.
+ * La tabla conserva el nombre histórico `cuota_telefonos.telefono_hash`, pero
+ * desde que la ampliación pasó a pedirse por correo guarda el HMAC de cualquiera
+ * de los dos contactos.
+ */
+export function hashContactoCuota(contacto: string): string {
   const secreto = process.env.CUOTA_TELEFONO_SECRET;
   if (!secreto) throw new Error("CUOTA_TELEFONO_SECRET no configurado");
-  return createHmac("sha256", secreto).update(telefono).digest("hex");
+  return createHmac("sha256", secreto).update(contacto).digest("hex");
 }
 
-export async function telefonoCuotaDeVisitante(uid: string): Promise<string | null> {
+export async function contactoCuotaDeVisitante(uid: string): Promise<string | null> {
   const rows = await getSql()`
     SELECT telefono_hash FROM cuota_telefonos
     WHERE visitor_id = ${uid} AND expira_en > NOW()
@@ -56,15 +68,15 @@ export async function telefonoCuotaDeVisitante(uid: string): Promise<string | nu
 }
 
 /**
- * Vincula una cuota semanal al visitante sin conservar el teléfono en claro.
+ * Vincula una cuota semanal al visitante sin conservar el contacto en claro.
  * Los análisis anónimos de los últimos siete días cuentan dentro del máximo
- * semanal al vincular el teléfono.
+ * semanal al vincular el contacto.
  */
-export async function vincularTelefonoCuota(uid: string, telefonoHash: string): Promise<void> {
+export async function vincularContactoCuota(uid: string, contactoHash: string): Promise<void> {
   const db = getSql();
   const insertado = await db`
     INSERT INTO cuota_telefonos (visitor_id, telefono_hash, expira_en)
-    VALUES (${uid}, ${telefonoHash}, NOW() + INTERVAL '180 days')
+    VALUES (${uid}, ${contactoHash}, NOW() + INTERVAL '180 days')
     ON CONFLICT (visitor_id) DO NOTHING
     RETURNING visitor_id
   `;
@@ -72,15 +84,15 @@ export async function vincularTelefonoCuota(uid: string, telefonoHash: string): 
     const existente = await db`
       SELECT telefono_hash FROM cuota_telefonos WHERE visitor_id = ${uid}
     `;
-    if (existente[0]?.telefono_hash !== telefonoHash) {
-      throw new Error("Este dispositivo ya tiene un teléfono vinculado.");
+    if (existente[0]?.telefono_hash !== contactoHash) {
+      throw new Error("Este dispositivo ya tiene un contacto vinculado.");
     }
   }
   // Solo se etiquetan los usos anónimos del propio visitante, no las filas de
   // límites secundarios (global/IP), que no deben contarse dos veces.
   await db`
     UPDATE cuota_usos
-    SET telefono_hash = ${telefonoHash}
+    SET telefono_hash = ${contactoHash}
     WHERE visitor_id = ${uid}
       AND ambito = 'diag'
       AND telefono_hash IS NULL
@@ -250,7 +262,8 @@ export async function consumirUso(
     }
 
     const ipValida = ipParaLimite(ip);
-    const telefonoHash = await telefonoCuotaDeVisitante(uid);
+    const contactoHash = await contactoCuotaDeVisitante(uid);
+    const telefonoHash = contactoHash;
     const sujeto = telefonoHash ? `telefono:${telefonoHash}` : `visitante:${uid}`;
     const limite = telefonoHash ? LIMITES.telefono : LIMITES.anonimos;
 
@@ -337,9 +350,9 @@ export async function consumirUso(
       motivo: "visitante",
       mensaje: telefonoHash
         ? "Has alcanzado los 6 análisis de esta semana. Podrás volver a analizar cuando se renueve el límite semanal."
-        : "Has completado tus 2 análisis iniciales de esta semana. Si quieres ampliar el límite a 6 análisis semanales, puedes facilitar tu teléfono.",
+        : "Has completado tu análisis inicial de esta semana. Deja tu correo para ver el informe completo y ampliar el límite a 6 análisis semanales.",
       restantes: 0,
-      requiereTelefono: !telefonoHash,
+      requiereAmpliacion: !telefonoHash,
     };
   } catch {
     console.error("No se pudo comprobar la cuota de análisis.");

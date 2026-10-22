@@ -72,9 +72,19 @@ describe("contacto: teléfono o correo", () => {
     );
   });
 
-  it("sigue exigiendo la confirmación de la solicitud", () => {
-    expect(erroresDe({ telefono: "600123456", solicitud_respuesta: false })).toContain(
-      "Debes confirmar que solicitas respuesta sobre este caso"
+  it("sigue exigiendo un canal aunque no se pida revisión técnica", () => {
+    // La separación de intenciones permite enviar "solo informe", pero el
+    // contacto sigue siendo necesario para entregarlo.
+    expect(erroresDe({ solicitud_respuesta: false })).toContain(
+      "Déjanos un teléfono o un correo para recibir el informe y poder contactarte."
     );
+  });
+
+  it("acepta un envío sin revisión técnica (solo informe)", () => {
+    // La casilla de solicitud dejó de ser obligatoria en el flujo posterior al
+    // diagnóstico: quien solo quiere el informe no registra una solicitud de
+    // contacto.
+    const r = leadSchema.safeParse(cuerpo({ telefono: "600123456", solicitud_respuesta: false }));
+    expect(r.success).toBe(true);
   });
 });

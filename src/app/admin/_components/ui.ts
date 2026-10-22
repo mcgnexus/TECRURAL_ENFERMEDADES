@@ -126,7 +126,7 @@ export const ETIQUETAS_EMBUDO: Record<string, string> = {
   analisis_iniciado: "Pulsan analizar",
   analisis_completado: "Reciben el análisis",
   resultado_visto: "Ven el resultado",
-  cta_revision_abierto: "Abren el formulario",
+  cta_revision_abierto: "Rellanen el formulario",
   informe_desbloqueado: "Ven el informe completo",
   lead_enviado: "Envían el contacto",
 };

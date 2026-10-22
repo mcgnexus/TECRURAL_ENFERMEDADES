@@ -37,54 +37,83 @@ describe("contacto directo", () => {
   });
 });
 
-describe("posterior al diagnóstico", () => {
+describe("posterior al diagnóstico: solo informe (sin revisión)", () => {
+  // La revisión es una opción aparte: quien solo desbloquea el informe no
+  // recibe promesas de respuesta de ningún técnico.
+  const t = textosLead("post_diagnostico", 1, false);
+
+  it("pide el correo como contrapartida del informe", () => {
+    expect(t.intro).toMatch(/correo/i);
+    expect(t.intro).toMatch(/tratamiento/i);
+    expect(t.intro).toMatch(/dosis/i);
+    expect(t.cabecera).toBe("Recibe el informe completo");
+  });
+
+  it("menciona la ampliación del límite semanal con el correo", () => {
+    expect(t.intro).toContain("6 análisis semanales");
+  });
+
+  it("no promete revisión ni respuesta del técnico", () => {
+    const todo = JSON.stringify(t);
+    expect(todo).not.toMatch(/técnico.*revisará|te responderá|48 horas/i);
+    expect(t.encabezadoExito).toBe("Informe completo desbloqueado");
+  });
+
+  it("el consentimiento no enumera fotos, porque no se envían", () => {
+    expect(t.datosTratados).not.toMatch(/foto/i);
+    expect(t.datosTratados).toContain("el contacto que indicas");
+  });
+
+  it("apunta a la revisión como opción posterior, sin imponerla", () => {
+    expect(t.cuerpoExito).toMatch(/si más adelante quieres/i);
+  });
+});
+
+describe("posterior al diagnóstico: informe y revisión técnica", () => {
   it("menciona la orientación y las fotos", () => {
-    const t = textosLead("post_diagnostico", 1);
+    const t = textosLead("post_diagnostico", 1, true);
     expect(t.cuerpoExito).toContain("orientación y la foto del análisis");
     expect(t.cabecera).toBe("Recibe el informe completo");
   });
 
   it("promete el informe con tratamiento y dosis", () => {
-    const t = textosLead("post_diagnostico", 0);
+    const t = textosLead("post_diagnostico", 0, true);
     expect(t.intro).toMatch(/tratamiento/i);
     expect(t.intro).toMatch(/dosis/i);
     expect(t.cuerpoExito).toMatch(/tratamiento y la dosis/i);
-    expect(t.encabezadoExito).toBe("Informe completo desbloqueado");
-  });
-
-  it("pide un canal de contacto —teléfono o correo— como contrapartida, no una revisión a ciegas", () => {
-    const t = textosLead("post_diagnostico", 1);
-    expect(t.intro).toMatch(/teléfono/i);
-    expect(t.intro).toMatch(/correo/i);
-    // Basta con uno de los dos: el texto no puede dar por hecho el teléfono.
-    expect(t.intro).not.toMatch(/solo el teléfono|exclusivamente/i);
+    expect(t.encabezadoExito).toBe("Informe completo desbloqueado y revisión solicitada");
   });
 
   it("concuerda en número: singular con una foto", () => {
-    const t = textosLead("post_diagnostico", 1);
-    expect(t.intro).toContain("y la foto del análisis");
+    const t = textosLead("post_diagnostico", 1, true);
     expect(t.intro).not.toContain("las fotos");
     expect(t.cuerpoExito).toContain("la foto del análisis");
   });
 
   it("concuerda en número: plural con varias", () => {
-    const t = textosLead("post_diagnostico", 3);
-    expect(t.intro).toContain("y las fotos del análisis");
+    const t = textosLead("post_diagnostico", 3, true);
     expect(t.cuerpoExito).toContain("las fotos del análisis");
   });
 
-  it("el consentimiento enumera las fotos cuando las hay", () => {
-    expect(textosLead("post_diagnostico", 1).datosTratados).toContain("las fotos que envías");
+  it("sin fotos no las menciona en el éxito ni en el consentimiento", () => {
+    const t = textosLead("post_diagnostico", 0, true);
+    expect(t.cuerpoExito).not.toMatch(/foto/i);
+    expect(t.datosTratados).not.toMatch(/foto/i);
   });
 
-  it("sin fotos no las enumera en el consentimiento", () => {
-    expect(textosLead("post_diagnostico", 0).datosTratados).not.toMatch(/foto/i);
+  it("el consentimiento enumera las fotos cuando las hay", () => {
+    expect(textosLead("post_diagnostico", 1, true).datosTratados).toContain("las fotos que envías");
   });
 
   it("nunca impone un canal de contacto", () => {
     for (const n of [0, 1, 3]) {
-      expect(textosLead("post_diagnostico", n).cuerpoExito).not.toMatch(/te llamamos|te llamará/i);
+      expect(textosLead("post_diagnostico", n, true).cuerpoExito).not.toMatch(/te llamamos|te llamará/i);
     }
+  });
+
+  it("la revisión se presenta como opción aparte, no como precio del informe", () => {
+    const t = textosLead("post_diagnostico", 1, true);
+    expect(t.intro).toMatch(/si quieres|marcas la revisión/i);
   });
 });
 

@@ -1,6 +1,6 @@
 # TECRURAL Diagnóstico
 
-PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash con respaldo multimodal opcional OpenAI `gpt-4o-mini`) → orientación inicial gratuita y, al dejar un teléfono o un correo, informe completo con tratamiento orientativo.
+PWA de orientación fitosanitaria para agricultores del Altiplano de Granada y la Costa Tropical: foto del cultivo → hipótesis de orientación por IA (Gemini 2.5 Flash con respaldo multimodal opcional OpenAI `gpt-4o-mini`) → orientación inicial gratuita y, al dejar un correo, informe completo con tratamiento orientativo (el teléfono queda para quien pide la revisión de un técnico).
 
 ## Flujo de usuario
 
@@ -10,8 +10,8 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
 2. **Contexto del cultivo**: cultivo (selector + "Otro"/"No lo sé"), municipio o comarca (Altiplano/Costa Tropical + "Otro"), síntoma observado, desde cuándo (opcional), variedad (opcional). Sin GPS.
 3. **Fotos**: modo simple por defecto (1 foto nítida del síntoma). Modo avanzado opcional añade envés y planta completa. Vista previa, reemplazo y eliminación por foto. Validación de tipo real (magic bytes), tamaño (≤12 MB) y formato en frontend y backend. Compresión a JPEG/WebP ~1536px/1MB (elimina EXIF y optimiza móvil manteniendo detalle para manchas y síntomas pequeños).
 4. **Análisis**: botón «Analizar foto»; desactivado solo si falta la foto principal. Estados de espera claros sin porcentajes falsos; datos y fotos se conservan si hay error; reintentos permitidos. Errores amigables (red, límite de uso, proveedor, imagen no interpretable, servicio caído) sin trazas ni claves.
-5. **Resultado**: en lenguaje claro — qué se observa; posibles causas como hipótesis; qué falta para afinar; próximos pasos prudentes; y, tras dejar un teléfono o un correo, el **informe completo** con tratamiento orientativo (materia activa, dosis en rango, momento de aplicación y plazo de seguridad) y qué segunda foto confirma el diagnóstico. Aviso visible de que es orientativo y de que la IA no sustituye una inspección profesional. Fiabilidad mostrada cualitativamente (señales claras / indicios moderados / señales poco claras), sin porcentajes no calibrados. Guardable en PDF y compartible (Web Share API con fallback a portapapeles).
-6. **Revisión de TecRural**: el informe completo se desbloquea dejando un teléfono, sin ocultar la orientación inicial; formulario con nombre opcional, teléfono/canal, municipio y cultivo precargados y editables, mensaje opcional, confirmación de solicitud y consentimiento comercial **separado y desmarcado por defecto**. Las fotos se comparten solo al enviar la revisión, informando antes.
+5. **Resultado**: en lenguaje claro — qué se observa; posibles causas como hipótesis; qué falta para afinar; próximos pasos prudentes; y, tras dejar un correo (o un teléfono si se prefiere), el **informe completo** con tratamiento orientativo (materia activa, dosis en rango, momento de aplicación y plazo de seguridad) y qué segunda foto confirma el diagnóstico. Aviso visible de que es orientativo y de que la IA no sustituye una inspección profesional. Fiabilidad mostrada cualitativamente (señales claras / indicios moderados / señales poco claras), sin porcentajes no calibrados. Guardable en PDF y compartible (Web Share API con fallback a portapapeles).
+6. **Informe y revisión, por separado**: el informe completo se desbloquea dejando un correo, sin ocultar la orientación inicial ni pasos intermedios; pedir la revisión de un técnico es una casilla **opcional y aparte** que sí registra una solicitud de contacto (con teléfono y canal). Las fotos se comparten solo al pedir la revisión, informando antes.
 
 ## Arquitectura
 
@@ -26,12 +26,12 @@ Resumen ampliado, decisiones de identificación y reglas de cuota: [`docs/flujo-
   - `diagnosticos` — hipótesis y contexto. Las fotos NO se guardan por defecto (política de datos); solo en el lead si el usuario pide revisión.
   - `leads` — solicitudes de revisión cualificadas, consentimientos y fotos compartidas.
   - `cuota_usos` / `cuota_telefonos` — límites de uso con **ventana móvil real** (conteo por marcas de tiempo, sin corte a medianoche). El teléfono solo se guarda como HMAC (`CUOTA_TELEFONO_SECRET`), nunca en claro, y expira a los 180 días; los registros de uso se purgan a los 31 días.
-- **Cuotas de análisis:** 2 análisis sin datos en cualquier periodo de 7 días. Al tercero, la app ofrece ampliar a **6 análisis semanales** facilitando el teléfono, con casilla propia que explica el uso (solo límite, sin contacto ni publicidad); no es una solicitud de revisión ni consiente comunicaciones. Se añaden un tope global de 500/24 h y un **límite complementario por conexión (IP) de 12/24 h** contra el abuso. El conteo es atómico (advisory locks) y si la base no responde el análisis se rechaza con 503 en lugar de ejecutarse sin límite.
+- **Cuotas de análisis:** 1 análisis sin datos en cualquier periodo de 7 días. Después, la app pide el contacto en la propia pantalla del resultado: el correo desbloquea el informe completo y amplía a **6 análisis semanales** (solo límite, sin contacto ni publicidad); no es una solicitud de revisión ni consiente comunicaciones. Se añaden un tope global de 500/24 h y un **límite complementario por conexión (IP) de 12/24 h** contra el abuso. El conteo es atómico (advisory locks) y si la base no responde el análisis se rechaza con 503 en lugar de ejecutarse sin límite.
 - **Validación:** coherencia del JSON, saneado de síntomas, `requiere_experto` automático, magic bytes de imágenes (`src/lib/imagen.ts`).
 
 ## Leads, consentimientos y baja
 
-- **API:** `POST /api/leads` (zod, honeypot, rate limit 5/h por IP, `solicitud_respuesta` requerida), `GET /api/leads` (listado, `?metricas=1`, `?accesos=1` y `?diagnosticos=1`), `PATCH /api/leads` (cambio de estado y notas) y `DELETE /api/leads` (borrado definitivo), todos salvo el POST protegidos con `ADMIN_TOKEN` (header `x-admin-token`).
+- **API:** `POST /api/leads` (zod, honeypot, rate limit 5/h por IP, `solicitud_respuesta` booleana: false = solo informe, sin fotos ni solicitud de contacto), `POST /api/cuota/contacto` (ampliación semanal con correo o teléfono, guardado solo como HMAC), `GET /api/leads` (listado, `?metricas=1`, `?accesos=1` y `?diagnosticos=1`), `PATCH /api/leads` (cambio de estado y notas) y `DELETE /api/leads` (borrado definitivo), todos salvo el POST protegidos con `ADMIN_TOKEN` (header `x-admin-token`).
 - **Registro comercial** (`leads`): fecha de creación, origen (diagnóstico / contacto directo), municipio, cultivo, **síntoma** observado, **canal de contacto solicitado** (llamada / WhatsApp), **estado comercial** (`nuevo → contactado → cualificado → presupuesto → ganado / perdido`), prioridad cualificada en servidor, consentimiento comercial (estado, fecha, versión del texto y canal), **origen de campaña y parámetros UTM** (`utm_source/medium/campaign/content/term`, capturados del enlace de entrada y guardados en sesión) e **identificador del diagnóstico** (sin almacenar la imagen por defecto).
 - **Consentimientos separados:**
   - Gestionar la solicitud de revisión: implícito al enviar (confirmado con casilla obligatoria).
@@ -56,7 +56,7 @@ El esquema se aplica con `npm run db:migrate` (idempotente: `CREATE TABLE IF NOT
 
 ## Variables de entorno
 
-Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback multimodal opcional), `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por teléfono).
+Ver `.env.example`: `DATABASE_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` (fallback multimodal opcional), `DEEPSEEK_API_KEY` (servidor); `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `ADMIN_TOKEN`, `CUOTA_TELEFONO_SECRET` (opcionales; el secreto de cuota es necesario para la ampliación semanal por contacto).
 
 ## Analítica de conversión
 
@@ -87,7 +87,7 @@ npm run comprobar:esquema   # solo el guard de esquema (también corre en prebui
 55 pruebas en seis ficheros (más las de cuota SQL, que se saltan sin base aparte). La mayoría son puras y siempre se ejecutan:
 
 - `src/lib/error-analisis.test.ts` — traducción de errores HTTP a mensajes para el agricultor.
-- `src/lib/textos-lead.test.ts` — textos condicionales del formulario según el origen.
+- `src/lib/textos-lead.test.ts` — textos condicionales del formulario según el origen y la intención (solo informe frente a informe con revisión).
 - `scripts/comprobar-esquema-sin-borrados.test.ts` — el guard que impide que `aplicarMigraciones()` toque datos, probado lanzándolo como proceso porque lo que importa es su código de salida.
 
 La cuarta, `src/lib/cuota.test.ts`, toca Postgres de verdad: lo que verifica es el comportamiento del SQL —que el contador sea atómico con peticiones simultáneas, que la ventana se renueve sola y que un rechazo no consuma el tope global—, y eso no se puede simular con un doble sin dejar de probar lo que importa. Necesita una base aparte:

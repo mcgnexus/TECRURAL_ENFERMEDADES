@@ -7,8 +7,10 @@ uso y por qué se eligió.
 ## Resumen en una frase
 
 Una PWA sin registro obligatorio: el agricultor sube una foto y recibe una
-orientación por IA; puede hacer dos análisis gratis y, si necesita más, amplía
-a seis semanales facilitando un teléfono que se guarda solo como huella.
+orientación por IA; con un análisis anónimo demuestra el valor y, a partir de
+ahí, el informe completo y hasta seis análisis semanales se piden a cambio de
+un contacto (correo; el teléfono queda reservado a quien pide la revisión de
+un técnico).
 
 ## Flujo del usuario
 
@@ -34,8 +36,9 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
     - Se registra un uso atómico y se decide si se permite. Las filas de
       visitante, IP y límite global comparten un ID para poder reembolsarlas
       juntas ante un fallo confirmado del proveedor.
-   - Se permiten **2 análisis** por visitante en cualquier ventana móvil de
-     7 días.
+   - Se permiten **1 análisis** por visitante en cualquier ventana móvil de
+     7 días: uno basta para demostrar el valor; el siguiente paso es dejar el
+     contacto, no regalar más análisis.
    - Se aplican además dos topes: uno **global de 500 cada 24 h** (red de
      seguridad de coste) y uno **por conexión (IP) de 12 cada 24 h** (anti-abuso).
 5. **Análisis por IA** (solo servidor).
@@ -64,19 +67,24 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
    - Orientación inicial gratuita: hechos observados, otras posibilidades,
      próximos pasos prudentes. Lenguaje claro, sin porcentajes de confianza no
      calibrados.
-   - El **informe completo** (tratamiento con materia activa y dosis en rango,
-     momento de aplicación y plazo de seguridad, y qué segunda foto confirma el
-     diagnóstico) queda tras dejar un teléfono o un correo (basta uno de los dos): es el imán suave que convierte.
-     Se muestra al instante en pantalla y se puede guardar en PDF.
+   - En la propia pantalla del resultado, sin botones intermedios, se ofrece
+     el **informe completo** (tratamiento con materia activa y dosis en rango,
+     momento de aplicación y plazo de seguridad, y qué segunda foto confirma
+     el diagnóstico) a cambio de un **correo** (o un teléfono si es lo que la
+     persona prefiera). Se muestra al instante en pantalla y se puede guardar
+     en PDF. Al dejar el contacto, la cuota semanal se amplía a seis análisis.
    - El tratamiento es una **sugerencia orientativa, no una prescripción**: la
      app recuerda confirmar el registro del producto y respetar la etiqueta y el
      plazo de seguridad. Las fotos **no se guardan** por defecto.
-7. **Revisión técnica**.
-   - Al dejar el teléfono o el correo se registra un lead (con las fotos
-     adjuntas si las hay) y se avisa al técnico (Telegram o webhook). Si solo
-     se dejó correo, el canal registrado es `correo` y no se ofrece el
-     consentimiento de WhatsApp. La revisión es independiente del
-     análisis y no tiene coste.
+7. **Revisión técnica (opción aparte)**.
+   - En el formulario posterior al diagnóstico, pedir que un técnico revise el
+     caso es una casilla **separada y opcional**: quien solo quiere el informe
+     no registra una solicitud de contacto ni le prometen respuesta.
+   - Al marcarla se registra un lead (con las fotos adjuntas) y se avisa al
+     técnico (Telegram o webhook); entonces sí se promete respuesta en un
+     plazo máximo de 48 horas por el canal elegido. Si solo se dejó correo, el
+     canal registrado es `correo` y no se ofrece el consentimiento de
+     WhatsApp. La revisión es independiente del análisis y no tiene coste.
 8. **Historial** (`/historial`).
    - Se guarda por dispositivo (cookie), no por cuenta. Se avisa de que borrar
      cookies o cambiar de móvil puede impedir recuperarlo.
@@ -86,15 +94,15 @@ a seis semanales facilitando un teléfono que se guarda solo como huella.
 | Mecanismo | Rol | Valoración |
 | --- | --- | --- |
 | **Cookie propia + base de datos** | Identidad anónima principal | Fácil, sin fricción y comprobable en servidor. No es infalible: borrar cookies o usar navegación privada reinicia el contador. |
-| **Teléfono (huella HMAC)** | Ampliar la cuota | Eleva el límite con poca fricción. No se verifica el número, así que es un freno, no una prueba de identidad. |
+| **Correo o teléfono (huella HMAC)** | Ampliar la cuota | Eleva el límite con poca fricción y sin guardar el dato en claro. No se verifica, así que es un freno, no una prueba de identidad. |
 | **IP** | Límite complementario anti-abuso | Red secundaria. No identifica a la persona y puede cambiar en móvil; se usa holgado para no afectar a redes compartidas. |
 | **Login con Google** | Identidad persistente | Solo recomendable cuando haya demanda real de historial entre dispositivos. Añade fricción y tratamiento de datos. |
 
 ## Reglas de cuota
 
-- **Sin teléfono:** 2 análisis por ventana móvil de 7 días.
-- **Con teléfono:** 6 análisis por ventana móvil de 7 días, **incluyendo** los
-  anónimos ya usados.
+- **Sin contacto:** 1 análisis por ventana móvil de 7 días.
+- **Con contacto vinculado (correo o teléfono):** 6 análisis por ventana móvil
+  de 7 días, **incluyendo** los anónimos ya usados.
 - **Global:** 500 análisis cada 24 h para toda la aplicación.
 - **Por conexión (IP):** 12 cada 24 h.
 - **Ventana móvil real:** los usos se cuentan por marcas de tiempo, no por día
@@ -112,11 +120,14 @@ posterior del proveedor también consume el uso: es preferible contar de más qu
 permitir reintentos que multipliquen el gasto. Por tanto, el contador refleja
 análisis admitidos, no necesariamente diagnósticos entregados con éxito.
 
-## Ampliación por teléfono
+## Ampliación por contacto (correo o teléfono)
 
-- Se ofrece al agotar el límite anónimo, con una casilla que explica el uso.
-- El teléfono se normaliza y se convierte en **HMAC-SHA-256** con
-  `CUOTA_TELEFONO_SECRET`; el número original **no se almacena**.
+- Se ofrece en la propia pantalla del primer resultado (formulario del informe)
+  y, si el límite se agota sin haber dejado contacto, en la vista de captura.
+- Basta un correo; se acepta también un teléfono para quien no use correo. El
+  dato se normaliza y se convierte en **HMAC-SHA-256** con
+  `CUOTA_TELEFONO_SECRET`; el original **no se almacena** (endpoint
+  `POST /api/cuota/contacto`).
 - La huella se asocia al dispositivo y caduca a los **180 días**.
 - **No** se usa para contactar, **no** es publicidad, **no** es una solicitud de
   revisión ni un consentimiento comercial.
@@ -128,7 +139,8 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   RGPD): contener coste y evitar abuso, con minimización (HMAC, no contacto).
 - La solicitud de revisión se basa en las medidas precontractuales
   (art. 6.1.b); las comunicaciones comerciales, en el consentimiento separado
-  (art. 6.1.a).
+  (art. 6.1.a). Un envío que solo desbloquea el informe no registra solicitud
+  de revisión ni guarda fotos.
 - Las fotos solo se guardan si el usuario pide revisión; máximo 12 meses.
 - Detalle completo en `/privacidad` y en
   `docs/pendientes-legal-formulario.md`.
@@ -137,7 +149,8 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
 
 - Eventos first-party en la tabla `eventos`, contados por visitante único y día:
   `portada_vista` → `captura_realizada` → `analisis_iniciado` →
-  `analisis_completado` → `resultado_visto` → `cta_revision_abierto` →
+  `analisis_completado` → `resultado_visto` → `cta_revision_abierto` (primera
+  interacción con el formulario del informe) →
   `informe_desbloqueado` → `lead_enviado`. Se añade `informe_pdf` cuando se
   guarda el informe.
 - La conversión se mide sobre visitas a la portada, no sobre análisis.
@@ -168,7 +181,9 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
 
 - **¿Login con Google?** Solo si el uso recurrente lo justifica; hoy no es
   necesario para el MVP.
-- **¿Verificar el teléfono?** Daría una identidad más sólida, pero añade coste y
-  complejidad; no se ha implementado.
-- **¿Subir de 2 a 3 análisis anónimos?** Se valorará si el embudo muestra que el
-  límite frena a usuarios legítimos.
+- **¿Verificar el contacto?** Daría una identidad más sólida, pero añade coste
+  y complejidad; no se ha implementado.
+- **¿Cuántos análisis anónimos?** Con uno solo se mide si el contacto pide más
+  fricción de la que retiene; el embudo (`resultado_visto` frente a
+  `lead_enviado`) dirá si conviene volver a dos. Con muy pocos casos analizados
+  aún no hay datos para decidir.

@@ -12,6 +12,11 @@
  * 2. Al ser texto plano y sin React, se puede comprobar con una prueba. Es la
  *    única forma de revisar la variante posterior al diagnóstico, que no se
  *    renderiza sin completar un análisis antes.
+ *
+ * En el flujo posterior al diagnóstico hay dos intenciones que no se mezclan:
+ * desbloquear el informe (basta un correo) y solicitar que un técnico revise
+ * el caso (opción aparte, que es la única que promete respuesta). El texto del
+ * éxito depende de cuál se haya marcado.
  */
 
 export interface TextosLead {
@@ -24,7 +29,8 @@ export interface TextosLead {
 
 export function textosLead(
   origen: "post_diagnostico" | "contacto_directo",
-  numeroFotos = 0
+  numeroFotos = 0,
+  solicitaRevision = true
 ): TextosLead {
   const directo = origen === "contacto_directo";
   const fotos = Math.max(0, Math.trunc(numeroFotos));
@@ -47,11 +53,25 @@ export function textosLead(
   const singular = fotos === 1;
   const fotosTxt = singular ? "la foto del análisis" : "las fotos del análisis";
 
+  if (!solicitaRevision) {
+    // Solo informe: no se promete respuesta de ningún técnico, porque no se ha
+    // pedido revisión. El contacto sirve para el informe y el límite semanal.
+    return {
+      cabecera: "Recibe el informe completo",
+      intro: "Escribe tu correo y verás al momento el informe completo: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma el diagnóstico. Con tu correo amplías también el límite a 6 análisis semanales.",
+      encabezadoExito: "Informe completo desbloqueado",
+      cuerpoExito: "Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Si más adelante quieres que un técnico revise tu caso, puedes solicitarlo en cualquier momento.",
+      // Sin revisión no se envían fotos, así que el consentimiento no puede
+      // mencionarlas aunque el análisis tuviera varias.
+      datosTratados: "el contacto que indicas y la orientación del análisis",
+    };
+  }
+
   return {
     cabecera: "Recibe el informe completo",
-    intro: `Déjanos un teléfono o un correo y verás al momento el informe completo: el tratamiento orientativo con su dosis y el momento de aplicación, y qué foto nos confirma el diagnóstico. Con tus datos y ${fotosTxt}, además, un técnico puede revisar este caso contigo.`,
-    encabezadoExito: "Informe completo desbloqueado",
-    cuerpoExito: `Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Hemos registrado tu caso junto con la orientación y ${fotosTxt}; un técnico de TecRural lo revisará y ${canal}.`,
+    intro: "Escribe tu correo y verás al momento el informe completo: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma el diagnóstico. Con tu correo amplías también el límite a 6 análisis semanales. Si quieres, marcas la revisión y un técnico revisa este caso contigo.",
+    encabezadoExito: "Informe completo desbloqueado y revisión solicitada",
+    cuerpoExito: `Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Hemos registrado tu caso junto con la orientación${fotos > 0 ? ` y ${fotosTxt}` : ""}; un técnico de TecRural lo revisará y ${canal}.`,
     // El consentimiento enumera los datos que de verdad se tratan: sostiene el
     // consentimiento, así que no puede mencionar fotos que no se envían.
     datosTratados:
@@ -61,7 +81,10 @@ export function textosLead(
   };
 }
 
-/** Aviso de las fotos que se compartirán, solo cuando las hay. */
+/**
+ * Aviso de las fotos que se compartirán, solo cuando hay revisión con fotos.
+ * Sin revisión las fotos no se envían, así que no hay nada que avisar.
+ */
 export function avisoFotos(numeroFotos: number): string | null {
   if (numeroFotos <= 0) return null;
   return numeroFotos === 1

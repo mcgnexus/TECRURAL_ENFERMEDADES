@@ -4,7 +4,7 @@ import type { FaseAnalisis } from "./opciones-analisis";
 type EventoStream<T> =
   | { type: "phase"; phase: FaseAnalisis }
   | { type: "result"; data: T }
-  | { type: "error"; status: number; data: { error?: string; cuota?: { requiereTelefono?: boolean } } };
+  | { type: "error"; status: number; data: { error?: string; cuota?: { requiereAmpliacion?: boolean } } };
 
 export async function leerProgresoAnalisis<T>(
   response: Response,
@@ -30,7 +30,7 @@ export async function leerProgresoAnalisis<T>(
     if (evento.type === "phase") onPhase(evento.phase);
     if (evento.type === "result") result = evento.data;
     if (evento.type === "error") {
-      throw new ErrorAnalisis(evento.status, evento.data.error, Boolean(evento.data.cuota?.requiereTelefono));
+      throw new ErrorAnalisis(evento.status, evento.data.error, Boolean(evento.data.cuota?.requiereAmpliacion));
     }
   };
 

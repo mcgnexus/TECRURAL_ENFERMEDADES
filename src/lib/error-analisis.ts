@@ -21,13 +21,13 @@
  */
 export class ErrorAnalisis extends Error {
   readonly status: number;
-  readonly requiereTelefono: boolean;
+  readonly requiereAmpliacion: boolean;
 
-  constructor(status: number, mensaje?: string, requiereTelefono = false) {
+  constructor(status: number, mensaje?: string, requiereAmpliacion = false) {
     super(mensaje ?? "");
     this.name = "ErrorAnalisis";
     this.status = status;
-    this.requiereTelefono = requiereTelefono;
+    this.requiereAmpliacion = requiereAmpliacion;
   }
 }
 
@@ -94,9 +94,9 @@ export async function errorDeRespuesta(response: Response): Promise<ErrorAnalisi
 
   const posibleError = (cuerpo as { error?: unknown } | undefined)?.error;
   const mensaje = typeof posibleError === "string" && posibleError.trim() ? posibleError : undefined;
-  const requiereTelefono = Boolean(
-    (cuerpo as { cuota?: { requiereTelefono?: unknown } } | undefined)?.cuota?.requiereTelefono
+  const requiereAmpliacion = Boolean(
+    (cuerpo as { cuota?: { requiereAmpliacion?: unknown } } | undefined)?.cuota?.requiereAmpliacion
   );
 
-  return new ErrorAnalisis(response.status, mensaje, requiereTelefono);
+  return new ErrorAnalisis(response.status, mensaje, requiereAmpliacion);
 }

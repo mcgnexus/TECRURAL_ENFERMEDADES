@@ -50,7 +50,8 @@ export interface DatosLead {
   mensaje?: string;
   diagnostico_id?: string;
   origen: OrigenLead;
-  solicitud_respuesta: true;
+  /** true solo cuando la persona pide además la revisión técnica del caso. */
+  solicitud_respuesta: boolean;
   canal_contacto?: string;
   consentimiento_comercial?: boolean;
   contexto?: ContextoDiagnosticoLead;

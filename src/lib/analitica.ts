@@ -11,8 +11,8 @@
  * - captura_realizada: el usuario cargó u hizo una foto
  * - analisis_iniciado / analisis_completado / analisis_error
  * - resultado_visto: con gravedad y si requiere experto (calidad del lead)
- * - cta_revision_abierto: abrió el formulario de contacto tras diagnóstico
- * - informe_desbloqueado: dejó el teléfono y vio el informe completo
+ * - cta_revision_abierto: empezó a rellenar el formulario tras el diagnóstico
+ * - informe_desbloqueado: dejó su contacto y vio el informe completo
  * - informe_pdf: guardó o imprimió el informe en PDF
  * - lead_enviado / lead_error: formulario enviado
  * - whatsapp_click: contacto por WhatsApp

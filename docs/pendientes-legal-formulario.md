@@ -79,12 +79,19 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 - Pendiente: decidir si además se quiere un canal manual (responder "BAJA" por
   WhatsApp) y documentarlo en la firma de los mensajes comerciales.
 
-## 9. Ampliación de cuota por teléfono (nuevo)
-- Implementado: 2 análisis anónimos por semana móvil; al tercero la app ofrece
-  6 análisis semanales a cambio del teléfono (`POST /api/cuota/telefono`).
+## 9. Ampliación de cuota por contacto (nuevo)
+- Implementado: 1 análisis anónimo por semana móvil; a partir de ahí la app pide
+  el contacto en la pantalla del resultado. El correo (o un teléfono, si se
+  prefiere) desbloquea el informe completo y amplía a 6 análisis semanales
+  (`POST /api/cuota/contacto`).
   Solo se guarda un HMAC (`CUOTA_TELEFONO_SECRET`), vinculado al dispositivo y
   con expiración a 180 días; no se usa para contactar ni para publicidad, y no
   es una solicitud de revisión ni consentimiento comercial.
+- Implementado además: separación de intenciones en el formulario posterior al
+  diagnóstico — desbloquear el informe (correo) y pedir la revisión técnica
+  (casilla opcional aparte, la única que registra solicitud de contacto, adjunta
+  fotos y promete respuesta) — con `solicitud_respuesta` booleana en la API;
+  un envío "solo informe" no guarda fotos ni genera solicitud.
 - Redactado (borrador): texto de la casilla en `src/app/page.tsx` y sección 9
   de `/privacidad`, que fija la finalidad (control de límites y prevención de
   abuso), la base de interés legítimo (art. 6.1.f RGPD), la minimización con

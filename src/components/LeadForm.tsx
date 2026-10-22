@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
 import { trackEvento } from "@/lib/analitica";
@@ -48,7 +48,7 @@ export function LeadForm({
 }: LeadFormProps) {
   const [estado, setEstado] = useState<EstadoEnvio>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [errores, setErrores] = useState<{ telefono?: string; email?: string; contacto?: string; solicitud?: string }>({});
+  const [errores, setErrores] = useState<{ telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string }>({});
   const [form, setForm] = useState({
     nombre: "",
     telefono: "",
@@ -58,14 +58,23 @@ export function LeadForm({
     sintoma: "",
     canalContacto: "llamada",
     mensaje: mensajeInicial,
+    // En "contacto_directo" es la casilla obligatoria de la solicitud. En el
+    // flujo posterior al diagnóstico es la opción aparte y opcional de pedir
+    // que un técnico revise el caso: quien solo quiere el informe no la marca
+    // y su envío no registra una solicitud de contacto.
     solicitudRespuesta: false,
     consentimientoComercial: false, // siempre desmarcado por defecto
+    // Solo en el flujo posterior al diagnóstico: autorización obligatoria para
+    // usar el contacto en el informe y en el límite semanal, separada de la
+    // revisión técnica.
+    autorizoInforme: false,
     web: "",
   });
 
   const set = (campo: string, valor: string | boolean) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
+  const esDirecto = origen === "contacto_directo";
   const TELEFONO_REGEX = /^[+]?[\d\s().-]{9,20}$/;
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -74,8 +83,24 @@ export function LeadForm({
   /** Solo se pidió correo: no tiene sentido ofrecer llamada ni WhatsApp. */
   const soloCorreo = !telefono && Boolean(correo);
 
+  /**
+   * En el flujo posterior al diagnóstico las fotos solo viajan con la revisión
+   * técnica: quien únicamente desbloquea el informe no las comparte con nadie.
+   */
+  const fotosAdjuntas = adjuntarFotos && adjuntarFotos.length > 0 ? adjuntarFotos : null;
+  const comparteFotos = esDirecto || form.solicitudRespuesta;
+  const numFotos = fotosAdjuntas?.length ?? 0;
+  const numFotosEnviadas = comparteFotos ? numFotos : 0;
+  const fotosParaEnviar = comparteFotos && fotosAdjuntas ? fotosAdjuntas.slice(0, 3) : undefined;
+
+  // Los textos viven en src/lib/textos-lead.ts, que es puro y por tanto
+  // verificable: la variante posterior al diagnóstico no se renderiza sin
+  // completar un análisis, así que la única forma de comprobarla es aislarla.
+  const textos = textosLead(origen, numFotosEnviadas, esDirecto || form.solicitudRespuesta);
+  const aviso = avisoFotos(numFotosEnviadas);
+
   const validar = (): boolean => {
-    const nuevos: { telefono?: string; email?: string; contacto?: string; solicitud?: string } = {};
+    const nuevos: { telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string } = {};
     if (telefono && !TELEFONO_REGEX.test(telefono)) {
       nuevos.telefono = "Introduce un teléfono válido (9-15 dígitos).";
     }
@@ -84,24 +109,25 @@ export function LeadForm({
     }
     // Informe completo y revisión: basta con UNO de los dos canales.
     if (!telefono && !correo) {
-      nuevos.contacto = "Déjanos tu teléfono o tu correo: con uno de los dos basta para ver el informe completo.";
+      nuevos.contacto = esDirecto
+        ? "Déjanos tu teléfono o tu correo: con uno de los dos basta para responder a tu solicitud."
+        : "Escribe tu correo para recibir el informe completo.";
     }
-    if (!form.solicitudRespuesta) {
+    if (!esDirecto && !form.autorizoInforme) {
+      nuevos.autorizacion = "Confirma el uso del contacto para recibir el informe.";
+    }
+    if (form.solicitudRespuesta) {
+      // Con revisión pedida y canal de llamada o WhatsApp, sin teléfono no hay
+      // forma de contactar: se pide el número o el cambio a correo.
+      if (!telefono && form.canalContacto !== "correo") {
+        nuevos.telefono = "Para la revisión, deja un teléfono (o elige que te escriban al correo).";
+      }
+    } else if (esDirecto) {
       nuevos.solicitud = "Confirma que solicitas una respuesta sobre este caso.";
     }
     setErrores(nuevos);
     return Object.keys(nuevos).length === 0;
   };
-
-  const esDirecto = origen === "contacto_directo";
-  const fotosAdjuntas = adjuntarFotos && adjuntarFotos.length > 0 ? adjuntarFotos : null;
-  const numFotos = fotosAdjuntas?.length ?? 0;
-
-  // Los textos viven en src/lib/textos-lead.ts, que es puro y por tanto
-  // verificable: la variante posterior al diagnóstico no se renderiza sin
-  // completar un análisis, así que la única forma de comprobarla es aislarla.
-  const textos = textosLead(origen, numFotos);
-  const aviso = avisoFotos(numFotos);
 
   const mensajeWhatsApp = (() => {
     const partes = ["Hola, he usado la app de diagnóstico de TecRural"];
@@ -150,12 +176,14 @@ export function LeadForm({
           municipio: form.municipio.trim() || undefined,
           cultivo: form.cultivo.trim() || undefined,
           sintoma: sintomaFinal,
-          mensaje: form.mensaje.trim() || undefined,
+          // Sin revisión pedida no hay mensaje: el envío no es una solicitud
+          // de contacto y no necesita notas para el técnico.
+          mensaje: form.solicitudRespuesta ? (form.mensaje.trim() || undefined) : undefined,
           diagnostico_id: diagnosticoId,
           origen,
           // Sin teléfono no se puede llamar ni escribir por WhatsApp: el canal
-          // efectivo pasa a ser el correo.
-          canal_contacto: soloCorreo ? "correo" : form.canalContacto,
+          // efectivo pasa a ser el correo. Sin revisión pedida no hay canal.
+          canal_contacto: form.solicitudRespuesta ? (soloCorreo ? "correo" : form.canalContacto) : undefined,
           solicitud_respuesta: form.solicitudRespuesta,
           // El consentimiento comercial es de WhatsApp, así que solo procede
           // cuando hay número.
@@ -163,7 +191,7 @@ export function LeadForm({
           web: form.web,
           contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
-          imagenes: fotosAdjuntas ? fotosAdjuntas.slice(0, 3) : undefined,
+          imagenes: fotosParaEnviar,
         }),
       });
 
@@ -184,7 +212,20 @@ export function LeadForm({
     }
   };
 
+  /** Paso de embudo: primera interacción con el formulario tras el resultado. */
+  const interaccionRegistrada = useRef(false);
+  const registrarInteraccion = () => {
+    if (esDirecto || interaccionRegistrada.current) return;
+    interaccionRegistrada.current = true;
+    trackEvento("cta_revision_abierto", {
+      gravedad: contexto?.gravedad,
+      requiere_experto: contexto?.requiere_experto,
+      tipo: contexto?.tipo,
+    });
+  };
+
   if (estado === "ok") {
+    const conRevision = form.solicitudRespuesta;
     return (
       <div className={`p-5 ${cardStyles}`} aria-live="polite">
         <div className="flex items-start gap-3">
@@ -194,11 +235,13 @@ export function LeadForm({
           <div>
             <p className="font-heading font-semibold text-tr-forest">{textos.encabezadoExito}</p>
             <p className="mt-1 text-body text-tr-muted">{textos.cuerpoExito}</p>
-            <p className="mt-2 text-small text-tr-muted">
-              Un técnico de TecRural te responderá en un plazo máximo de 48 horas desde el envío de
-              la solicitud.
-            </p>
-            {whatsappDisponible && (
+            {conRevision && (
+              <p className="mt-2 text-small text-tr-muted">
+                Un técnico de TecRural te responderá en un plazo máximo de 48 horas desde el envío de
+                la solicitud.
+              </p>
+            )}
+            {conRevision && whatsappDisponible && (
               <a
                 href={urlWhatsApp(mensajeWhatsApp)}
                 target="_blank"
@@ -219,7 +262,7 @@ export function LeadForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`p-5 ${cardStyles}`} noValidate>
+    <form onSubmit={handleSubmit} onFocusCapture={registrarInteraccion} className={`p-5 ${cardStyles}`} noValidate>
       <h3 className="font-heading font-semibold text-tr-forest">{textos.cabecera}</h3>
       <p className="mt-1 text-small text-tr-muted">{textos.intro}</p>
 
@@ -249,255 +292,457 @@ export function LeadForm({
         </div>
       )}
 
-      <div className="grid gap-4 mt-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`lead-nombre-${origen}`} className={labelCls}>
-              Nombre <span className="font-normal text-tr-muted">(opcional)</span>
-            </label>
-            <input
-              id={`lead-nombre-${origen}`}
-              type="text"
-              value={form.nombre}
-              onChange={(e) => set("nombre", e.target.value)}
-              disabled={estado === "enviando"}
-              autoComplete="name"
-              className={inputCls}
-              placeholder="Tu nombre"
-            />
-          </div>
-          <div>
-            <label htmlFor={`lead-telefono-${origen}`} className={labelCls}>
-              Teléfono / WhatsApp <span className="font-normal text-tr-muted">(opcional si dejas el correo)</span>
-            </label>
-            <input
-              id={`lead-telefono-${origen}`}
-              type="tel"
-              inputMode="tel"
-              value={form.telefono}
-              onChange={(e) => {
-                set("telefono", e.target.value);
-                if (errores.telefono || errores.contacto) {
-                  setErrores((x) => ({ ...x, telefono: undefined, contacto: undefined }));
-                }
-              }}
-              disabled={estado === "enviando"}
-              autoComplete="tel"
-              aria-invalid={errores.telefono ? "true" : undefined}
-              aria-describedby={errores.telefono ? `lead-telefono-error-${origen}` : undefined}
-              className={`${inputCls} ${errores.telefono ? "border-tr-warning-text" : ""}`}
-              placeholder="Ej: 600 123 456"
-            />
-            {errores.telefono && (
-              <p id={`lead-telefono-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
-                {errores.telefono}
-              </p>
-            )}
-          </div>
+      {esDirecto ? (
+        <FormularioDirecto
+          origen={origen}
+          form={form}
+          set={set}
+          errores={errores}
+          setErrores={setErrores}
+          estado={estado}
+          textos={textos}
+        />
+      ) : (
+        <FormularioInforme
+          origen={origen}
+          form={form}
+          set={set}
+          errores={errores}
+          setErrores={setErrores}
+          estado={estado}
+          textos={textos}
+          numFotos={numFotos}
+        />
+      )}
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Campos comunes                                                            */
+/* ------------------------------------------------------------------------- */
+
+interface CampoBaseProps {
+  origen: OrigenLead;
+  form: {
+    nombre: string;
+    telefono: string;
+    email: string;
+    municipio: string;
+    cultivo: string;
+    sintoma: string;
+    canalContacto: string;
+    mensaje: string;
+    solicitudRespuesta: boolean;
+    consentimientoComercial: boolean;
+    autorizoInforme: boolean;
+    web: string;
+  };
+  set: (campo: string, valor: string | boolean) => void;
+  errores: { telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string };
+  setErrores: React.Dispatch<React.SetStateAction<{ telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string }>>;
+  estado: EstadoEnvio;
+}
+
+interface CamposProps extends CampoBaseProps {
+  textos: { datosTratados: string };
+}
+
+function CampoCorreo({ origen, form, set, errores, setErrores, estado, conTelefono }: CampoBaseProps & { conTelefono: boolean }) {
+  return (
+    <div>
+      <label htmlFor={`lead-email-${origen}`} className={labelCls}>
+        Correo electrónico {conTelefono && <span className="font-normal text-tr-muted">(opcional si dejas el teléfono)</span>}
+      </label>
+      <input
+        id={`lead-email-${origen}`}
+        type="email"
+        inputMode="email"
+        value={form.email}
+        onChange={(e) => {
+          set("email", e.target.value);
+          if (errores.email || errores.contacto) {
+            setErrores((x) => ({ ...x, email: undefined, contacto: undefined }));
+          }
+        }}
+        disabled={estado === "enviando"}
+        autoComplete="email"
+        aria-invalid={errores.email ? "true" : undefined}
+        aria-describedby={errores.email ? `lead-email-error-${origen}` : undefined}
+        className={`${inputCls} ${errores.email ? "border-tr-warning-text" : ""}`}
+        placeholder="Ej: nombre@correo.com"
+      />
+      {errores.email && (
+        <p id={`lead-email-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+          {errores.email}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CampoTelefono({ origen, form, set, errores, setErrores, estado, etiquetaOpcional }: CampoBaseProps & { etiquetaOpcional: string }) {
+  return (
+    <div>
+      <label htmlFor={`lead-telefono-${origen}`} className={labelCls}>
+        Teléfono / WhatsApp <span className="font-normal text-tr-muted">({etiquetaOpcional})</span>
+      </label>
+      <input
+        id={`lead-telefono-${origen}`}
+        type="tel"
+        inputMode="tel"
+        value={form.telefono}
+        onChange={(e) => {
+          set("telefono", e.target.value);
+          if (errores.telefono || errores.contacto) {
+            setErrores((x) => ({ ...x, telefono: undefined, contacto: undefined }));
+          }
+        }}
+        disabled={estado === "enviando"}
+        autoComplete="tel"
+        aria-invalid={errores.telefono ? "true" : undefined}
+        aria-describedby={errores.telefono ? `lead-telefono-error-${origen}` : undefined}
+        className={`${inputCls} ${errores.telefono ? "border-tr-warning-text" : ""}`}
+        placeholder="Ej: 600 123 456"
+      />
+      {errores.telefono && (
+        <p id={`lead-telefono-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+          {errores.telefono}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Flujo posterior al diagnóstico: informe con correo, revisión aparte        */
+/* ------------------------------------------------------------------------- */
+
+function FormularioInforme({ origen, form, set, errores, setErrores, estado, textos, numFotos }: CamposProps & { numFotos: number }) {
+  return (
+    <div className="grid gap-4 mt-4">
+      <CampoCorreo origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} conTelefono={false} />
+
+      {/* Sin ningún contacto no hay forma de entregar el informe. */}
+      {errores.contacto && (
+        <p className="text-small text-tr-warning-text" role="alert">
+          {errores.contacto}
+        </p>
+      )}
+
+      {/* Autorización de uso del contacto, separada de la revisión técnica:
+          desbloquear el informe no implica que un técnico vaya a contactar. */}
+      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <input
+          id={`lead-autorizacion-${origen}`}
+          type="checkbox"
+          required
+          checked={form.autorizoInforme}
+          onChange={(e) => {
+            set("autorizoInforme", e.target.checked);
+            if (errores.autorizacion) setErrores((x) => ({ ...x, autorizacion: undefined }));
+          }}
+          disabled={estado === "enviando"}
+          aria-invalid={errores.autorizacion ? "true" : undefined}
+          aria-describedby={errores.autorizacion ? `lead-autorizacion-error-${origen}` : undefined}
+          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+        />
+        <div className="flex-1">
+          <label htmlFor={`lead-autorizacion-${origen}`} className="block text-small text-tr-ink leading-relaxed">
+            <span className="block font-semibold">
+              Autorizo el uso de mi contacto para desbloquear el informe y aplicar el límite semanal de análisis. *
+            </span>
+            <span className="mt-1 block text-tr-muted">
+              Trataremos {textos.datosTratados} para estas dos finalidades. No supone contratación, coste ni
+              publicidad. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.
+            </span>
+          </label>
+          {errores.autorizacion && (
+            <p id={`lead-autorizacion-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+              {errores.autorizacion}
+            </p>
+          )}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`lead-email-${origen}`} className={labelCls}>
-              Correo electrónico <span className="font-normal text-tr-muted">(opcional si dejas el teléfono)</span>
-            </label>
-            <input
-              id={`lead-email-${origen}`}
-              type="email"
-              inputMode="email"
-              value={form.email}
-              onChange={(e) => {
-                set("email", e.target.value);
-                if (errores.email || errores.contacto) {
-                  setErrores((x) => ({ ...x, email: undefined, contacto: undefined }));
-                }
-              }}
-              disabled={estado === "enviando"}
-              autoComplete="email"
-              aria-invalid={errores.email ? "true" : undefined}
-              aria-describedby={errores.email ? `lead-email-error-${origen}` : undefined}
-              className={`${inputCls} ${errores.email ? "border-tr-warning-text" : ""}`}
-              placeholder="Ej: nombre@correo.com"
-            />
-            {errores.email && (
-              <p id={`lead-email-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
-                {errores.email}
-              </p>
-            )}
-          </div>
-          <div>
-            <label htmlFor={`lead-municipio-${origen}`} className={labelCls}>Municipio</label>
-            <input
-              id={`lead-municipio-${origen}`}
-              type="text"
-              value={form.municipio}
-              onChange={(e) => set("municipio", e.target.value)}
-              disabled={estado === "enviando"}
-              className={inputCls}
-              placeholder="Tu zona"
-            />
-          </div>
-        </div>
+      {/* Intención aparte: la revisión técnica. Es opcional y es la única que
+          registra una solicitud de contacto con el técnico. */}
+      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <input
+          id={`lead-solicitud-${origen}`}
+          type="checkbox"
+          checked={form.solicitudRespuesta}
+          onChange={(e) => set("solicitudRespuesta", e.target.checked)}
+          disabled={estado === "enviando"}
+          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+        />
+        <label htmlFor={`lead-solicitud-${origen}`} className="text-small text-tr-ink leading-relaxed">
+          <span className="block font-semibold">Además, quiero que un técnico revise mi caso y me contacte</span>
+          <span className="mt-1 block text-tr-muted">
+            Opcional. La foto se comparte con el técnico solo si lo marcas; no tiene coste ni compromiso
+            de contratación.
+          </span>
+        </label>
+      </div>
 
-        {/* Falta el canal de contacto: se avisa aquí y no bajo un campo
-            concreto, porque no es culpa del teléfono ni del correo. */}
-        {errores.contacto && (
-          <p className="text-small text-tr-warning-text" role="alert">
-            {errores.contacto}
-          </p>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`lead-cultivo-${origen}`} className={labelCls}>Cultivo</label>
-            <input
-              id={`lead-cultivo-${origen}`}
-              type="text"
-              value={form.cultivo}
-              onChange={(e) => set("cultivo", e.target.value)}
-              disabled={estado === "enviando"}
-              className={inputCls}
-              placeholder="Tu cultivo"
-            />
-          </div>
+      {form.solicitudRespuesta && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+          <CampoTelefono origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} etiquetaOpcional="necesario salvo si eliges correo" />
           <div>
             <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
             <select
               id={`lead-canal-${origen}`}
-              value={soloCorreo ? "correo" : form.canalContacto}
+              value={form.canalContacto}
               onChange={(e) => set("canalContacto", e.target.value)}
               disabled={estado === "enviando"}
               className={inputCls}
             >
-              <option value="llamada" disabled={soloCorreo}>Llamada telefónica</option>
-              <option value="whatsapp" disabled={soloCorreo}>WhatsApp</option>
+              <option value="llamada">Llamada telefónica</option>
+              <option value="whatsapp">WhatsApp</option>
               <option value="correo">Correo electrónico</option>
             </select>
           </div>
+          {numFotos > 0 && (
+            <p className="sm:col-span-2 text-caption text-tr-muted">
+              Al enviar, {numFotos === 1 ? "la foto del análisis se adjuntará" : `las ${numFotos} fotos del análisis se adjuntarán`} para la revisión. No se usan para ningún otro fin.
+            </p>
+          )}
         </div>
+      )}
 
-        {/* Sin diagnóstico detrás (página de contacto) el técnico no sabe qué
-            le pasa al cultivo. Este campo sustituye a las hectáreas: es lo que
-            el pequeño agricultor sí sabe describir. */}
-        {!contexto?.sintoma && !prefill?.sintoma && (
-          <div>
-            <label htmlFor={`lead-sintoma-${origen}`} className={labelCls}>
-              ¿Qué has observado en el cultivo? <span className="font-normal text-tr-muted">(opcional)</span>
-            </label>
-            <textarea
-              id={`lead-sintoma-${origen}`}
-              rows={2}
-              value={form.sintoma}
-              onChange={(e) => set("sintoma", e.target.value)}
-              disabled={estado === "enviando"}
-              className={`${inputCls} resize-none`}
-              placeholder="Por ejemplo: hojas con manchas marrones desde hace dos semanas"
-            />
-          </div>
+      {/* Honeypot anti-spam: oculto para personas */}
+      <div className="hidden" aria-hidden="true">
+        <label htmlFor={`lead-web-${origen}`}>Web</label>
+        <input
+          id={`lead-web-${origen}`}
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={form.web}
+          onChange={(e) => set("web", e.target.value)}
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={estado === "enviando"}
+        className={`${btnPrimary} w-full py-3`}
+      >
+        {estado === "enviando" ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+            Enviando...
+          </>
+        ) : form.solicitudRespuesta ? (
+          "Ver mi informe y solicitar la revisión"
+        ) : (
+          "Ver mi informe completo"
         )}
+      </button>
 
+      <p className="text-caption text-tr-muted text-center">
+        Recibirás el informe al momento en pantalla. Enviarlo no implica ninguna contratación ni coste.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Contacto directo: formulario completo de la página /contacto              */
+/* ------------------------------------------------------------------------- */
+
+function FormularioDirecto({ origen, form, set, errores, setErrores, estado, textos }: CamposProps) {
+  const telefonoLleno = Boolean(form.telefono.trim());
+  const soloCorreo = !form.telefono.trim() && Boolean(form.email.trim());
+  return (
+    <div className="grid gap-4 mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label htmlFor={`lead-mensaje-${origen}`} className={labelCls}>
-            ¿Algo más que debamos saber? <span className="font-normal text-tr-muted">(opcional)</span>
+          <label htmlFor={`lead-nombre-${origen}`} className={labelCls}>
+            Nombre <span className="font-normal text-tr-muted">(opcional)</span>
           </label>
-          <textarea
-            id={`lead-mensaje-${origen}`}
-            rows={2}
-            value={form.mensaje}
-            onChange={(e) => set("mensaje", e.target.value)}
-            disabled={estado === "enviando"}
-            className={`${inputCls} resize-none`}
-            placeholder="Opcional: cuéntanos brevemente el problema"
-          />
-        </div>
-
-        {/* Honeypot anti-spam: oculto para personas */}
-        <div className="hidden" aria-hidden="true">
-          <label htmlFor={`lead-web-${origen}`}>Web</label>
           <input
-            id={`lead-web-${origen}`}
+            id={`lead-nombre-${origen}`}
             type="text"
-            tabIndex={-1}
-            autoComplete="off"
-            value={form.web}
-            onChange={(e) => set("web", e.target.value)}
+            value={form.nombre}
+            onChange={(e) => set("nombre", e.target.value)}
+            disabled={estado === "enviando"}
+            autoComplete="name"
+            className={inputCls}
+            placeholder="Tu nombre"
           />
         </div>
+        <CampoTelefono origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} etiquetaOpcional="opcional si dejas el correo" />
+      </div>
 
-        {/* Confirmación de solicitud: separada del consentimiento comercial */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <CampoCorreo origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} conTelefono />
+        <div>
+          <label htmlFor={`lead-municipio-${origen}`} className={labelCls}>Municipio</label>
+          <input
+            id={`lead-municipio-${origen}`}
+            type="text"
+            value={form.municipio}
+            onChange={(e) => set("municipio", e.target.value)}
+            disabled={estado === "enviando"}
+            className={inputCls}
+            placeholder="Tu zona"
+          />
+        </div>
+      </div>
+
+      {/* Falta el canal de contacto: se avisa aquí y no bajo un campo
+          concreto, porque no es culpa del teléfono ni del correo. */}
+      {errores.contacto && (
+        <p className="text-small text-tr-warning-text" role="alert">
+          {errores.contacto}
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor={`lead-cultivo-${origen}`} className={labelCls}>Cultivo</label>
+          <input
+            id={`lead-cultivo-${origen}`}
+            type="text"
+            value={form.cultivo}
+            onChange={(e) => set("cultivo", e.target.value)}
+            disabled={estado === "enviando"}
+            className={inputCls}
+            placeholder="Tu cultivo"
+          />
+        </div>
+        <div>
+          <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
+          <select
+            id={`lead-canal-${origen}`}
+            value={soloCorreo ? "correo" : form.canalContacto}
+            onChange={(e) => set("canalContacto", e.target.value)}
+            disabled={estado === "enviando"}
+            className={inputCls}
+          >
+            <option value="llamada" disabled={soloCorreo}>Llamada telefónica</option>
+            <option value="whatsapp" disabled={soloCorreo}>WhatsApp</option>
+            <option value="correo">Correo electrónico</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Sin diagnóstico detrás (página de contacto) el técnico no sabe qué
+          le pasa al cultivo. Este campo sustituye a las hectáreas: es lo que
+          el pequeño agricultor sí sabe describir. */}
+      <div>
+        <label htmlFor={`lead-sintoma-${origen}`} className={labelCls}>
+          ¿Qué has observado en el cultivo? <span className="font-normal text-tr-muted">(opcional)</span>
+        </label>
+        <textarea
+          id={`lead-sintoma-${origen}`}
+          rows={2}
+          value={form.sintoma}
+          onChange={(e) => set("sintoma", e.target.value)}
+          disabled={estado === "enviando"}
+          className={`${inputCls} resize-none`}
+          placeholder="Por ejemplo: hojas con manchas marrones desde hace dos semanas"
+        />
+      </div>
+
+      <div>
+        <label htmlFor={`lead-mensaje-${origen}`} className={labelCls}>
+          ¿Algo más que debamos saber? <span className="font-normal text-tr-muted">(opcional)</span>
+        </label>
+        <textarea
+          id={`lead-mensaje-${origen}`}
+          rows={2}
+          value={form.mensaje}
+          onChange={(e) => set("mensaje", e.target.value)}
+          disabled={estado === "enviando"}
+          className={`${inputCls} resize-none`}
+          placeholder="Opcional: cuéntanos brevemente el problema"
+        />
+      </div>
+
+      {/* Honeypot anti-spam: oculto para personas */}
+      <div className="hidden" aria-hidden="true">
+        <label htmlFor={`lead-web-${origen}`}>Web</label>
+        <input
+          id={`lead-web-${origen}`}
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={form.web}
+          onChange={(e) => set("web", e.target.value)}
+        />
+      </div>
+
+      {/* Confirmación de solicitud: separada del consentimiento comercial */}
+      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <input
+          id={`lead-solicitud-${origen}`}
+          type="checkbox"
+          required
+          checked={form.solicitudRespuesta}
+          onChange={(e) => {
+            set("solicitudRespuesta", e.target.checked);
+            if (errores.solicitud) setErrores((x) => ({ ...x, solicitud: undefined }));
+          }}
+          disabled={estado === "enviando"}
+          aria-invalid={errores.solicitud ? "true" : undefined}
+          aria-describedby={errores.solicitud ? `lead-solicitud-error-${origen}` : undefined}
+          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+        />
+        <div className="flex-1">
+          <label htmlFor={`lead-solicitud-${origen}`} className="block text-small text-tr-ink leading-relaxed">
+            <span className="block font-semibold">
+              Solicito que TecRural revise este caso y me responda al teléfono o correo indicado. *
+            </span>
+            <span className="mt-1 block text-tr-muted">Usaremos tus datos ({textos.datosTratados}) para gestionar la solicitud. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.</span>
+          </label>
+          {errores.solicitud && (
+            <p id={`lead-solicitud-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+              {errores.solicitud}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Consentimiento comercial: opcional, desmarcado por defecto. Solo se
+          ofrece cuando hay teléfono: es un consentimiento para WhatsApp y,
+          sin número, no hay nada que enviar. */}
+      {telefonoLleno && (
         <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
           <input
-            id={`lead-solicitud-${origen}`}
+            id={`lead-comercial-${origen}`}
             type="checkbox"
-            required
-            checked={form.solicitudRespuesta}
-            onChange={(e) => {
-              set("solicitudRespuesta", e.target.checked);
-              if (errores.solicitud) setErrores((x) => ({ ...x, solicitud: undefined }));
-            }}
+            checked={form.consentimientoComercial}
+            onChange={(e) => set("consentimientoComercial", e.target.checked)}
             disabled={estado === "enviando"}
-            aria-invalid={errores.solicitud ? "true" : undefined}
-            aria-describedby={errores.solicitud ? `lead-solicitud-error-${origen}` : undefined}
             className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
           />
-          <div className="flex-1">
-            <label htmlFor={`lead-solicitud-${origen}`} className="block text-small text-tr-ink leading-relaxed">
-              <span className="block font-semibold">
-                {esDirecto
-                  ? "Solicito que TecRural revise este caso y me responda al teléfono o correo indicado. *"
-                  : "Solicito ver el informe completo y que TecRural revise este caso, y autorizo que me respondáis al teléfono o correo indicado. *"}
-              </span>
-              <span className="mt-1 block text-tr-muted">Usaremos tus datos ({textos.datosTratados}) para gestionar la solicitud. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.</span>
-            </label>
-            {errores.solicitud && (
-              <p id={`lead-solicitud-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
-                {errores.solicitud}
-              </p>
-            )}
-          </div>
+          <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
+            Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
+            <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
+          </label>
         </div>
+      )}
 
-        {/* Consentimiento comercial: opcional, desmarcado por defecto. Solo se
-            ofrece cuando hay teléfono: es un consentimiento para WhatsApp y,
-            sin número, no hay nada que enviar. */}
-        {Boolean(form.telefono.trim()) && (
-          <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
-            <input
-              id={`lead-comercial-${origen}`}
-              type="checkbox"
-              checked={form.consentimientoComercial}
-              onChange={(e) => set("consentimientoComercial", e.target.checked)}
-              disabled={estado === "enviando"}
-              className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
-            />
-            <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
-              Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
-              <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
-            </label>
-          </div>
+      <button
+        type="submit"
+        disabled={estado === "enviando" || !form.solicitudRespuesta}
+        className={`${btnPrimary} w-full py-3`}
+      >
+        {estado === "enviando" ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+            Enviando...
+          </>
+        ) : (
+          "Enviar solicitud de revisión"
         )}
+      </button>
 
-        <button
-          type="submit"
-          disabled={estado === "enviando" || !form.solicitudRespuesta}
-          className={`${btnPrimary} w-full py-3`}
-        >
-          {estado === "enviando" ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-              Enviando...
-            </>
-          ) : esDirecto ? (
-            "Enviar solicitud de revisión"
-          ) : (
-            "Ver mi informe completo"
-          )}
-        </button>
-
-        <p className="text-caption text-tr-muted text-center">
-          Enviar esta solicitud no implica ninguna contratación ni coste.
-        </p>
-      </div>
-    </form>
+      <p className="text-caption text-tr-muted text-center">
+        Enviar esta solicitud no implica ninguna contratación ni coste.
+      </p>
+    </div>
   );
 }

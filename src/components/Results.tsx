@@ -88,7 +88,6 @@ export function Results({
     diagnosticos_diferenciales,
   } = diagnostico;
 
-  const [ctaAbierto, setCtaAbierto] = useState(false);
   const [informeDesbloqueado, setInformeDesbloqueado] = useState(false);
   const [feedbackEstado, setFeedbackEstado] = useState<"idle" | "enviando" | "ok" | "error">("idle");
   const [compartido, setCompartido] = useState<"idle" | "ok" | "error">("idle");
@@ -134,15 +133,6 @@ export function Results({
     if (feedback !== null) {
       enviarFeedback(feedback);
     }
-  };
-
-  const abrirCTA = () => {
-    setCtaAbierto(true);
-    trackEvento("cta_revision_abierto", {
-      gravedad: diag.gravedad,
-      requiere_experto,
-      tipo: diag.tipo,
-    });
   };
 
   const desbloquearInforme = () => {
@@ -331,7 +321,6 @@ export function Results({
           <p className="mt-3 text-small text-tr-muted leading-relaxed">
             El informe es orientativo: parte de una foto y puede contener errores. Confirma que el producto
             está autorizado para tu cultivo y respeta siempre la etiqueta y el plazo de seguridad.
-            Hemos registrado tu caso: un técnico de TecRural te responderá en un plazo máximo de 48 horas.
           </p>
         </div>
       ) : (
@@ -363,36 +352,29 @@ export function Results({
             ))}
           </ul>
           <p className="mt-3 text-body text-tr-muted">
-            Déjanos tu teléfono o tu correo y verás el informe al momento en pantalla, listo para
-            descargar en PDF. Un técnico puede además revisar tu caso contigo.
+            Escribe tu correo y verás el informe al momento en pantalla, listo para descargar en PDF.
+            Si quieres que además un técnico revise tu caso, márcalo en el formulario: es una opción
+            aparte y en ese caso sí se registra una solicitud de contacto.
           </p>
 
-          {!ctaAbierto ? (
-            <div className="mt-4 no-print">
-              <button onClick={abrirCTA} type="button" className={`${btnPrimary} w-full`}>
-                Ver mi informe completo
-              </button>
-            </div>
-          ) : (
-            <div className="mt-4 no-print">
-              <LeadForm
-                origen="post_diagnostico"
-                diagnosticoId={diagnostico.id}
-                contexto={contexto}
-                prefill={{
-                  cultivo: contextoUsuario?.cultivo,
-                  municipio: contextoUsuario?.municipio,
-                  variedad: diagnostico.nombre_planta || contextoUsuario?.variedad,
-                  sintoma: contextoUsuario?.sintoma,
-                }}
-                mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
-                adjuntarFotos={fotosDataUrl}
-                onEnviado={desbloquearInforme}
-              />
-            </div>
-          )}
+          <div className="mt-4 no-print">
+            <LeadForm
+              origen="post_diagnostico"
+              diagnosticoId={diagnostico.id}
+              contexto={contexto}
+              prefill={{
+                cultivo: contextoUsuario?.cultivo,
+                municipio: contextoUsuario?.municipio,
+                variedad: diagnostico.nombre_planta || contextoUsuario?.variedad,
+                sintoma: contextoUsuario?.sintoma,
+              }}
+              mensajeInicial={diag.tipo !== "sano" ? `Me sale esta orientación: ${diag.nombre} en ${especie_identificada}.` : ""}
+              adjuntarFotos={fotosDataUrl}
+              onEnviado={desbloquearInforme}
+            />
+          </div>
           <p className="mt-3 text-small text-tr-muted leading-relaxed">
-            La foto se comparte con el técnico solo si envías la solicitud. No tiene coste ni compromiso
+            La foto se comparte con el técnico solo si pides la revisión. No tiene coste ni compromiso
             de contratación; el tiempo de respuesta depende de la demanda.
           </p>
         </div>

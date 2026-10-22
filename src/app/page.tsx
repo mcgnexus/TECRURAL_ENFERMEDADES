@@ -58,11 +58,11 @@ function HomeContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [faseAnalisis, setFaseAnalisis] = useState<FaseAnalisis | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [requiereTelefono, setRequiereTelefono] = useState(false);
-  const [telefonoCuota, setTelefonoCuota] = useState("");
-  const [confirmarCuotaTelefono, setConfirmarCuotaTelefono] = useState(false);
-  const [guardandoTelefono, setGuardandoTelefono] = useState(false);
-  const [errorTelefono, setErrorTelefono] = useState<string | null>(null);
+  const [requiereAmpliacion, setRequiereAmpliacion] = useState(false);
+  const [correoCuota, setCorreoCuota] = useState("");
+  const [confirmarCuotaContacto, setConfirmarCuotaContacto] = useState(false);
+  const [guardandoCuota, setGuardandoCuota] = useState(false);
+  const [errorCuota, setErrorCuota] = useState<string | null>(null);
 
   const handleFotosChange = useCallback((nuevas: FotosEstado) => {
     setFotos(nuevas);
@@ -119,7 +119,7 @@ function HomeContent() {
     setIsLoading(true);
     setFaseAnalisis(null);
     setError(null);
-    setRequiereTelefono(false);
+    setRequiereAmpliacion(false);
     trackEvento("analisis_iniciado", { fotos: 1 + (fotos.enves ? 1 : 0) + (fotos.planta_completa ? 1 : 0) });
 
     try {
@@ -157,7 +157,7 @@ function HomeContent() {
     } catch (err) {
       const mensaje = mensajeAmigable(err);
       setError(mensaje);
-      if (err instanceof ErrorAnalisis && err.requiereTelefono) setRequiereTelefono(true);
+      if (err instanceof ErrorAnalisis && err.requiereAmpliacion) setRequiereAmpliacion(true);
       trackEvento("analisis_error", { message: mensaje });
       // Las fotos y el contexto se conservan para reintentar
     } finally {
@@ -166,27 +166,27 @@ function HomeContent() {
     }
   }, [fotos, contexto, isLoading]);
 
-  const activarCuotaTelefono = useCallback(async () => {
-    setGuardandoTelefono(true);
-    setErrorTelefono(null);
+  const activarCuotaContacto = useCallback(async () => {
+    setGuardandoCuota(true);
+    setErrorCuota(null);
     try {
-      const response = await fetch("/api/cuota/telefono", {
+      const response = await fetch("/api/cuota/contacto", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefono: telefonoCuota, aviso_uso_datos: confirmarCuotaTelefono }),
+        body: JSON.stringify({ email: correoCuota, aviso_uso_datos: confirmarCuotaContacto }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo activar la ampliación.");
-      setRequiereTelefono(false);
+      setRequiereAmpliacion(false);
       setError(null);
-      setErrorTelefono(null);
-      setConfirmarCuotaTelefono(false);
+      setErrorCuota(null);
+      setConfirmarCuotaContacto(false);
     } catch (err) {
-      setErrorTelefono(err instanceof Error ? err.message : "No se pudo activar la ampliación.");
+      setErrorCuota(err instanceof Error ? err.message : "No se pudo activar la ampliación.");
     } finally {
-      setGuardandoTelefono(false);
+      setGuardandoCuota(false);
     }
-  }, [telefonoCuota, confirmarCuotaTelefono]);
+  }, [correoCuota, confirmarCuotaContacto]);
 
   const handleReiniciar = useCallback(() => {
     setDiagnostico(null);
@@ -336,7 +336,7 @@ function HomeContent() {
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">3</span>
                 <div>
                   <h3 className="font-heading font-semibold text-tr-forest">Llévate el informe completo</h3>
-                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Con tu teléfono o tu correo desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto.</p>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Dejando tu correo desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto. Si lo deseas, puedes pedir además la revisión de un técnico.</p>
                 </div>
               </li>
             </ol>
@@ -414,8 +414,8 @@ function HomeContent() {
 
         <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
           Al terminar verás una orientación inicial gratuita. Si quieres el informe completo con el
-          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu teléfono o tu
-          correo; la foto solo se comparte con el técnico cuando envías esa solicitud.
+          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu correo;
+          la foto solo se comparte con el técnico si pides aparte que revise tu caso.
         </p>
 
         {error && (
@@ -437,38 +437,38 @@ function HomeContent() {
           </div>
         )}
 
-        {requiereTelefono && (
-          <section className="mb-5 rounded-[var(--tr-radius-card)] border border-tr-line bg-tr-surface p-4" aria-labelledby="cuota-telefono-titulo">
-            <h2 id="cuota-telefono-titulo" className="font-heading font-semibold text-tr-forest">Amplía el límite semanal</h2>
+        {requiereAmpliacion && (
+          <section className="mb-5 rounded-[var(--tr-radius-card)] border border-tr-line bg-tr-surface p-4" aria-labelledby="cuota-contacto-titulo">
+            <h2 id="cuota-contacto-titulo" className="font-heading font-semibold text-tr-forest">Amplía el límite semanal con tu correo</h2>
             <p className="mt-1 text-small text-tr-muted">Puedes hacer hasta 6 análisis en cualquier periodo de 7 días, contando los que ya hayas hecho esta semana.</p>
-            <label htmlFor="cuota-telefono" className="mt-3 block text-small font-semibold text-tr-forest">Teléfono</label>
+            <label htmlFor="cuota-correo" className="mt-3 block text-small font-semibold text-tr-forest">Correo electrónico</label>
             <input
-              id="cuota-telefono"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={telefonoCuota}
-              onChange={(e) => setTelefonoCuota(e.target.value)}
+              id="cuota-correo"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={correoCuota}
+              onChange={(e) => setCorreoCuota(e.target.value)}
               className="mt-1 w-full rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper px-3 py-2.5 text-tr-ink"
-              placeholder="Ej.: 600 123 456"
+              placeholder="Ej.: nombre@correo.com"
             />
             <label className="mt-3 flex items-start gap-2 text-caption leading-relaxed text-tr-muted">
               <input
                 type="checkbox"
-                checked={confirmarCuotaTelefono}
-                onChange={(e) => setConfirmarCuotaTelefono(e.target.checked)}
+                checked={confirmarCuotaContacto}
+                onChange={(e) => setConfirmarCuotaContacto(e.target.checked)}
                 className="mt-0.5"
               />
-              <span>Confirmo que facilito mi teléfono solo para ampliar el límite de análisis. No se guarda en claro (únicamente una huella seudonimizada), no se usa para contactarme ni para publicidad, y se conserva un máximo de 180 días. Esta ampliación no es una solicitud de revisión. <Link href="/privacidad#limite-analisis" className="underline">Más información</Link>.</span>
+              <span>Confirmo que facilito mi correo solo para ampliar el límite de análisis. No se guarda en claro (únicamente una huella seudonimizada), no se usa para contactarme ni para publicidad, y se conserva un máximo de 180 días. Esta ampliación no es una solicitud de revisión. <Link href="/privacidad#limite-analisis" className="underline">Más información</Link>.</span>
             </label>
-            {errorTelefono && <p className="mt-2 text-small text-tr-warning-text" role="alert">{errorTelefono}</p>}
+            {errorCuota && <p className="mt-2 text-small text-tr-warning-text" role="alert">{errorCuota}</p>}
             <button
               type="button"
-              onClick={activarCuotaTelefono}
-              disabled={guardandoTelefono || !telefonoCuota.trim() || !confirmarCuotaTelefono}
+              onClick={activarCuotaContacto}
+              disabled={guardandoCuota || !correoCuota.trim() || !confirmarCuotaContacto}
               className={`${btnPrimary} mt-3 w-full`}
             >
-              {guardandoTelefono ? "Activando…" : "Ampliar a 6 análisis semanales"}
+              {guardandoCuota ? "Activando…" : "Ampliar a 6 análisis semanales"}
             </button>
           </section>
         )}

@@ -220,7 +220,7 @@ async function procesarDiagnostico(
     if (cuota && !cuota.permitido) {
       console.warn("Diagnóstico bloqueado por cuota o indisponibilidad de la base.");
       return NextResponse.json(
-        { error: cuota.mensaje, cuota: { motivo: cuota.motivo, requiereTelefono: cuota.requiereTelefono } },
+        { error: cuota.mensaje, cuota: { motivo: cuota.motivo, requiereAmpliacion: cuota.requiereAmpliacion } },
         { status: cuota.motivo === "global" || cuota.motivo === "database" ? 503 : 429 }
       );
     }

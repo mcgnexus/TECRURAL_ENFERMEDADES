@@ -32,43 +32,41 @@ describe.skipIf(!disponible)("cuotas móviles", () => {
     await sql`DELETE FROM cuota_telefonos`;
   });
 
-  it("permite dos análisis anónimos dentro de la ventana semanal y después pide teléfono", async () => {
+  it("permite un análisis anónimo en la ventana semanal y después pide el contacto", async () => {
     const uid = randomUUID();
-    expect((await mod.consumirUso("diag", uid)).permitido).toBe(true);
     expect((await mod.consumirUso("diag", uid)).permitido).toBe(true);
     const bloqueado = await mod.consumirUso("diag", uid);
     expect(bloqueado.permitido).toBe(false);
-    expect(bloqueado.requiereTelefono).toBe(true);
+    expect(bloqueado.requiereAmpliacion).toBe(true);
   });
 
   it("cuenta los análisis anónimos previos dentro de los seis semanales", async () => {
     const uid = randomUUID();
     await mod.consumirUso("diag", uid);
-    await mod.consumirUso("diag", uid);
-    const hash = mod.hashTelefonoCuota("+34600123456");
-    await mod.vincularTelefonoCuota(uid, hash);
+    const hash = mod.hashContactoCuota("+34600123456");
+    await mod.vincularContactoCuota(uid, hash);
 
-    for (let i = 0; i < 4; i++) expect((await mod.consumirUso("diag", uid)).permitido).toBe(true);
+    for (let i = 0; i < mod.LIMITES.telefono - mod.LIMITES.anonimos; i++) {
+      expect((await mod.consumirUso("diag", uid)).permitido).toBe(true);
+    }
     const limite = await mod.consumirUso("diag", uid);
     expect(limite.permitido).toBe(false);
-    expect(limite.requiereTelefono).toBe(false);
+    expect(limite.requiereAmpliacion).toBe(false);
   });
 
   it("usa una ventana móvil: el consumo de hace ocho días ya no cuenta", async () => {
     const uid = randomUUID();
-    for (let i = 0; i < 2; i++) {
-      await sql`
-        INSERT INTO cuota_usos (ambito, sujeto, visitor_id, creado_en)
-        VALUES ('diag', ${`visitante:${uid}`}, ${uid}, NOW() - INTERVAL '8 days')
-      `;
-    }
+    await sql`
+      INSERT INTO cuota_usos (ambito, sujeto, visitor_id, creado_en)
+      VALUES ('diag', ${`visitante:${uid}`}, ${uid}, NOW() - INTERVAL '8 days')
+    `;
     expect((await mod.consumirUso("diag", uid)).permitido).toBe(true);
   });
 
   it("no supera la cuota anónima con peticiones simultáneas", async () => {
     const uid = randomUUID();
     const resultados = await Promise.all(Array.from({ length: 20 }, () => mod.consumirUso("diag", uid)));
-    expect(resultados.filter((resultado) => resultado.permitido)).toHaveLength(2);
+    expect(resultados.filter((resultado) => resultado.permitido)).toHaveLength(mod.LIMITES.anonimos);
   });
 
   it("reembolsa idempotentemente las filas de visitante, IP y global del intento", async () => {

@@ -37,8 +37,8 @@ const utmSchema = z.object({
 // "teléfono O correo" no se puede comprobar de otra forma sin llamar a la API.
 export const leadSchema = z.object({
   // El nombre es opcional. Del contacto, basta con teléfono O correo: se
-  // exige al menos uno en el superRefine del final, porque el informe completo
-  // solo se revela a cambio de un canal por el que el técnico pueda responder.
+  // exige al menos uno en el superRefine del final, porque sin canal no hay
+  // forma de entregar el informe completo ni de responder a la revisión.
   nombre: z.string().trim().max(80).optional(),
   telefono: z
     .string()
@@ -67,9 +67,12 @@ export const leadSchema = z.object({
   // Canal de contacto solicitado para responder a la revisión
   // (llamada | whatsapp | correo)
   canal_contacto: z.string().trim().max(40).optional(),
-  // Confirmación explícita de que solicita respuesta sobre este caso
-  solicitud_respuesta: z.literal(true, {
-    message: "Debes confirmar que solicitas respuesta sobre este caso",
+  // Confirmación explícita de que solicita respuesta sobre este caso. En el
+  // flujo posterior al diagnóstico puede llegar a false: quien solo quería ver
+  // el informe completo no ha pedido revisión, y su envío no genera una
+  // solicitud de contacto (ni guarda fotos).
+  solicitud_respuesta: z.boolean({
+    message: "Falta la confirmación de la solicitud de respuesta",
   }),
   // Consentimiento comercial: opcional, separado, nunca premarcado
   consentimiento_comercial: z.boolean().optional().default(false),
@@ -144,9 +147,13 @@ export async function POST(request: NextRequest) {
 
     const datos = parsed.data;
 
+    // Minimización: las fotos son material de la revisión técnica. Si el envío
+    // no la solicita, no se guardan ni se validan.
+    const imagenes = datos.solicitud_respuesta ? datos.imagenes : undefined;
+
     // Validación real del contenido de cada imagen (magic bytes)
-    if (datos.imagenes && datos.imagenes.length > 0) {
-      for (const imagen of datos.imagenes) {
+    if (imagenes && imagenes.length > 0) {
+      for (const imagen of imagenes) {
         const resultado = validarDataUrlImagen(imagen);
         if (!resultado.ok) {
           return NextResponse.json({ error: resultado.error }, { status: 400 });
@@ -228,7 +235,7 @@ export async function POST(request: NextRequest) {
       utmCampaign: datos.utm?.campaign,
       utmContent: datos.utm?.content,
       utmTerm: datos.utm?.term,
-      imagenes: datos.imagenes,
+      imagenes,
       ip,
     });
 
