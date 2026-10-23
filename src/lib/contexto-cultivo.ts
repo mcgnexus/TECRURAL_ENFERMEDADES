@@ -23,6 +23,19 @@ export const CONTEXTO_INICIAL: ContextoForm = {
 export const VALOR_OTRO = "__otro__";
 export const VALOR_NO_LO_SE = "__no_lo_se__";
 
+/**
+ * ¿Hay un cultivo utilizable para analizar?
+ *
+ * El select nunca obliga por sí solo (la pantalla no es un `<form>`), así que
+ * el gating del botón de análisis vive aquí: vacío no vale, "otro" exige texto
+ * y "no lo sé" es una respuesta legítima.
+ */
+export function cultivoSeleccionado(c: ContextoForm): boolean {
+  if (c.cultivo === "") return false;
+  if (c.cultivo === VALOR_OTRO) return c.cultivoOtro.trim() !== "";
+  return true;
+}
+
 export function resumenContexto(c: ContextoForm) {
   return {
     cultivo:

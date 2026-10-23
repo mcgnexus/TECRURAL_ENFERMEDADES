@@ -44,6 +44,9 @@ const PERMITIDOS: NombreEvento[] = [
   "lead_enviado",
   "lead_error",
   "whatsapp_click",
+  // Informativo: mide el interés por el ejemplo de la portada. No es un paso
+  // del embudo y no debe contarse como análisis real (ver ORDEN_EMBUDO).
+  "ejemplo_visto",
 ];
 
 const eventoSchema = z.object({

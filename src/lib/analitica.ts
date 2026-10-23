@@ -16,6 +16,8 @@
  * - informe_pdf: guardó o imprimió el informe en PDF
  * - lead_enviado / lead_error: formulario enviado
  * - whatsapp_click: contacto por WhatsApp
+ * - ejemplo_visto: abrió el ejemplo de la portada. Es informativo y NO forma
+ *   parte del embudo: no equivale a un análisis real.
  */
 
 export type NombreEvento =
@@ -30,7 +32,8 @@ export type NombreEvento =
   | "informe_pdf"
   | "lead_enviado"
   | "lead_error"
-  | "whatsapp_click";
+  | "whatsapp_click"
+  | "ejemplo_visto";
 
 const CLAVE_BUFFER = "tr-eventos";
 

@@ -20,8 +20,21 @@ un técnico).
    - Esa cookie es la identidad anónima del dispositivo. No hay cuentas.
    - La portada muestra el límite gratuito (1 análisis cada 7 días, sin
      registro) antes de subir la foto: sin muros sorpresa tras el análisis.
-2. **Contexto del cultivo** (opcional salvo cultivo): cultivo, municipio,
-   síntoma, duración y variedad. Mejora la orientación; no se exige.
+   - El titular es corto y el botón principal está justo debajo. Un
+     desplegable «Ver un ejemplo» muestra una orientación de ejemplo (foto,
+     posibles causas, qué comprobar, limitaciones y cuándo pedir ayuda) sin
+     subir ninguna foto. Es contenido estático etiquetado como **Ejemplo**: no
+     llama a la API, no crea diagnósticos y el evento `ejemplo_visto` queda
+     fuera del embudo.
+2. **Pantalla de captura: cultivo → foto → contexto opcional**.
+   - Lo primero que se ve es la selección de **cultivo** y los botones de
+     cámara/galería. El análisis se habilita con cultivo + foto principal
+     (incluida la opción «No lo sé»).
+   - Municipio, síntoma, duración y variedad viven en un desplegable
+     **opcional** cerrado por defecto: mejoran la orientación, pero no
+     bloquean el envío. El desplegable explica para qué sirven.
+   - Un error recuperable conserva la foto y el contexto: se puede reintentar
+     sin repetir la captura.
 3. **Foto y envío** (`POST /api/diagnostico`).
    - Se valida el tipo real de la imagen (magic bytes), el tamaño y el formato
      en el cliente y en el servidor; se comprime a JPEG/WebP con un objetivo

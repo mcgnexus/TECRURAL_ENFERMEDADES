@@ -158,7 +158,7 @@ export function CameraCapture({
         return;
       }
       if (file.size > MAX_BYTES_IMAGEN) {
-        setError("La foto es demasiado grande (máximo 12 MB). Hazla con la cámara de la app.");
+        setError("Esa foto pesa demasiado. Hazla de nuevo con la cámara o elige otra imagen.");
         return;
       }
 
@@ -434,8 +434,8 @@ export function CameraCapture({
       />
 
       <p className="mt-3 text-caption text-tr-muted text-center">
-        Fotos optimizadas para envío móvil (hasta 1536 px, comprimidas). Se envían al servicio de
-        análisis y no se guardan, salvo que solicites una revisión de TecRural.
+        La app ajusta la foto para que llegue rápido aunque la cobertura sea floja. Se usa solo
+        para este análisis y no se guarda, salvo que pidas la revisión de un técnico.
       </p>
     </div>
   );

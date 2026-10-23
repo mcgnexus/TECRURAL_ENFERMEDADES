@@ -144,6 +144,7 @@ export const ETIQUETAS_EVENTO: Record<string, string> = {
   lead_enviado: "Contacto",
   lead_error: "Error contacto",
   whatsapp_click: "WhatsApp",
+  ejemplo_visto: "Ejemplo visto",
 };
 
 export const ETIQUETAS_ORIGEN: Record<string, string> = {

@@ -10,7 +10,8 @@ import { leerProgresoAnalisis } from "@/lib/progreso-analisis";
 import type { FaseAnalisis } from "@/lib/opciones-analisis";
 import logoTecRural from "../../TecRural_icono.png";
 import type { FotosEstado, FotoCapturada } from "@/components/CameraCapture";
-import { CONTEXTO_INICIAL, resumenContexto, type ContextoForm } from "@/lib/contexto-cultivo";
+import { CONTEXTO_INICIAL, cultivoSeleccionado, resumenContexto, type ContextoForm } from "@/lib/contexto-cultivo";
+import { EJEMPLO_ORIENTACION } from "@/lib/ejemplo-orientacion";
 import { PWAProviders } from "@/components/PWA/Providers";
 import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
@@ -33,10 +34,16 @@ const CameraCapture = dynamic(
     loading: () => <p className="text-small text-tr-muted" role="status">Preparando la cámara…</p>,
   },
 );
-const ContextoCultivo = dynamic(
-  () => import("@/components/ContextoCultivo").then((mod) => mod.ContextoCultivo),
+const CultivoSelector = dynamic(
+  () => import("@/components/ContextoCultivo").then((mod) => mod.CultivoSelector),
   {
     loading: () => <p className="text-small text-tr-muted" role="status">Cargando opciones de cultivo…</p>,
+  },
+);
+const ContextoOpcional = dynamic(
+  () => import("@/components/ContextoCultivo").then((mod) => mod.ContextoOpcional),
+  {
+    loading: () => <p className="text-small text-tr-muted" role="status">Cargando datos opcionales…</p>,
   },
 );
 const Results = dynamic(
@@ -124,7 +131,7 @@ function HomeContent() {
   }, []);
 
   const handleAnalizar = useCallback(async () => {
-    if (!fotos.principal || isLoading) return;
+    if (!fotos.principal || !cultivoSeleccionado(contexto) || isLoading) return;
 
     setIsLoading(true);
     setFaseAnalisis(null);
@@ -271,47 +278,159 @@ function HomeContent() {
               <a href="#como-funciona" className="inline-flex min-h-[44px] items-center rounded-[var(--tr-radius-control)] text-small font-semibold text-tr-forest underline-offset-2 hover:underline">Cómo funciona</a>
               <Link href="/contacto" className="inline-flex min-h-[44px] items-center rounded-[var(--tr-radius-control)] text-small font-semibold text-tr-forest underline-offset-2 hover:underline">Contacto</Link>
               <Link href="/contacto" className={`${btnBase} px-3 py-2 text-small bg-tr-lime text-tr-forest hover:bg-[#c7dc83]`}>
-                Hablar con un técnico
+                Hablar con TecRural
               </Link>
             </nav>
           </div>
         </header>
         <div className="flex-1">
-          <section className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14" aria-labelledby="home-title">
-            <div className="text-center lg:text-left">
-              <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">PLAGAS Y ENFERMEDADES · GRANADA</p>
-              <h1 id="home-title" className="home-hero-title font-heading font-bold text-tr-forest text-balance">
-                ¿Manchas en las hojas de tu aguacate o mango? Sube una foto y sabrás qué puede ser.
-              </h1>
-              <p className="mt-4 text-body leading-relaxed text-tr-ink text-pretty">
-                Para aguacate, mango, chirimoyo, cítricos, olivo y huerta de la Costa Tropical y el Altiplano.
-                <span className="mt-2 block text-tr-muted">Sin cuenta ni teléfono: {LIMITE_GRATIS}.</span>
-              </p>
-              <button onClick={() => setVista("captura")} type="button" className={`${btnPrimary} mt-6 w-full sm:w-auto sm:min-w-64`}>
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Analizar mi planta — gratis y sin registro
-              </button>
-              <p className="mt-3 text-small leading-relaxed text-tr-muted">
-                {TIEMPO_ANALISIS} · No sustituye el diagnóstico de un técnico.
-              </p>
+          <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14" aria-labelledby="home-title">
+            <div className="grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
+              <div className="text-center lg:text-left">
+                <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">PLAGAS Y ENFERMEDADES · GRANADA</p>
+                <h1 id="home-title" className="home-hero-title font-heading font-bold text-tr-forest text-balance">
+                  Una foto de tu cultivo y sabrás qué puede tener.
+                </h1>
+                <p className="mt-4 text-body leading-relaxed text-tr-ink text-pretty">
+                  Aguacate, mango, chirimoyo, cítricos, olivo y hortalizas de la Costa Tropical y el Altiplano.
+                </p>
+                <button onClick={() => setVista("captura")} type="button" className={`${btnPrimary} mt-6 w-full sm:w-auto sm:min-w-64`}>
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Analizar mi planta — gratis
+                </button>
+                <p className="mt-3 text-small leading-relaxed text-tr-muted">
+                  {LIMITE_GRATIS}, {SIN_REGISTRO} · {TIEMPO_ANALISIS} · No sustituye el diagnóstico de un técnico.
+                </p>
+              </div>
+
+              <figure className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl">
+                <div className="relative aspect-[3/2]">
+                  <Image
+                    src="/aguacate.jpg"
+                    alt="Hoja de aguacate con lesiones y punteado oscuro por chinches del aguacate."
+                    preload
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    fill
+                    quality={70}
+                    className="object-cover"
+                  />
+                </div>
+              </figure>
             </div>
 
-            <figure className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl">
-              <div className="relative aspect-[3/2]">
-                <Image
-                  src="/aguacate.jpg"
-                  alt="Hoja de aguacate con lesiones y punteado oscuro por chinches del aguacate."
-                  preload
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  fill
-                  quality={70}
-                  className="object-cover"
-                />
+            {/* Ejemplo sin foto propia: permite entender el resultado antes de
+                capturar nada. Es contenido estático, no llama a la API y no
+                cuenta como análisis real. */}
+            <details
+              id="ejemplo-resultado"
+              onToggle={(e) => {
+                if (e.currentTarget.open) trackEvento("ejemplo_visto");
+              }}
+              className="group mx-auto mt-8 w-full max-w-3xl overflow-hidden rounded-[var(--tr-radius-card)] border border-tr-line bg-tr-surface"
+            >
+              <summary
+                className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-small font-semibold text-tr-forest hover:bg-tr-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tr-green-strong"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-tr-lime px-2 py-0.5 text-caption font-bold uppercase tracking-wide text-tr-forest">
+                    {EJEMPLO_ORIENTACION.etiqueta}
+                  </span>
+                  Ver un ejemplo de resultado
+                </span>
+                <svg
+                  className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </summary>
+
+              <div className="border-t border-tr-line p-4 sm:p-5">
+                <h2 className="sr-only">Ejemplo de resultado</h2>
+                <p className="text-caption leading-relaxed text-tr-muted">
+                  {EJEMPLO_ORIENTACION.avisoNoCliente}
+                </p>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-[220px_1fr] sm:items-start">
+                  <figure>
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--tr-radius-control)] border border-tr-line">
+                      <Image
+                        src={EJEMPLO_ORIENTACION.foto.src}
+                        alt={EJEMPLO_ORIENTACION.foto.alt}
+                        fill
+                        sizes="(max-width: 640px) 100vw, 220px"
+                        quality={70}
+                        className="object-cover"
+                      />
+                      <span className="absolute left-2 top-2 rounded-full bg-tr-forest/90 px-2 py-0.5 text-caption font-bold uppercase tracking-wide text-white">
+                        {EJEMPLO_ORIENTACION.etiqueta}
+                      </span>
+                    </div>
+                    <figcaption className="mt-2 text-caption text-tr-muted">
+                      {EJEMPLO_ORIENTACION.cultivo} · Foto de ejemplo
+                    </figcaption>
+                  </figure>
+
+                  <div className="grid gap-4">
+                    <section>
+                      <h3 className="font-heading font-semibold text-tr-forest text-small">Posibles causas</h3>
+                      <ul className="mt-1.5 space-y-1.5" role="list">
+                        {EJEMPLO_ORIENTACION.posiblesCausas.map((causa) => (
+                          <li key={causa.nombre} className="text-caption leading-relaxed text-tr-muted">
+                            <span className="font-semibold text-tr-ink">{causa.nombre}</span>
+                            <span className="text-tr-muted"> · {causa.certeza}</span>
+                            <span className="block">{causa.indicio}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+
+                    <section>
+                      <h3 className="font-heading font-semibold text-tr-forest text-small">Qué comprobar</h3>
+                      <ul className="mt-1.5 space-y-1.5" role="list">
+                        {EJEMPLO_ORIENTACION.queComprobar.map((paso) => (
+                          <li key={paso} className="flex items-start gap-2 text-caption leading-relaxed text-tr-muted">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-tr-brand-green" aria-hidden="true" />
+                            <span>{paso}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+
+                    <section>
+                      <h3 className="font-heading font-semibold text-tr-forest text-small">Limitaciones</h3>
+                      <ul className="mt-1.5 space-y-1.5" role="list">
+                        {EJEMPLO_ORIENTACION.limitaciones.map((limite) => (
+                          <li key={limite} className="flex items-start gap-2 text-caption leading-relaxed text-tr-muted">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-tr-warning" aria-hidden="true" />
+                            <span>{limite}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+
+                    <section>
+                      <h3 className="font-heading font-semibold text-tr-forest text-small">Cuándo pedir ayuda</h3>
+                      <p className="mt-1.5 text-caption leading-relaxed text-tr-muted">
+                        {EJEMPLO_ORIENTACION.cuandoPedirAyuda}
+                      </p>
+                    </section>
+                  </div>
+                </div>
+
+                <p className="mt-4 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-paper p-3 text-caption leading-relaxed text-tr-muted">
+                  Esto lo genera la herramienta automáticamente. La revisión humana es aparte: la hace{" "}
+                  {IDENTIDAD.responsable}, responsable de TecRural, y responde en un máximo de 48 horas si la
+                  pides, sin coste.
+                </p>
               </div>
-            </figure>
+            </details>
           </section>
 
           <section aria-label="Qué ofrece TecRural" className="border-y border-tr-line bg-[#E9EFE7]">
@@ -325,7 +444,7 @@ function HomeContent() {
                 <span className="mt-1 block text-caption text-tr-muted">Tratamiento, dosis y segunda foto. Con tu correo.</span>
               </li>
               <li>
-                <span className="block text-small font-bold text-tr-forest">Revisión de un técnico</span>
+                <span className="block text-small font-bold text-tr-forest">Revisión humana</span>
                 <span className="mt-1 block text-caption text-tr-muted">Opcional, sin coste, respuesta en 48 h.</span>
               </li>
             </ul>
@@ -358,7 +477,7 @@ function HomeContent() {
                   <p className="mt-2 text-body leading-relaxed text-tr-muted">
                     Deja tu correo y el informe se abre aquí mismo. {PROPOSITO_CORREO} Incluye
                     tratamiento orientativo, dosis y qué foto confirma la orientación. Con tu correo pasas a
-                    {` ${LIMITE_AMPLIADO}`}. La revisión de un técnico es aparte y opcional.
+                    {` ${LIMITE_AMPLIADO}`}. La revisión humana es aparte y opcional.
                   </p>
                 </div>
               </li>
@@ -387,9 +506,9 @@ function HomeContent() {
             </div>
             <div className="max-w-2xl">
               <p className="text-body leading-relaxed text-tr-ink">
-                TecRural es {IDENTIDAD.responsable}, de {IDENTIDAD.ubicacion}. Los casos con revisión los
-                valora un técnico de TecRural, que responde en un máximo de 48 horas por el canal que
-                elijas. La revisión no tiene coste ni compromiso de contratación.
+                TecRural es un proyecto de {IDENTIDAD.responsable}, de {IDENTIDAD.ubicacion}. Las
+                revisiones de los casos las hace {IDENTIDAD.responsable} y responde en un máximo de 48
+                horas por el canal que elijas. La revisión no tiene coste ni compromiso de contratación.
               </p>
               <p className="mt-3 text-body leading-relaxed text-tr-muted">{LIMITES_HONESTOS}</p>
               <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-small font-semibold text-tr-forest">
@@ -450,7 +569,7 @@ function HomeContent() {
         <header className="mb-6 text-center">
           <h1 className="font-heading font-bold text-tr-forest">Analizar una planta</h1>
           <p className="text-tr-muted mt-1 text-body">
-            Cuéntanos qué ves y sube una foto del síntoma
+            Elige el cultivo y añade una foto del síntoma
           </p>
         </header>
 
@@ -518,7 +637,7 @@ function HomeContent() {
           </section>
         )}
 
-        <ContextoCultivo valor={contexto} onChange={setContexto} disabled={isLoading} />
+        <CultivoSelector valor={contexto} onChange={setContexto} disabled={isLoading} />
 
         {editandoFoto && (
           <button
@@ -540,11 +659,15 @@ function HomeContent() {
           />
         </div>
 
+        <div className="mt-5">
+          <ContextoOpcional valor={contexto} onChange={setContexto} disabled={isLoading} />
+        </div>
+
         {fotos.principal && !isLoading && (
           <div className="mt-6">
             <button
               onClick={handleAnalizar}
-              disabled={isLoading}
+              disabled={isLoading || !cultivoSeleccionado(contexto)}
               type="button"
               className={`${btnPrimary} w-full py-3`}
             >
@@ -553,9 +676,15 @@ function HomeContent() {
               </svg>
               Analizar foto
             </button>
-            <p className="mt-2 text-caption text-tr-muted text-center">
-              El análisis tarda unos 10-20 segundos. Necesitas conexión; la foto no se guarda salvo que pidas revisión.
-            </p>
+            {!cultivoSeleccionado(contexto) ? (
+              <p className="mt-2 text-small text-tr-warning-text text-center" role="status">
+                Elige el cultivo arriba: la herramienta interpreta mejor la foto sabiendo qué planta es.
+              </p>
+            ) : (
+              <p className="mt-2 text-caption text-tr-muted text-center">
+                El análisis tarda unos 10-20 segundos. Necesitas conexión; la foto no se guarda salvo que pidas revisión.
+              </p>
+            )}
           </div>
         )}
 

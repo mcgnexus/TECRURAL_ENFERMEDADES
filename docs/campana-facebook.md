@@ -73,7 +73,9 @@ aparece en el feed)
 El anuncio debe llevar directo a la **portada** (`/`). El embudo ya está
 optimizado:
 
-1. **Portada** → "Analizar mi planta" → captura.
+1. **Portada** → "Analizar mi planta" → captura. Incluye un desplegable
+   «Ver un ejemplo» que enseña el tipo de resultado antes de subir foto: útil
+   para tráfico frío que aún no sabe qué va a recibir.
 2. **1 análisis gratis** → orientación completa en pantalla.
 3. **Pantalla de resultado** → tarjeta "Llévate el informe completo" con
    formulario de correo (solo correo, sin teléfono obligatorio).
