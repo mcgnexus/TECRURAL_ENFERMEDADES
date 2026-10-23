@@ -246,3 +246,43 @@ export function campanasUnicas(leads: LeadFila[]): string[] {
   }
   return [...valores].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
 }
+
+const ETIQUETA_CANAL_COMERCIAL: Record<string, string> = {
+  correo: "Correo",
+  whatsapp: "WhatsApp",
+};
+
+/** `YYYY-MM-DD` (o ISO completo) a `dd/mm/aaaa`, sin depender de la zona. */
+function fechaComercial(iso: string): string {
+  const [anio, mes, dia] = iso.slice(0, 10).split("-");
+  return anio && mes && dia ? `${dia}/${mes}/${anio}` : iso;
+}
+
+/**
+ * Resumen legible del consentimiento comercial de un lead para el panel.
+ *
+ * Devuelve una línea por canal autorizado y distingue el histórico inferido de
+ * la app antigua. La lógica vive aquí, no en el JSX, para poder probarla.
+ */
+export function resumenComercial(lead: LeadFila): string[] {
+  const lineas: string[] = [];
+
+  if (lead.consentimiento_fuente === "legacy_inferido") {
+    const canal =
+      ETIQUETA_CANAL_COMERCIAL[lead.canal_comercial ?? ""] ?? "canal sin verificar";
+    lineas.push(`Histórico: ${canal} (inferido, sin verificar)`);
+  } else if (lead.consentimiento_fuente === "explicito") {
+    for (const consentimiento of lead.consentimientos_comerciales) {
+      if (consentimiento.revocado_en) continue;
+      const canal =
+        ETIQUETA_CANAL_COMERCIAL[consentimiento.canal] ?? consentimiento.canal;
+      lineas.push(
+        `${canal} · ${consentimiento.texto_version} · ${fechaComercial(consentimiento.aceptado_en)}`
+      );
+    }
+  }
+
+  if (lineas.length === 0) lineas.push("Sin consentimiento");
+  if (lead.baja_comercial) lineas.push("BAJA (suprime todos los canales)");
+  return lineas;
+}

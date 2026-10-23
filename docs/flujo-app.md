@@ -88,6 +88,11 @@ un técnico).
      plazo máximo de 48 horas por el canal elegido. Si solo se dejó correo, el
      canal registrado es `correo` y no se ofrece el consentimiento de
      WhatsApp. La revisión es independiente del análisis y no tiene coste.
+   - El consentimiento comercial es explícito por canal
+     (`leads.consentimientos_comerciales`, migración 0012): correo en el
+     formulario del informe y WhatsApp solo en contacto directo con teléfono.
+     Nunca se deduce del teléfono ni del canal de revisión. El panel muestra el
+     canal, la versión y la fecha, y marca los registros históricos inferidos.
    - La intención queda guardada en `leads.solicitud_revision` (migración
      0011): el panel muestra una columna "Revisión" y los avisos distinguen
      "pide revisión" de "solo informe", que no genera promesa de respuesta.

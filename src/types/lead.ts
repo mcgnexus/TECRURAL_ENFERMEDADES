@@ -17,6 +17,23 @@ export const ESTADOS_LEAD = [
   "perdido",
 ] as const;
 
+/** Canal por el que se autorizaron comunicaciones comerciales. */
+export type CanalComercial = "correo" | "whatsapp";
+
+/** Una autorización comercial concreta, tal y como queda guardada en el lead. */
+export interface ConsentimientoComercialRegistrado {
+  canal: CanalComercial;
+  /** Versión del texto que la persona vio al marcar la casilla. */
+  texto_version: string;
+  /** ISO generado en el servidor en el momento de guardar el lead. */
+  aceptado_en: string;
+  origen: OrigenLead;
+  /** Reservado para una baja selectiva futura; la baja actual es global. */
+  revocado_en: string | null;
+  /** true solo si se dedujo de un payload antiguo con el booleano ambiguo. */
+  compatibilidad?: boolean;
+}
+
 export interface UtmParams {
   source?: string;
   medium?: string;
@@ -53,7 +70,14 @@ export interface DatosLead {
   /** true solo cuando la persona pide además la revisión técnica del caso. */
   solicitud_respuesta: boolean;
   canal_contacto?: string;
-  consentimiento_comercial?: boolean;
+  /**
+   * Canales comerciales autorizados explícitamente en el formulario mostrado.
+   * Nunca se infiere del teléfono ni del canal de revisión.
+   */
+  consentimientos_comerciales?: Array<{
+    canal: CanalComercial;
+    texto_version: string;
+  }>;
   contexto?: ContextoDiagnosticoLead;
   utm?: UtmParams;
   imagenes?: string[];
@@ -91,9 +115,19 @@ export interface LeadFila {
   puntuacion: number;
   estado: EstadoLead;
   contexto_diagnostico: ContextoDiagnosticoLead | null;
+  /**
+   * Agregado de compatibilidad: hay al menos una autorización activa. El
+   * detalle por canal está en `consentimientos_comerciales`.
+   */
   consentimiento_comercial: boolean;
+  consentimiento_comercial_fecha: string | null;
   consentimiento_texto_version: string | null;
+  /** Canal heredado: solo cuando hay exactamente un canal activo. */
   canal_comercial: string | null;
+  /** Detalle explícito por canal; vacío en los registros históricos. */
+  consentimientos_comerciales: ConsentimientoComercialRegistrado[];
+  /** Distingue consentimiento explícito, inferido por la app antigua o ninguno. */
+  consentimiento_fuente: "explicito" | "legacy_inferido" | "ninguno";
   baja_comercial: boolean;
   num_imagenes: number;
   origen_campana: string | null;

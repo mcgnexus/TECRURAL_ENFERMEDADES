@@ -14,6 +14,7 @@ import {
   opcionesUnicas,
   ordenarLeads,
   paginar,
+  resumenComercial,
 } from "./filtros";
 import type { CampoOrden, Filtros, Orden } from "./filtros";
 import {
@@ -506,17 +507,20 @@ export function LeadsTab({
                   <td className="px-3 py-3 text-tr-muted">{lead.cultivo ?? "—"}</td>
                   <td className="px-3 py-3 text-tr-muted">{lead.sintoma ?? "—"}</td>
                   <td className="px-3 py-3">
-                    {lead.consentimiento_comercial ? (
-                      <span className="text-tr-green-strong font-semibold">Sí</span>
-                    ) : (
-                      <span className="text-tr-muted">No</span>
-                    )}
-                    {lead.consentimiento_comercial && lead.consentimiento_texto_version && (
-                      <span className="block text-caption text-tr-muted">
-                        {lead.consentimiento_texto_version}
+                    {resumenComercial(lead).map((linea) => (
+                      <span
+                        key={linea}
+                        className={`block text-caption ${
+                          linea.startsWith("BAJA")
+                            ? "text-red-600 font-semibold"
+                            : linea.startsWith("Sin consentimiento")
+                              ? "text-tr-muted"
+                              : "text-tr-ink"
+                        }`}
+                      >
+                        {linea}
                       </span>
-                    )}
-                    {lead.baja_comercial && <span className="block text-caption text-red-600">BAJA</span>}
+                    ))}
                   </td>
                   <td className="px-3 py-3 text-tr-muted">
                     {lead.utm_campaign ?? lead.origen_campana ?? "—"}

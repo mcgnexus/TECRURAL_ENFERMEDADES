@@ -8,14 +8,14 @@ import { consumirUsoPorClave, estadoCuotas, contactoCuota, hashContactoCuota, vi
 import { validarDataUrlImagen } from "@/lib/imagen";
 import { ipCliente } from "@/lib/ip-request";
 import { ESTADOS_LEAD } from "@/types/lead";
-import type { EstadoLead, PrioridadLead } from "@/types/lead";
+import type { ConsentimientoComercialRegistrado, EstadoLead, PrioridadLead } from "@/types/lead";
+import {
+  derivarConsentimientoAgregado,
+  validarConsentimientosComerciales,
+} from "@/lib/consentimiento-comercial";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-// Versión del texto del consentimiento comercial mostrado en el formulario.
-// Actualizar si cambia la redacción; se guarda junto al lead.
-const TEXTO_COMERCIAL_VERSION = "v1-2026-09";
 
 const TELEFONO_REGEX = /^[+]?[\d\s().-]{9,20}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -73,8 +73,21 @@ export const leadSchema = z.object({
   solicitud_respuesta: z.boolean({
     message: "Falta la confirmación de la solicitud de respuesta",
   }),
-  // Consentimiento comercial: opcional, separado, nunca premarcado
+  // Consentimiento comercial: opcional, separado, nunca premarcado. El formato
+  // nuevo declara el canal explícito; el booleano se conserva solo para admitir
+  // una PWA con JS antiguo y se mapea por origen, nunca por "hay teléfono".
   consentimiento_comercial: z.boolean().optional().default(false),
+  consentimientos_comerciales: z
+    .array(
+      z.object({
+        canal: z.enum(["correo", "whatsapp"], {
+          message: "El canal de novedades no es válido.",
+        }),
+        texto_version: z.string().trim().min(1).max(40),
+      })
+    )
+    .max(2)
+    .optional(),
   contexto: z
     .object({
       especie: z.string().trim().max(120).optional(),
@@ -101,6 +114,23 @@ export const leadSchema = z.object({
       code: "custom",
       path: ["telefono"],
       message: "Déjanos un teléfono o un correo para recibir el informe y poder contactarte.",
+    });
+  }
+
+  // La autorización comercial se valida contra el canal que se mostró en cada
+  // formulario. El canal de revisión no interviene en esta comprobación.
+  const consentimientos = validarConsentimientosComerciales({
+    origen: datos.origen,
+    email: datos.email,
+    telefono: datos.telefono,
+    consentimientosComerciales: datos.consentimientos_comerciales,
+    consentimientoComercial: datos.consentimiento_comercial,
+  });
+  if (!consentimientos.ok) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["consentimientos_comerciales"],
+      message: consentimientos.error ?? "No se pudo registrar la autorización de novedades.",
     });
   }
 });
@@ -176,9 +206,33 @@ export async function POST(request: NextRequest) {
 
     const { prioridad, puntuacion } = calcularPrioridadLead(datos.contexto, datos.origen);
 
-    // Canal comercial del consentimiento: WhatsApp cuando hay teléfono, correo
-    // cuando el opt-in se dio con el formulario del informe (solo correo).
-    const canalComercial = datos.telefono ? "whatsapp" : "correo";
+    // Una única validación, también aquí, para obtener el detalle normalizado.
+    // Las fechas y el origen los pone el servidor: el cliente no puede fijarlos.
+    const validacion = validarConsentimientosComerciales({
+      origen: datos.origen,
+      email: datos.email,
+      telefono: datos.telefono,
+      consentimientosComerciales: datos.consentimientos_comerciales,
+      consentimientoComercial: datos.consentimiento_comercial,
+    });
+    if (!validacion.ok) {
+      return NextResponse.json(
+        { error: validacion.error ?? "No se pudo registrar la autorización de novedades." },
+        { status: 400 }
+      );
+    }
+
+    const aceptadoEn = new Date().toISOString();
+    const consentimientosComerciales: ConsentimientoComercialRegistrado[] =
+      validacion.consentimientos.map((consentimiento) => ({
+        canal: consentimiento.canal,
+        texto_version: consentimiento.texto_version,
+        aceptado_en: aceptadoEn,
+        origen: datos.origen,
+        revocado_en: null,
+        ...(validacion.compatibilidad ? { compatibilidad: true as const } : {}),
+      }));
+    const agregadoComercial = derivarConsentimientoAgregado(consentimientosComerciales);
 
     // Aviso de prueba del canal, sin crear lead. ?test_notificacion=1 manda un
     // mensaje de ejemplo al destino configurado para comprobar que Telegram o
@@ -195,12 +249,21 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
         contexto_diagnostico: datos.contexto ?? null,
         num_imagenes: 0,
-        consentimiento_comercial: datos.consentimiento_comercial ?? false,
-        consentimiento_texto_version: null,
-        canal_comercial: null,
-        baja_comercial: false,
-        utm_campaign: datos.utm?.campaign ?? null,
+        sintoma: datos.sintoma ?? null,
+        municipio: datos.municipio ?? null,
+        cultivo: datos.cultivo ?? null,
+        mensaje: datos.mensaje ?? null,
+        origen_campana: datos.utm?.campaign ?? null,
         utm_source: datos.utm?.source ?? null,
+        utm_campaign: datos.utm?.campaign ?? null,
+        canal_contacto: datos.canal_contacto ?? null,
+        consentimiento_comercial: agregadoComercial.consentimiento_comercial,
+        consentimiento_comercial_fecha: agregadoComercial.consentimiento_comercial_fecha,
+        consentimiento_texto_version: agregadoComercial.consentimiento_texto_version,
+        canal_comercial: agregadoComercial.canal_comercial,
+        consentimientos_comerciales: consentimientosComerciales,
+        consentimiento_fuente: consentimientosComerciales.length > 0 ? "explicito" : "ninguno",
+        baja_comercial: false,
       } as unknown as Parameters<typeof notificarLeadNuevo>[0];
 
       await notificarLeadNuevo(prueba);
@@ -230,9 +293,7 @@ export async function POST(request: NextRequest) {
       prioridad,
       puntuacion,
       contexto: datos.contexto,
-      consentimientoComercial: datos.consentimiento_comercial,
-      consentimientoTextoVersion: datos.consentimiento_comercial ? TEXTO_COMERCIAL_VERSION : undefined,
-      canalComercial: datos.consentimiento_comercial ? canalComercial : undefined,
+      consentimientosComerciales: consentimientosComerciales,
       origenCampana: datos.utm?.campaign || undefined,
       utmSource: datos.utm?.source,
       utmMedium: datos.utm?.medium,

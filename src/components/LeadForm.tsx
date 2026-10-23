@@ -8,6 +8,7 @@ import { trackMeta } from "@/components/MetaPixel";
 import { obtenerUtm } from "@/lib/utm";
 import { textosLead, avisoFotos } from "@/lib/textos-lead";
 import { LIMITE_AMPLIADO } from "@/lib/textos-publicos";
+import { TEXTOS_COMERCIALES } from "@/lib/consentimiento-comercial";
 import type {
   ContextoDiagnosticoLead,
   OrigenLead,
@@ -65,7 +66,7 @@ export function LeadForm({
     // que un técnico revise el caso: quien solo quiere el informe no la marca
     // y su envío no registra una solicitud de contacto.
     solicitudRespuesta: false,
-    consentimientoComercial: false, // siempre desmarcado por defecto
+    consentimientoWhatsapp: false, // siempre desmarcado por defecto
     // Solo en el flujo posterior al diagnóstico: autorización obligatoria para
     // usar el contacto en el informe y en el límite semanal, separada de la
     // revisión técnica.
@@ -170,8 +171,28 @@ export function LeadForm({
     setEstado("enviando");
     setError(null);
 
+    const utm = obtenerUtm();
+
+    // Canales comerciales explícitos: solo se envía el que se mostró y se
+    // marcó. El canal de revisión (`canal_contacto`) no interviene aquí.
+    const consentimientosComerciales: Array<{
+      canal: "correo" | "whatsapp";
+      texto_version: string;
+    }> = [];
+    if (esDirecto && form.consentimientoWhatsapp && telefono) {
+      consentimientosComerciales.push({
+        canal: "whatsapp",
+        texto_version: TEXTOS_COMERCIALES.whatsapp.version,
+      });
+    }
+    if (!esDirecto && form.consentimientoCorreo && correo) {
+      consentimientosComerciales.push({
+        canal: "correo",
+        texto_version: TEXTOS_COMERCIALES.correo.version,
+      });
+    }
+
     try {
-      const utm = obtenerUtm();
       const response = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,11 +212,11 @@ export function LeadForm({
           // efectivo pasa a ser el correo. Sin revisión pedida no hay canal.
           canal_contacto: form.solicitudRespuesta ? (soloCorreo ? "correo" : form.canalContacto) : undefined,
           solicitud_respuesta: form.solicitudRespuesta,
-          // Consentimiento comercial: en "contacto_directo" es la casilla de
-          // WhatsApp (solo con teléfono); en el informe es la casilla de correo.
-          consentimiento_comercial: esDirecto
-            ? form.consentimientoComercial && Boolean(form.telefono.trim())
-            : form.consentimientoCorreo,
+          // Solo se envía el canal comercial que se mostró y se marcó.
+          consentimientos_comerciales:
+            consentimientosComerciales.length > 0
+              ? consentimientosComerciales
+              : undefined,
           web: form.web,
           contexto: contextoFinal,
           utm: Object.keys(utm).length > 0 ? utm : undefined,
@@ -217,7 +238,9 @@ export function LeadForm({
       // guardado, y sin datos personales en los parámetros.
       trackMeta("Lead", { origen });
       if (form.solicitudRespuesta) trackMeta("RevisionTecnica", { origen });
-      if (!esDirecto && form.consentimientoCorreo) trackMeta("SuscripcionCorreo", { origen });
+      if (!esDirecto && form.consentimientoCorreo && Boolean(correo)) {
+        trackMeta("SuscripcionCorreo", { origen });
+      }
       onEnviado?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
@@ -348,7 +371,7 @@ interface CampoBaseProps {
     canalContacto: string;
     mensaje: string;
     solicitudRespuesta: boolean;
-    consentimientoComercial: boolean;
+    consentimientoWhatsapp: boolean;
     consentimientoCorreo: boolean;
     autorizoInforme: boolean;
     web: string;
@@ -376,6 +399,11 @@ function CampoCorreo({ origen, form, set, errores, setErrores, estado, conTelefo
         value={form.email}
         onChange={(e) => {
           set("email", e.target.value);
+          // Sin correo no hay dirección a la que enviar novedades: la casilla
+          // no puede quedar marcada y el servidor la rechazaría.
+          if (!e.target.value.trim() && form.consentimientoCorreo) {
+            set("consentimientoCorreo", false);
+          }
           if (errores.email || errores.contacto) {
             setErrores((x) => ({ ...x, email: undefined, contacto: undefined }));
           }
@@ -434,6 +462,7 @@ function CampoTelefono({ origen, form, set, errores, setErrores, estado, etiquet
 /* ------------------------------------------------------------------------- */
 
 function FormularioInforme({ origen, form, set, errores, setErrores, estado, textos, numFotos }: CamposProps & { numFotos: number }) {
+  const correo = form.email.trim();
   return (
     <div className="grid gap-4 mt-4">
       <CampoCorreo origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} conTelefono={false} />
@@ -533,14 +562,23 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
           type="checkbox"
           checked={form.consentimientoCorreo}
           onChange={(e) => set("consentimientoCorreo", e.target.checked)}
-          disabled={estado === "enviando"}
+          disabled={estado === "enviando" || !correo}
           className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
         />
         <label htmlFor={`lead-correo-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
-          Quiero recibir consejos y novedades por correo
+          {TEXTOS_COMERCIALES.correo.texto}
           <span className="mt-1 block text-tr-muted">
-            Opcional y desmarcado: no influye en el acceso al informe. Puedes retirarlo cuando
-            quiera desde <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">la página de baja</Link>.
+            {!correo ? (
+              "Escribe tu correo arriba para recibir novedades."
+            ) : (
+              <>
+                Opcional y desmarcado: no influye en el acceso al informe. Puedes retirarlo
+                cuando quiera desde{" "}
+                <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">
+                  la página de baja
+                </Link>.
+              </>
+            )}
           </span>
         </label>
       </div>
@@ -748,13 +786,13 @@ function FormularioDirecto({ origen, form, set, errores, setErrores, estado, tex
           <input
             id={`lead-comercial-${origen}`}
             type="checkbox"
-            checked={form.consentimientoComercial}
-            onChange={(e) => set("consentimientoComercial", e.target.checked)}
+            checked={form.consentimientoWhatsapp}
+            onChange={(e) => set("consentimientoWhatsapp", e.target.checked)}
             disabled={estado === "enviando"}
             className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
           />
           <label htmlFor={`lead-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
-            Quiero recibir por WhatsApp consejos y novedades comerciales de TecRural.
+            {TEXTOS_COMERCIALES.whatsapp.texto}.
             <span className="mt-1 block text-tr-muted">Es opcional y puedo retirar el consentimiento cuando quiera: <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">darme de baja</Link>.</span>
           </label>
         </div>

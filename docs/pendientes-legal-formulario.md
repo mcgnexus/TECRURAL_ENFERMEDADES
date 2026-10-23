@@ -30,12 +30,15 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 - Incluye categorías de datos, finalidades, bases, derechos, destinatarios y conservación.
 
 ## 3. Texto del consentimiento comercial
-- Implementado: casilla opcional, desmarcada por defecto, con versión registrada
-  (`v1-2026-09`) en la base de datos.
-- Pendiente: revisión legal de la redacción exacta y del canal (actualmente "WhatsApp"),
-  y decisión sobre el organismo/ley aplicable si se opera fuera de España.
-- Si se cambia el texto, actualizar `TEXTO_COMERCIAL_VERSION`
-  (`src/app/api/leads/route.ts`) para poder auditar qué versión aceptó cada contacto.
+- Implementado: casilla opcional, desmarcada por defecto, con la versión del texto
+  registrada por canal (`v2-2026-10`) en la base de datos
+  (`leads.consentimientos_comerciales`).
+- Pendiente: revisión legal de la redacción exacta y del canal (correo en el
+  informe, WhatsApp en contacto directo), y decisión sobre el organismo/ley
+  aplicable si se opera fuera de España.
+- Si se cambia el texto, subir `TEXTOS_COMERCIALES[canal].version`
+  (`src/lib/consentimiento-comercial.ts`) para poder auditar qué versión aceptó
+  cada contacto. El servidor rechaza versiones que no coincidan con la actual.
 
 ## 4. Canal oficial de contacto
 - Resuelto: número configurado en el entorno de producción de Vercel
@@ -104,11 +107,18 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 
 ## 10. Novedades comerciales por correo (nuevo)
 - Implementado: casilla opcional y desmarcada en el formulario del informe
-  ("Quiero recibir por correo consejos y novedades"). Se guarda como
-  `consentimiento_comercial` con `canal_comercial = 'correo'`, separada de la
-  autorización de informe + límite (que no es publicidad).
+  ("Quiero recibir consejos y novedades por correo"). Se guarda como una entrada
+  `canal = 'correo'` en `leads.consentimientos_comerciales` (JSONB), con versión,
+  fecha y origen; separada de la autorización de informe + límite (que no es
+  publicidad). El canal no se infiere del teléfono: la casilla de correo exige
+  correo y la de WhatsApp solo se muestra en contacto directo con teléfono.
+- Los leads anteriores al cambio quedan identificados como históricos
+  (`consentimiento_fuente = 'legacy_inferido'`) y no se convierten
+  automáticamente. `db/one-off/auditar-consentimientos-comerciales.mjs` los
+  lista en solo lectura para revisión manual.
 - Implementado: la baja (`/baja`, `POST /api/baja`) acepta teléfono **o**
-  correo, con `bajaComercialEmail()` en la base de datos.
+  correo, con `bajaComercialEmail()` en la base de datos. La baja es global:
+  suprime todos los canales del lead.
 - Pendiente: revisión legal de la frecuencia y el contenido de esos envíos; el
   píxel de Meta sigue cargándose en producción sin banner de consentimiento
   (ver sección 7), decidir banner o exclusión.

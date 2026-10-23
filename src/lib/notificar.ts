@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { LeadFila, MetricasCaptacion } from "@/types/lead";
+import type { ConsentimientoComercialRegistrado, LeadFila, MetricasCaptacion } from "@/types/lead";
 
 /**
  * Aviso inmediato al técnico cuando entra un lead.
@@ -52,6 +52,10 @@ interface PayloadNotificacion {
   origen: string;
   /** true cuando la persona pidió que un técnico revisara el caso. */
   solicitud_revision: boolean;
+  /** Canal elegido para la revisión; null si solo desbloqueó el informe. */
+  canal_contacto: string | null;
+  /** Autorizaciones comerciales explícitas, por canal. Vacío si no hay ninguna. */
+  consentimientos_comerciales: ConsentimientoComercialRegistrado[];
   nombre: string;
   /** Vacío cuando la persona solo dejó correo. */
   telefono: string;
@@ -87,6 +91,8 @@ function construirPayload(lead: LeadFila): PayloadNotificacion {
     estado: lead.estado,
     origen: lead.origen,
     solicitud_revision: lead.solicitud_revision,
+    canal_contacto: lead.canal_contacto,
+    consentimientos_comerciales: lead.consentimientos_comerciales ?? [],
     nombre: lead.nombre,
     telefono: lead.telefono,
     email: lead.email ?? null,
@@ -103,6 +109,19 @@ function construirPayload(lead: LeadFila): PayloadNotificacion {
     url_admin: `${urlBase()}/admin`,
     recibido_en: new Date().toISOString(),
   };
+}
+
+/**
+ * Línea de consentimiento comercial para los avisos. Solo cuenta lo que la
+ * persona autorizó explícitamente; un lead histórico no se presenta como si
+ * hubiera aceptado publicidad.
+ */
+function lineaComercial(p: PayloadNotificacion): string {
+  const activos = p.consentimientos_comerciales.filter((c) => !c.revocado_en);
+  if (activos.length === 0) return "Sin consentimiento comercial";
+  return `Comercial: ${activos
+    .map((c) => `${c.canal} (${c.texto_version})`)
+    .join(" · ")}`;
 }
 
 /** Resumen de una línea, para destinos que solo aceptan texto. */
@@ -122,6 +141,7 @@ function resumenTexto(p: PayloadNotificacion): string {
       ? `Diagnóstico: ${p.especie}${p.gravedad ? ` (${p.gravedad})` : ""}\n`
       : "") +
     (p.fotos > 0 ? `Fotos adjuntas: ${p.fotos}\n` : "") +
+    `${lineaComercial(p)}\n` +
     p.url_admin
   );
 }
@@ -195,6 +215,7 @@ function mensajeTelegram(p: PayloadNotificacion): string {
   }
 
   if (p.fotos > 0) lineas.push(`\u{1F4F7} Fotos adjuntas: ${p.fotos}`);
+  lineas.push(escaparHtml(lineaComercial(p)));
   if (p.campaña) lineas.push(`\u{1F3AF} Campaña: ${escaparHtml(p.campaña)}`);
 
   const texto = lineas.join("\n");

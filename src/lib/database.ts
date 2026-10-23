@@ -1,6 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { enmascararIp } from "./accesos-ip";
+import {
+  derivarConsentimientoAgregado,
+  fuenteConsentimientoComercial,
+  parsearConsentimientosComerciales,
+} from "./consentimiento-comercial";
 import type {
   ContextoUsuario,
   DiagnosticoPanelFila,
@@ -9,6 +14,7 @@ import type {
   DiagnosticosPanel,
 } from "@/types/diagnostico";
 import type {
+  ConsentimientoComercialRegistrado,
   ContextoDiagnosticoLead,
   EstadoLead,
   LeadFila,
@@ -380,6 +386,19 @@ function aplicarMigraciones(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_leads_solicitud_revision
     ON leads(solicitud_revision, created_at DESC)
   `;
+
+  // Migración 0012: consentimiento comercial explícito por canal. El array
+  // conserva fecha, versión y origen de cada autorización; los campos agregados
+  // (booleano, canal y versión) se derivan de él en guardarLead.
+  await db`
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS consentimientos_comerciales JSONB NOT NULL DEFAULT '[]'
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_leads_consentimientos_comerciales
+    ON leads USING GIN (consentimientos_comerciales)
+  `;
 })();
 }
 
@@ -415,9 +434,12 @@ export interface NuevoLead {
   prioridad: PrioridadLead;
   puntuacion: number;
   contexto?: ContextoDiagnosticoLead;
-  consentimientoComercial?: boolean;
-  consentimientoTextoVersion?: string;
-  canalComercial?: string;
+  /**
+   * Autorizaciones comerciales explícitas. Los campos agregados de la fila
+   * (booleano, canal, versión y fecha) se derivan de aquí dentro de guardarLead:
+   * así no pueden desincronizarse.
+   */
+  consentimientosComerciales?: ConsentimientoComercialRegistrado[];
   origenCampana?: string;
   utmSource?: string;
   utmMedium?: string;
@@ -430,12 +452,14 @@ export interface NuevoLead {
 
 export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
   const db = getSql();
+  const consentimientos = lead.consentimientosComerciales ?? [];
+  const agregado = derivarConsentimientoAgregado(consentimientos);
   const [row] = await db`
     INSERT INTO leads (
       usuario_id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
       mensaje, origen, solicitud_revision, canal_contacto, prioridad, puntuacion, contexto_diagnostico, ip,
       imagenes, consentimiento_comercial, consentimiento_comercial_fecha,
-      consentimiento_texto_version, canal_comercial,
+      consentimiento_texto_version, canal_comercial, consentimientos_comerciales,
       origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term
     )
     VALUES (
@@ -457,10 +481,11 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
       ${lead.contexto ? JSON.stringify(lead.contexto) : null},
       ${lead.ip ?? null},
       ${lead.imagenes && lead.imagenes.length > 0 ? JSON.stringify(lead.imagenes) : null},
-      ${lead.consentimientoComercial ?? false},
-      ${lead.consentimientoComercial ? new Date().toISOString() : null},
-      ${lead.consentimientoComercial ? lead.consentimientoTextoVersion ?? null : null},
-      ${lead.consentimientoComercial ? lead.canalComercial ?? null : null},
+      ${agregado.consentimiento_comercial},
+      ${agregado.consentimiento_comercial_fecha},
+      ${agregado.consentimiento_texto_version},
+      ${agregado.canal_comercial},
+      ${JSON.stringify(consentimientos)},
       ${lead.origenCampana ?? null},
       ${lead.utmSource ?? null},
       ${lead.utmMedium ?? null},
@@ -471,7 +496,9 @@ export async function guardarLead(lead: NuevoLead): Promise<LeadFila> {
     RETURNING id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
               mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
               contexto_diagnostico,
-              consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+              consentimiento_comercial, consentimiento_comercial_fecha,
+              consentimiento_texto_version, canal_comercial,
+              consentimientos_comerciales,
               baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
               origen_campana, utm_source, utm_medium, utm_campaign,
               utm_content, utm_term, primera_response_at, notas, created_at
@@ -806,7 +833,8 @@ export async function obtenerLeads(
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
              contexto_diagnostico,
-             consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+             consentimiento_comercial, consentimiento_comercial_fecha,
+             consentimiento_texto_version, canal_comercial, consentimientos_comerciales,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
@@ -822,7 +850,8 @@ export async function obtenerLeads(
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
              contexto_diagnostico,
-             consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+             consentimiento_comercial, consentimiento_comercial_fecha,
+             consentimiento_texto_version, canal_comercial, consentimientos_comerciales,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
@@ -838,7 +867,8 @@ export async function obtenerLeads(
       SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
              mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
              contexto_diagnostico,
-             consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+             consentimiento_comercial, consentimiento_comercial_fecha,
+             consentimiento_texto_version, canal_comercial, consentimientos_comerciales,
              baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
              origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term, primera_response_at, notas, created_at
       FROM leads
@@ -853,7 +883,8 @@ export async function obtenerLeads(
     SELECT id, diagnostico_id, nombre, telefono, email, municipio, cultivo, sintoma, hectareas,
            mensaje, origen, canal_contacto, solicitud_revision, prioridad, puntuacion, estado,
            contexto_diagnostico,
-           consentimiento_comercial, consentimiento_texto_version, canal_comercial,
+           consentimiento_comercial, consentimiento_comercial_fecha,
+           consentimiento_texto_version, canal_comercial, consentimientos_comerciales,
            baja_comercial, jsonb_array_length(imagenes) AS num_imagenes,
            origen_campana, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
            primera_response_at, notas, created_at
@@ -1045,6 +1076,10 @@ export async function obtenerMetricasCaptacion(): Promise<MetricasCaptacion> {
 
 type LeadRow = Record<string, unknown>;
 function mapearLead(row: LeadRow): LeadFila {
+  const consentimientoComercial = Boolean(row.consentimiento_comercial);
+  const consentimientos = parsearConsentimientosComerciales(
+    row.consentimientos_comerciales
+  );
   return {
     id: row.id as string,
     diagnostico_id: (row.diagnostico_id as string | null) ?? null,
@@ -1063,9 +1098,17 @@ function mapearLead(row: LeadRow): LeadFila {
     puntuacion: Number(row.puntuacion),
     estado: row.estado as EstadoLead,
     contexto_diagnostico: (row.contexto_diagnostico as ContextoDiagnosticoLead | null) ?? null,
-    consentimiento_comercial: Boolean(row.consentimiento_comercial),
+    consentimiento_comercial: consentimientoComercial,
+    consentimiento_comercial_fecha:
+      (row.consentimiento_comercial_fecha as Date | string | null | undefined)?.toString() ??
+      null,
     consentimiento_texto_version: (row.consentimiento_texto_version as string | null) ?? null,
     canal_comercial: (row.canal_comercial as string | null) ?? null,
+    consentimientos_comerciales: consentimientos,
+    consentimiento_fuente: fuenteConsentimientoComercial(
+      consentimientos,
+      consentimientoComercial
+    ),
     baja_comercial: Boolean(row.baja_comercial),
     num_imagenes: row.num_imagenes !== null && row.num_imagenes !== undefined ? Number(row.num_imagenes) : 0,
     origen_campana: (row.origen_campana as string | null) ?? null,

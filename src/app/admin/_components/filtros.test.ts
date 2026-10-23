@@ -10,6 +10,7 @@ import {
   opcionesUnicas,
   ordenarLeads,
   paginar,
+  resumenComercial,
 } from "./filtros";
 
 function lead(parcial: Partial<LeadFila> & { id: string }): LeadFila {
@@ -31,8 +32,11 @@ function lead(parcial: Partial<LeadFila> & { id: string }): LeadFila {
     estado: "nuevo",
     contexto_diagnostico: null,
     consentimiento_comercial: false,
+    consentimiento_comercial_fecha: null,
     consentimiento_texto_version: null,
     canal_comercial: null,
+    consentimientos_comerciales: [],
+    consentimiento_fuente: "ninguno",
     baja_comercial: false,
     num_imagenes: 0,
     origen_campana: null,
@@ -213,5 +217,78 @@ describe("utilidades", () => {
     expect(diaLead("2026-03-10T23:30:00.000Z")).toBe("2026-03-10");
     expect(horasRespuesta(B)).toBe(3);
     expect(horasRespuesta(A)).toBeNull();
+  });
+});
+
+describe("resumenComercial", () => {
+  const consentimiento = {
+    canal: "correo" as const,
+    texto_version: "v2-2026-10",
+    aceptado_en: "2026-10-23T10:00:00.000Z",
+    origen: "post_diagnostico" as const,
+    revocado_en: null,
+  };
+
+  it("muestra canal, versión y fecha del consentimiento explícito", () => {
+    const l = lead({
+      id: "x",
+      consentimiento_comercial: true,
+      consentimiento_fuente: "explicito",
+      consentimientos_comerciales: [consentimiento],
+    });
+    expect(resumenComercial(l)).toEqual(["Correo · v2-2026-10 · 23/10/2026"]);
+  });
+
+  it("muestra una línea por canal", () => {
+    const l = lead({
+      id: "x",
+      consentimiento_comercial: true,
+      consentimiento_fuente: "explicito",
+      consentimientos_comerciales: [
+        consentimiento,
+        {
+          ...consentimiento,
+          canal: "whatsapp",
+          texto_version: "v2-2026-10",
+        },
+      ],
+    });
+    expect(resumenComercial(l)).toEqual([
+      "Correo · v2-2026-10 · 23/10/2026",
+      "WhatsApp · v2-2026-10 · 23/10/2026",
+    ]);
+  });
+
+  it("marca el histórico inferido sin presentarlo como explícito", () => {
+    const l = lead({
+      id: "x",
+      consentimiento_comercial: true,
+      consentimiento_fuente: "legacy_inferido",
+      canal_comercial: "whatsapp",
+    });
+    expect(resumenComercial(l)).toEqual([
+      "Histórico: WhatsApp (inferido, sin verificar)",
+    ]);
+  });
+
+  it("indica la baja global y el caso sin consentimiento", () => {
+    expect(resumenComercial(lead({ id: "x" }))).toEqual(["Sin consentimiento"]);
+    expect(
+      resumenComercial(
+        lead({ id: "x", consentimiento_comercial: true, baja_comercial: true })
+      )
+    ).toEqual(["Sin consentimiento", "BAJA (suprime todos los canales)"]);
+  });
+
+  it("omite consentimientos revocados", () => {
+    const l = lead({
+      id: "x",
+      consentimiento_comercial: true,
+      consentimiento_fuente: "explicito",
+      consentimientos_comerciales: [
+        { ...consentimiento, revocado_en: "2026-10-24T10:00:00.000Z" },
+      ],
+    });
+    expect(resumenComercial(l)).toEqual(["Sin consentimiento"]);
   });
 });
