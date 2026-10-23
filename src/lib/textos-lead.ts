@@ -14,9 +14,10 @@
  *    renderiza sin completar un análisis antes.
  *
  * En el flujo posterior al diagnóstico hay dos intenciones que no se mezclan:
- * desbloquear el informe (basta un correo) y solicitar que un técnico revise
+ * abrir el informe (basta un correo) y solicitar que un técnico revise
  * el caso (opción aparte, que es la única que promete respuesta). El texto del
- * éxito depende de cuál se haya marcado.
+ * éxito depende de cuál se haya marcado. En ambos casos el informe se abre en
+ * pantalla: el correo no es un canal de entrega.
  */
 
 export interface TextosLead {
@@ -57,10 +58,12 @@ export function textosLead(
     // Solo informe: no se promete respuesta de ningún técnico, porque no se ha
     // pedido revisión. El contacto sirve para el informe y el límite semanal.
     return {
-      cabecera: "Recibe el informe completo",
-      intro: "Escribe tu correo y verás al momento el informe completo: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma el diagnóstico. Con tu correo amplías también el límite a 6 análisis semanales.",
-      encabezadoExito: "Informe completo desbloqueado",
-      cuerpoExito: "Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Si más adelante quieres que un técnico revise tu caso, puedes solicitarlo en cualquier momento.",
+      cabecera: "Abre el informe completo",
+      intro:
+        "Escribe tu correo y el informe se abre aquí mismo, en esta pantalla: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma la orientación. No te lo enviamos por correo. Con tu correo pasas también a 6 análisis cada 7 días.",
+      encabezadoExito: "Informe completo abierto",
+      cuerpoExito:
+        "Ya puedes leerlo y descargarlo en PDF. Tu límite es ahora de 6 análisis cada 7 días. No te hemos enviado nada por correo. Si más adelante quieres que un técnico revise tu caso, puedes solicitarlo en cualquier momento.",
       // Sin revisión no se envían fotos, así que el consentimiento no puede
       // mencionarlas aunque el análisis tuviera varias.
       datosTratados: "el contacto que indicas y la orientación del análisis",
@@ -68,10 +71,11 @@ export function textosLead(
   }
 
   return {
-    cabecera: "Recibe el informe completo",
-    intro: "Escribe tu correo y verás al momento el informe completo: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma el diagnóstico. Con tu correo amplías también el límite a 6 análisis semanales. Si quieres, marcas la revisión y un técnico revisa este caso contigo.",
-    encabezadoExito: "Informe completo desbloqueado y revisión solicitada",
-    cuerpoExito: `Ya tienes aquí abajo el informe completo con el tratamiento y la dosis, listo para descargar en PDF. Hemos registrado tu caso junto con la orientación${fotos > 0 ? ` y ${fotosTxt}` : ""}; un técnico de TecRural lo revisará y ${canal}.`,
+    cabecera: "Abre el informe completo",
+    intro:
+      "Escribe tu correo y el informe se abre aquí mismo, en esta pantalla: el tratamiento orientativo con su dosis, el momento de aplicación y qué foto confirma la orientación. No te lo enviamos por correo. Con tu correo pasas también a 6 análisis cada 7 días. Si quieres, marcas la revisión y un técnico revisa este caso contigo.",
+    encabezadoExito: "Informe abierto y revisión solicitada",
+    cuerpoExito: `Ya puedes leer el informe abajo y descargarlo en PDF. Hemos registrado tu caso junto con la orientación${fotos > 0 ? ` y ${fotosTxt}` : ""}; un técnico de TecRural lo revisará y ${canal}.`,
     // El consentimiento enumera los datos que de verdad se tratan: sostiene el
     // consentimiento, así que no puede mencionar fotos que no se envían.
     datosTratados:

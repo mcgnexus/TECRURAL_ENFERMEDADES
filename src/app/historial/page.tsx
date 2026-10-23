@@ -8,7 +8,7 @@ import { HistorialWrapper } from "@/components/PWA/HistorialWrapper";
 export const metadata = {
   title: "Historial de análisis",
   description:
-    "Consulta tus análisis fitosanitarios anteriores y el estado de las revisiones que has solicitado a TecRural.",
+    "Consulta tus análisis anteriores de plagas y enfermedades y el estado de las revisiones que has solicitado a TecRural.",
   robots: { index: false, follow: false },
 };
 

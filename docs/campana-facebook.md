@@ -13,7 +13,7 @@
   la app.
 - **Mensaje central:** "Prueba gratis: sube una foto de tu planta y recibe una
   orientación inmediata. Si quieres el informe completo y ampliar a 6 análisis
-  semanales, deja tu correo."
+  cada 7 días, deja tu correo."
 - **Beneficio principal en el anuncio:** "Conoce posibles causas y qué
   comprobar a continuación". El tratamiento con dosis existe en la app, pero
   no siempre procede proponerlo para una foto dada: no debe ser el gancho
@@ -25,8 +25,8 @@
 
 | Formato | Cuándo usarlo | Copia principal |
 |---------|---------------|-----------------|
-| **Imagen única** | Si quieres algo rápido y barato. | "¿Problemas en tu cultivo? Sube una foto y recibe orientación experta en segundos." |
-| **Carrusel (3-4 cards)** | Para mostrar el proceso paso a paso. | *Tarjeta 1:* "¿Tu planta tiene síntomas?" *Tarjeta 2:* "Haz una foto clara" *Tarjeta 3:* "Recibe orientación gratuita" *Tarjeta 4:* "Deja tu correo y obtén el informe completo + 6 análisis semanales" |
+| **Imagen única** | Si quieres algo rápido y barato. | "¿Problemas en tu cultivo? Sube una foto y recibe orientación en unos segundos." |
+| **Carrusel (3-4 cards)** | Para mostrar el proceso paso a paso. | *Tarjeta 1:* "¿Tu planta tiene síntomas?" *Tarjeta 2:* "Haz una foto clara" *Tarjeta 3:* "Recibe orientación gratuita" *Tarjeta 4:* "Deja tu correo y obtén el informe completo + 6 análisis cada 7 días" |
 
 ### B. Copy (texto del anuncio)
 
@@ -41,7 +41,7 @@ recorta). Enfatiza lo que obtienen al instante y la separación clara:
 > "Sube una foto de tu planta y recibe una orientación inicial gratuita. No es
 > un diagnóstico definitivo: es una herramienta para detectar problemas
 > comunes. Si el caso lo requiere, desbloquea el informe completo con
-> tratamiento y dosis, y amplía a 6 análisis semanales con tu correo. Sin
+> tratamiento y dosis, y amplía a 6 análisis cada 7 días con tu correo. Sin
 > compromiso, sin teléfono necesario al principio."
 
 **Texto secundario (News description):** hasta 30 caracteres (opcional,
@@ -129,7 +129,7 @@ Crea audiencias personalizadas:
 |-----------|------------------------|
 | **Visitantes que vieron pero no enviaron** | "¿Aún no lo has probado? Tu planta te está esperando. Sube una foto y recibe orientación gratis." |
 | **Leads obtenidos (solo correo)** | "Gracias por probar TecRural. Si quieres, un técnico puede revisar tu caso: solicita la revisión técnica en la app." |
-| **Usuarios que ampliaron cuota** | "Ya tienes 6 análisis semanales. ¿Necesitas más? Programa una revisión con un técnico." |
+| **Usuarios que ampliaron cuota** | "Ya tienes 6 análisis cada 7 días. ¿Necesitas más? Programa una revisión con un técnico." |
 
 ## 9. Cumplimiento y consideraciones legales
 
@@ -156,7 +156,7 @@ Crea audiencias personalizadas:
 > **Título:** Diagnóstico gratis para tu cultivo
 > **Texto:** Sube una foto de tu planta y recibe orientación inicial gratuita.
 > Conoce posibles causas y qué comprobar a continuación. Deja tu correo y
-> amplía a 6 análisis semanales. Sin teléfono, sin registro.
+> amplía a 6 análisis cada 7 días. Sin teléfono; 1 análisis gratis cada 7 días, sin registro.
 > **Imagen:** foto de una hoja con síntomas claros, buena luz, fondo sencillo.
 > **Segmentación:** agricultores de Granada, Málaga, Sevilla; 30-65 años;
 > intereses: agricultura, jardinería.

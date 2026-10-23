@@ -38,25 +38,31 @@ describe("contacto directo", () => {
 });
 
 describe("posterior al diagnóstico: solo informe (sin revisión)", () => {
-  // La revisión es una opción aparte: quien solo desbloquea el informe no
-  // recibe promesas de respuesta de ningún técnico.
+  // La revisión es una opción aparte: quien solo abre el informe no recibe
+  // promesas de respuesta de ningún técnico.
   const t = textosLead("post_diagnostico", 1, false);
 
   it("pide el correo como contrapartida del informe", () => {
     expect(t.intro).toMatch(/correo/i);
     expect(t.intro).toMatch(/tratamiento/i);
     expect(t.intro).toMatch(/dosis/i);
-    expect(t.cabecera).toBe("Recibe el informe completo");
+    expect(t.cabecera).toBe("Abre el informe completo");
   });
 
-  it("menciona la ampliación del límite semanal con el correo", () => {
-    expect(t.intro).toContain("6 análisis semanales");
+  it("aclara que el informe se abre en pantalla y no se envía por correo", () => {
+    expect(t.intro).toContain("se abre aquí mismo");
+    expect(t.intro).toContain("No te lo enviamos por correo");
+  });
+
+  it("menciona la ampliación del límite con el correo", () => {
+    expect(t.intro).toContain("6 análisis cada 7 días");
+    expect(t.cuerpoExito).toContain("6 análisis cada 7 días");
   });
 
   it("no promete revisión ni respuesta del técnico", () => {
     const todo = JSON.stringify(t);
     expect(todo).not.toMatch(/técnico.*revisará|te responderá|48 horas/i);
-    expect(t.encabezadoExito).toBe("Informe completo desbloqueado");
+    expect(t.encabezadoExito).toBe("Informe completo abierto");
   });
 
   it("el consentimiento no enumera fotos, porque no se envían", () => {
@@ -67,21 +73,25 @@ describe("posterior al diagnóstico: solo informe (sin revisión)", () => {
   it("apunta a la revisión como opción posterior, sin imponerla", () => {
     expect(t.cuerpoExito).toMatch(/si más adelante quieres/i);
   });
+
+  it("el éxito no sugiere que el informe llegó por correo", () => {
+    expect(t.cuerpoExito).toContain("No te hemos enviado nada por correo");
+  });
 });
 
 describe("posterior al diagnóstico: informe y revisión técnica", () => {
   it("menciona la orientación y las fotos", () => {
     const t = textosLead("post_diagnostico", 1, true);
     expect(t.cuerpoExito).toContain("orientación y la foto del análisis");
-    expect(t.cabecera).toBe("Recibe el informe completo");
+    expect(t.cabecera).toBe("Abre el informe completo");
   });
 
   it("promete el informe con tratamiento y dosis", () => {
     const t = textosLead("post_diagnostico", 0, true);
     expect(t.intro).toMatch(/tratamiento/i);
     expect(t.intro).toMatch(/dosis/i);
-    expect(t.cuerpoExito).toMatch(/tratamiento y la dosis/i);
-    expect(t.encabezadoExito).toBe("Informe completo desbloqueado y revisión solicitada");
+    expect(t.cuerpoExito).toContain("informe abajo");
+    expect(t.encabezadoExito).toBe("Informe abierto y revisión solicitada");
   });
 
   it("concuerda en número: singular con una foto", () => {

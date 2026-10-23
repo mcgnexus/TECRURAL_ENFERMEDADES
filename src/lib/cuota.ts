@@ -375,8 +375,8 @@ export async function consumirUso(
       permitido: false,
       motivo: "visitante",
       mensaje: telefonoHash
-        ? "Has alcanzado los 6 análisis de esta semana. Podrás volver a analizar cuando se renueve el límite semanal."
-        : "Has completado tu análisis inicial de esta semana. Deja tu correo para ver el informe completo y ampliar el límite a 6 análisis semanales.",
+        ? "Has alcanzado los 6 análisis de este periodo de 7 días. Podrás volver a analizar cuando se renueve el límite."
+        : "Has completado tu análisis gratis de este periodo. Deja tu correo para ver el informe completo y ampliar el límite a 6 análisis cada 7 días.",
       restantes: 0,
       requiereAmpliacion: !telefonoHash,
     };

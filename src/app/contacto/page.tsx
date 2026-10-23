@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LeadForm } from "@/components/LeadForm";
 import { openGraphDeRuta } from "@/lib/seo";
+import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
+import { IDENTIDAD, REVISION_TECNICA } from "@/lib/textos-publicos";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/contacto" },
   openGraph: openGraphDeRuta("/contacto"),
   title: "Contacto",
   description:
-    "Solicita asesoramiento agronómico para tus cultivos en el Altiplano de Granada y la Costa Tropical. Un técnico de TecRural te contactará por el canal que elijas.",
+    "Cuenta qué le pasa a tu cultivo en el Altiplano de Granada o la Costa Tropical. Si pides revisión, te respondemos en un máximo de 48 horas por el canal que elijas.",
 };
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
@@ -20,14 +22,28 @@ export default function ContactoPage() {
     <main className="min-h-screen bg-tr-paper py-8 px-4">
       <div className="max-w-md mx-auto">
         <header className="mb-8 text-center">
-          <h1 className="font-heading font-bold text-tr-forest">Contacta con TecRural</h1>
+          <h1 className="font-heading font-bold text-tr-forest">Habla con TecRural</h1>
           <p className="text-tr-muted mt-2 text-body">
-            Asesoramiento agronómico para cultivos del Altiplano de Granada y la Costa Tropical.
-            Cuéntanos tu caso y te contactamos por el canal que elijas.
+            Cuéntanos qué le pasa a tu cultivo. {REVISION_TECNICA}
           </p>
         </header>
 
         <div className="space-y-5">
+          <div className={`${cardStyles} p-4 bg-tr-paper`}>
+            <p className="text-small font-semibold text-tr-forest">¿Prefieres escribir directamente?</p>
+            <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-small font-semibold text-tr-forest">
+              {whatsappDisponible && (
+                <a href={urlWhatsApp()} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center underline-offset-2 hover:underline">
+                  WhatsApp
+                </a>
+              )}
+              <a href={`mailto:${IDENTIDAD.correo}`} className="inline-flex min-h-[44px] items-center underline-offset-2 hover:underline">
+                {IDENTIDAD.correo}
+              </a>
+              <span className="font-normal text-tr-muted">{IDENTIDAD.ubicacion}</span>
+            </p>
+          </div>
+
           <LeadForm origen="contacto_directo" />
 
           <div className={`${cardStyles} p-5`}>

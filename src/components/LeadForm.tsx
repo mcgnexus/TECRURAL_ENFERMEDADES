@@ -7,6 +7,7 @@ import { trackEvento } from "@/lib/analitica";
 import { trackMeta } from "@/components/MetaPixel";
 import { obtenerUtm } from "@/lib/utm";
 import { textosLead, avisoFotos } from "@/lib/textos-lead";
+import { LIMITE_AMPLIADO } from "@/lib/textos-publicos";
 import type {
   ContextoDiagnosticoLead,
   OrigenLead,
@@ -251,8 +252,7 @@ export function LeadForm({
             <p className="mt-1 text-body text-tr-muted">{textos.cuerpoExito}</p>
             {conRevision && (
               <p className="mt-2 text-small text-tr-muted">
-                Un técnico de TecRural te responderá en un plazo máximo de 48 horas desde el envío de
-                la solicitud.
+                Un técnico de TecRural responderá en un plazo máximo de 48 horas por el canal que elegiste.
               </p>
             )}
             {conRevision && whatsappDisponible && (
@@ -465,11 +465,11 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
         <div className="flex-1">
           <label htmlFor={`lead-autorizacion-${origen}`} className="block text-small text-tr-ink leading-relaxed">
             <span className="block font-semibold">
-              Autorizo el uso de mi contacto para desbloquear el informe y aplicar el límite semanal de análisis. *
+              Entiendo que TecRural usará mi correo para mostrarme el informe y aplicar el límite de {LIMITE_AMPLIADO}, no para contactarme ni para publicidad. *
             </span>
             <span className="mt-1 block text-tr-muted">
-              Trataremos {textos.datosTratados} para estas dos finalidades. No supone contratación, coste ni
-              publicidad. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.
+              El informe se muestra en pantalla y puedes descargarlo en PDF; no se envía por correo.
+              Trataremos {textos.datosTratados} para estas dos finalidades. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.
             </span>
           </label>
           {errores.autorizacion && (
@@ -492,10 +492,10 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
           className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
         />
         <label htmlFor={`lead-solicitud-${origen}`} className="text-small text-tr-ink leading-relaxed">
-          <span className="block font-semibold">Además, quiero que un técnico revise mi caso y me contacte</span>
+          <span className="block font-semibold">Además, quiero que un técnico revise mi caso</span>
           <span className="mt-1 block text-tr-muted">
-            Opcional. La foto se comparte con el técnico solo si lo marcas; no tiene coste ni compromiso
-            de contratación.
+            Opcional. Si lo marcas, un técnico responde en un máximo de 48 horas por el canal que elijas.
+            La foto se comparte solo entonces. Sin coste ni compromiso de contratación.
           </span>
         </label>
       </div>
@@ -537,7 +537,7 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
           className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
         />
         <label htmlFor={`lead-correo-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
-          Quiero recibir por correo consejos y novedades de TecRural
+          Quiero recibir consejos y novedades por correo
           <span className="mt-1 block text-tr-muted">
             Opcional y desmarcado: no influye en el acceso al informe. Puedes retirarlo cuando
             quiera desde <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">la página de baja</Link>.
@@ -576,7 +576,7 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
       </button>
 
       <p className="text-caption text-tr-muted text-center">
-        Recibirás el informe al momento en pantalla. Enviarlo no implica ninguna contratación ni coste.
+        El informe se abre al momento en pantalla. Enviarlo no implica contratación ni coste.
       </p>
     </div>
   );

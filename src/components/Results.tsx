@@ -326,11 +326,11 @@ export function Results({
       ) : (
         <div className={`${cardStyles} p-5 border-l-4 border-tr-brand-green`}>
           <h3 className="font-heading font-semibold text-tr-forest">
-            {esSano ? "Llévate el informe completo de tu cultivo" : "Llévate el informe con el tratamiento concreto"}
+            {esSano ? "Abre el informe completo de tu cultivo" : "Abre el informe con el tratamiento concreto"}
           </h3>
           <p className="mt-1 text-body text-tr-muted">
-            Lo que acabas de ver es la orientación inicial. El informe completo añade lo que de verdad
-            cambia la decisión:
+            Deja tu correo y el informe se abre aquí mismo. No te lo enviamos por correo. Añade lo que
+            de verdad cambia la decisión:
           </p>
           <ul className="mt-3 space-y-2" role="list">
             {(esSano
@@ -352,9 +352,9 @@ export function Results({
             ))}
           </ul>
           <p className="mt-3 text-body text-tr-muted">
-            Escribe tu correo y verás el informe al momento en pantalla, listo para descargar en PDF.
-            Si quieres que además un técnico revise tu caso, márcalo en el formulario: es una opción
-            aparte y en ese caso sí se registra una solicitud de contacto.
+            Con tu correo pasas también a 6 análisis cada 7 días. Si quieres que además un técnico revise
+            tu caso, márcalo en el formulario: es una opción aparte y en ese caso sí se registra una
+            solicitud de contacto.
           </p>
 
           <div className="mt-4 no-print">
@@ -374,8 +374,8 @@ export function Results({
             />
           </div>
           <p className="mt-3 text-small text-tr-muted leading-relaxed">
-            La foto se comparte con el técnico solo si pides la revisión. No tiene coste ni compromiso
-            de contratación; el tiempo de respuesta depende de la demanda.
+            La revisión de un técnico es opcional. Si la pides, responde en un máximo de 48 horas y no
+            tiene coste. La foto se comparte con el técnico solo entonces.
           </p>
         </div>
       )}

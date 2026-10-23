@@ -18,6 +18,8 @@ un técnico).
    - El servidor emite una cookie propia `tr_uid`: un UUID aleatorio,
      `httpOnly`, `SameSite=Lax`, segura en producción y con 180 días de vida.
    - Esa cookie es la identidad anónima del dispositivo. No hay cuentas.
+   - La portada muestra el límite gratuito (1 análisis cada 7 días, sin
+     registro) antes de subir la foto: sin muros sorpresa tras el análisis.
 2. **Contexto del cultivo** (opcional salvo cultivo): cultivo, municipio,
    síntoma, duración y variedad. Mejora la orientación; no se exige.
 3. **Foto y envío** (`POST /api/diagnostico`).
@@ -68,11 +70,12 @@ un técnico).
      próximos pasos prudentes. Lenguaje claro, sin porcentajes de confianza no
      calibrados.
    - En la propia pantalla del resultado, sin botones intermedios, se ofrece
-     el **informe completo** (tratamiento con materia activa y dosis en rango,
-     momento de aplicación y plazo de seguridad, y qué segunda foto confirma
-     el diagnóstico) a cambio de un **correo** (o un teléfono si es lo que la
-     persona prefiera). Se muestra al instante en pantalla y se puede guardar
-     en PDF. Al dejar el contacto, la cuota semanal se amplía a seis análisis.
+      el **informe completo** (tratamiento con materia activa y dosis en rango,
+      momento de aplicación y plazo de seguridad, y qué segunda foto confirma
+      el diagnóstico) a cambio de un **correo** (o un teléfono si es lo que la
+      persona prefiera). El informe se abre en pantalla y se puede guardar
+      en PDF; el correo no es un canal de entrega. Al dejar el contacto, la
+      cuota se amplía a seis análisis cada 7 días.
    - El tratamiento es una **sugerencia orientativa, no una prescripción**: la
      app recuerda confirmar el registro del producto y respetar la etiqueta y el
      plazo de seguridad. Las fotos **no se guardan** por defecto.

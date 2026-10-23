@@ -15,6 +15,16 @@ import { PWAProviders } from "@/components/PWA/Providers";
 import { CULTIVOS_FRECUENTES } from "@/lib/datos-zona";
 import { trackEvento, volcarEventos } from "@/lib/analitica";
 import { mensajeAmigable, ErrorAnalisis } from "@/lib/error-analisis";
+import {
+  LIMITE_GRATIS,
+  LIMITE_AMPLIADO,
+  TIEMPO_ANALISIS,
+  IDENTIDAD,
+  LIMITES_HONESTOS,
+  SIN_REGISTRO,
+  PROPOSITO_CORREO,
+} from "@/lib/textos-publicos";
+import { urlWhatsApp, whatsappDisponible } from "@/lib/contacto";
 
 const CameraCapture = dynamic(
   () => import("@/components/CameraCapture").then((mod) => mod.CameraCapture),
@@ -254,7 +264,7 @@ function HomeContent() {
               <Image src={logoTecRural} alt="" width={40} height={40} priority className="object-contain" />
               <span className="flex flex-col">
                 <span className="font-heading text-base font-extrabold tracking-wide text-tr-forest">TECRURAL</span>
-                <span className="text-caption leading-tight text-tr-muted">Orientación fitosanitaria para agricultores</span>
+                <span className="text-caption leading-tight text-tr-muted">Plagas y enfermedades de tu cultivo</span>
               </span>
             </Link>
             <nav aria-label="Navegación principal" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:justify-end">
@@ -269,24 +279,23 @@ function HomeContent() {
         <div className="flex-1">
           <section className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14" aria-labelledby="home-title">
             <div className="text-center lg:text-left">
-              <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">ORIENTACIÓN AGRÍCOLA EN GRANADA</p>
+              <p className="mb-3 text-small font-bold tracking-[0.14em] text-tr-green-strong">PLAGAS Y ENFERMEDADES · GRANADA</p>
               <h1 id="home-title" className="home-hero-title font-heading font-bold text-tr-forest text-balance">
-                ¿Manchas o amarilleo en las hojas?
+                ¿Manchas en las hojas de tu aguacate o mango? Sube una foto y sabrás qué puede ser.
               </h1>
               <p className="mt-4 text-body leading-relaxed text-tr-ink text-pretty">
-                Sube una foto y recibe una orientación inicial mediante inteligencia artificial.
-                <span className="mt-2 block text-tr-muted">Disponible para agricultores del Altiplano y la Costa Tropical de Granada.</span>
+                Para aguacate, mango, chirimoyo, cítricos, olivo y huerta de la Costa Tropical y el Altiplano.
+                <span className="mt-2 block text-tr-muted">Sin cuenta ni teléfono: {LIMITE_GRATIS}.</span>
               </p>
               <button onClick={() => setVista("captura")} type="button" className={`${btnPrimary} mt-6 w-full sm:w-auto sm:min-w-64`}>
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                Analizar mi planta gratis
+                Analizar mi planta — gratis y sin registro
               </button>
               <p className="mt-3 text-small leading-relaxed text-tr-muted">
-                Primera prueba sin registro · Suele tardar 10-20 segundos.
-                No sustituye el diagnóstico de un técnico.
+                {TIEMPO_ANALISIS} · No sustituye el diagnóstico de un técnico.
               </p>
             </div>
 
@@ -305,11 +314,20 @@ function HomeContent() {
             </figure>
           </section>
 
-          <section aria-label="Ventajas de TecRural" className="border-y border-tr-line bg-[#E9EFE7]">
-            <ul className="mx-auto grid max-w-6xl gap-3 px-4 py-5 text-center text-small font-semibold text-tr-forest sm:grid-cols-3 sm:gap-6 sm:px-6" role="list">
-              <li>Orientación inicial</li>
-              <li>Contexto local</li>
-              <li>Informe con tratamiento</li>
+          <section aria-label="Qué ofrece TecRural" className="border-y border-tr-line bg-[#E9EFE7]">
+            <ul className="mx-auto grid max-w-6xl gap-4 px-4 py-5 text-center sm:grid-cols-3 sm:gap-6 sm:px-6" role="list">
+              <li>
+                <span className="block text-small font-bold text-tr-forest">Orientación inicial gratis</span>
+                <span className="mt-1 block text-caption text-tr-muted">Posibles causas y qué comprobar.</span>
+              </li>
+              <li>
+                <span className="block text-small font-bold text-tr-forest">Informe completo</span>
+                <span className="mt-1 block text-caption text-tr-muted">Tratamiento, dosis y segunda foto. Con tu correo.</span>
+              </li>
+              <li>
+                <span className="block text-small font-bold text-tr-forest">Revisión de un técnico</span>
+                <span className="mt-1 block text-caption text-tr-muted">Opcional, sin coste, respuesta en 48 h.</span>
+              </li>
             </ul>
           </section>
 
@@ -336,8 +354,12 @@ function HomeContent() {
               <li className="flex gap-4">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tr-forest font-heading font-bold text-white" aria-hidden="true">3</span>
                 <div>
-                  <h3 className="font-heading font-semibold text-tr-forest">Llévate el informe completo</h3>
-                  <p className="mt-2 text-body leading-relaxed text-tr-muted">Dejando tu correo desbloqueas el tratamiento recomendado, la dosis y cómo confirmarlo con otra foto. Si lo deseas, puedes pedir además la revisión de un técnico.</p>
+                  <h3 className="font-heading font-semibold text-tr-forest">Si quieres, abre el informe completo</h3>
+                  <p className="mt-2 text-body leading-relaxed text-tr-muted">
+                    Deja tu correo y el informe se abre aquí mismo. {PROPOSITO_CORREO} Incluye
+                    tratamiento orientativo, dosis y qué foto confirma la orientación. Con tu correo pasas a
+                    {` ${LIMITE_AMPLIADO}`}. La revisión de un técnico es aparte y opcional.
+                  </p>
                 </div>
               </li>
             </ol>
@@ -346,9 +368,9 @@ function HomeContent() {
           <section className="bg-white" aria-labelledby="cultivos-title">
             <div className="mx-auto grid max-w-6xl gap-5 px-4 py-12 sm:px-6 sm:py-14 md:grid-cols-[0.8fr_1.2fr] md:items-center">
               <div>
-                <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">CONTEXTO DE GRANADA</p>
-                <h2 id="cultivos-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">Cultivos disponibles</h2>
-                <p className="mt-3 text-body leading-relaxed text-tr-muted">La orientación contempla cultivos habituales del Altiplano y la Costa Tropical.</p>
+                <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">CULTIVOS</p>
+                <h2 id="cultivos-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">Cultivos que reconoce</h2>
+                <p className="mt-3 text-body leading-relaxed text-tr-muted">Aguacate, mango, chirimoyo, cítricos, olivo, almendro, vid y hortalizas. Si el tuyo no está en la lista, puedes escribirlo.</p>
               </div>
               <ul className="flex flex-wrap gap-2" aria-label="Cultivos disponibles" role="list">
                 {CULTIVOS_FRECUENTES.map((cultivo) => (
@@ -361,14 +383,33 @@ function HomeContent() {
           <section className="mx-auto grid max-w-6xl gap-5 px-4 py-12 sm:px-6 sm:py-16 md:grid-cols-[0.7fr_1.3fr]" aria-labelledby="equipo-title">
             <div>
               <p className="text-small font-bold tracking-[0.12em] text-tr-green-strong">QUIÉN ESTÁ DETRÁS</p>
-              <h2 id="equipo-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">TecRural, cerca de tu cultivo</h2>
+              <h2 id="equipo-title" className="home-section-title mt-2 font-heading font-bold text-tr-forest">Hablas con personas, no solo con una máquina</h2>
             </div>
             <div className="max-w-2xl">
               <p className="text-body leading-relaxed text-tr-ink">
-                TecRural está a cargo de Manuel Carrasco García y ofrece orientación a agricultores del Altiplano de Granada y la Costa Tropical.
+                TecRural es {IDENTIDAD.responsable}, de {IDENTIDAD.ubicacion}. Los casos con revisión los
+                valora un técnico de TecRural, que responde en un máximo de 48 horas por el canal que
+                elijas. La revisión no tiene coste ni compromiso de contratación.
               </p>
-              <p className="mt-3 text-body leading-relaxed text-tr-muted">
-                Si solicitas revisión, un técnico valorará la información del caso y te contactará por llamada, WhatsApp o correo, según elijas. La foto se comparte con el técnico solo al enviar la solicitud. Respondemos como máximo en 48 horas, según demanda; la solicitud no tiene coste ni implica contratar un servicio.
+              <p className="mt-3 text-body leading-relaxed text-tr-muted">{LIMITES_HONESTOS}</p>
+              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-small font-semibold text-tr-forest">
+                {whatsappDisponible && (
+                  <a
+                    href={urlWhatsApp()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-[44px] items-center gap-2 underline-offset-2 hover:underline"
+                  >
+                    <svg className="h-5 w-5 text-tr-green-strong" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91C21.95 6.45 17.5 2 12.04 2zm5.8 14.06c-.25.69-1.45 1.32-2 1.37-.55.05-1.05.24-3.53-.74-2.99-1.18-4.86-4.28-5.01-4.48-.15-.2-1.19-1.59-1.19-3.03 0-1.44.75-2.15 1.02-2.44.27-.3.59-.37.79-.37.2 0 .39 0 .57.01.18.01.43-.07.67.51.25.6.84 2.06.91 2.21.07.15.12.32.02.52-.1.2-.15.32-.3.5-.15.17-.31.39-.45.52-.15.15-.3.31-.13.61.17.3.76 1.26 1.64 2.04 1.13 1 2.07 1.31 2.37 1.46.3.15.47.12.65-.07.17-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.27.1 1.71.81 2 .95.3.15.5.22.57.35.07.12.07.72-.18 1.41z" />
+                    </svg>
+                    Escríbenos por WhatsApp
+                  </a>
+                )}
+                <a href={`mailto:${IDENTIDAD.correo}`} className="inline-flex min-h-[44px] items-center underline-offset-2 hover:underline">
+                  {IDENTIDAD.correo}
+                </a>
+                <span className="font-normal text-tr-muted">{IDENTIDAD.ubicacion}</span>
               </p>
             </div>
           </section>
@@ -376,7 +417,7 @@ function HomeContent() {
           <section className="bg-tr-forest px-4 py-12 text-center sm:py-14" aria-labelledby="cta-final-title">
             <div className="mx-auto max-w-2xl">
               <h2 id="cta-final-title" className="home-section-title font-heading font-bold text-white">Empieza con una foto de tu cultivo</h2>
-              <p className="mt-3 text-body leading-relaxed text-white/90">Recibe una orientación inicial gratuita y desbloquea el informe completo con el tratamiento recomendado.</p>
+              <p className="mt-3 text-body leading-relaxed text-white/90">{LIMITE_GRATIS}, sin registro. Si quieres el informe completo, deja tu correo y se abre en pantalla.</p>
               <button onClick={() => setVista("captura")} type="button" className={`${btnBase} mt-6 bg-tr-lime px-6 text-tr-forest hover:bg-[#c7dc83]`}>
                 Analizar mi planta gratis
               </button>
@@ -386,7 +427,7 @@ function HomeContent() {
 
         <footer className="border-t border-tr-line bg-tr-surface px-4 py-6 text-small text-tr-muted">
           <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p>© TecRural · Orientación fitosanitaria para agricultores</p>
+            <p>© TecRural · Plagas y enfermedades de tu cultivo</p>
             <nav aria-label="Enlaces legales y contacto" className="flex flex-wrap gap-x-5 gap-y-2">
               <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/contacto">Contacto</Link>
               <Link className="min-h-[44px] inline-flex items-center underline-offset-2 hover:underline" href="/privacidad">Privacidad</Link>
@@ -414,9 +455,10 @@ function HomeContent() {
         </header>
 
         <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
-          Al terminar verás una orientación inicial gratuita. Si quieres el informe completo con el
-          tratamiento, la dosis y el momento de aplicación, podrás desbloquearlo dejando tu correo;
-          la foto solo se comparte con el técnico si pides aparte que revise tu caso.
+          <span className="font-semibold text-tr-ink">{LIMITE_GRATIS}, {SIN_REGISTRO}.</span> {TIEMPO_ANALISIS}.
+          Al terminar verás una orientación inicial. Si quieres el informe completo con tratamiento, dosis y
+          cómo confirmarlo, deja tu correo: {PROPOSITO_CORREO.charAt(0).toLowerCase() + PROPOSITO_CORREO.slice(1)} Con tu correo
+          pasas a {LIMITE_AMPLIADO}. La revisión de un técnico es aparte, opcional y sin coste.
         </p>
 
         {error && (
@@ -440,8 +482,10 @@ function HomeContent() {
 
         {requiereAmpliacion && (
           <section className="mb-5 rounded-[var(--tr-radius-card)] border border-tr-line bg-tr-surface p-4" aria-labelledby="cuota-contacto-titulo">
-            <h2 id="cuota-contacto-titulo" className="font-heading font-semibold text-tr-forest">Amplía el límite semanal con tu correo</h2>
-            <p className="mt-1 text-small text-tr-muted">Puedes hacer hasta 6 análisis en cualquier periodo de 7 días, contando los que ya hayas hecho esta semana.</p>
+            <h2 id="cuota-contacto-titulo" className="font-heading font-semibold text-tr-forest">Has usado tu análisis gratis de este periodo</h2>
+            <p className="mt-1 text-small text-tr-muted">
+              Deja tu correo para pasar a {LIMITE_AMPLIADO}. No lo usamos para contactarte ni para publicidad.
+            </p>
             <label htmlFor="cuota-correo" className="mt-3 block text-small font-semibold text-tr-forest">Correo electrónico</label>
             <input
               id="cuota-correo"
@@ -460,7 +504,7 @@ function HomeContent() {
                 onChange={(e) => setConfirmarCuotaContacto(e.target.checked)}
                 className="mt-0.5"
               />
-              <span>Confirmo que facilito mi correo solo para ampliar el límite de análisis. No se guarda en claro (únicamente una huella seudonimizada), no se usa para contactarme ni para publicidad, y se conserva un máximo de 180 días. Esta ampliación no es una solicitud de revisión. <Link href="/privacidad#limite-analisis" className="underline">Más información</Link>.</span>
+              <span>Entiendo que guardáis una versión cifrada de mi correo para aplicar el límite de {LIMITE_AMPLIADO}. No me escribiréis ni me enviaréis publicidad. <Link href="/privacidad#limite-analisis" className="underline">Más información</Link>.</span>
             </label>
             {errorCuota && <p className="mt-2 text-small text-tr-warning-text" role="alert">{errorCuota}</p>}
             <button
@@ -469,7 +513,7 @@ function HomeContent() {
               disabled={guardandoCuota || !correoCuota.trim() || !confirmarCuotaContacto}
               className={`${btnPrimary} mt-3 w-full`}
             >
-              {guardandoCuota ? "Activando…" : "Ampliar a 6 análisis semanales"}
+              {guardandoCuota ? "Activando…" : `Ampliar a ${LIMITE_AMPLIADO}`}
             </button>
           </section>
         )}
@@ -510,7 +554,7 @@ function HomeContent() {
               Analizar foto
             </button>
             <p className="mt-2 text-caption text-tr-muted text-center">
-              El análisis tarda unos 10-20 segundos. Necesitas conexión; la foto no se guarda.
+              El análisis tarda unos 10-20 segundos. Necesitas conexión; la foto no se guarda salvo que pidas revisión.
             </p>
           </div>
         )}
