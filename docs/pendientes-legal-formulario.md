@@ -122,3 +122,25 @@ de la normativa de protección de datos: son necesarios estos contenidos y decis
 - Pendiente: revisión legal de la frecuencia y el contenido de esos envíos; el
   píxel de Meta sigue cargándose en producción sin banner de consentimiento
   (ver sección 7), decidir banner o exclusión.
+
+## 11. Entrega del enlace de recuperación del informe (nuevo)
+- Implementado: al guardar el informe con correo se envía, mediante **Resend**,
+  un mensaje transaccional que contiene **solo un enlace** válido 90 días. El
+  informe no se adjunta, no viaja contenido clínico (patología, materia activa
+  ni dosis) y el buzón no acumula datos agronómicos. También hay reenvío manual
+  desde el resultado, con límites de 3/24 h por diagnóstico, 10/7 días por
+  correo y 30/24 h por IP. Un token nuevo invalida el anterior; en la base de
+  datos solo se guarda su SHA-256.
+- Finalidad redactada en `/privacidad` (secciones 2, 3, 5, 6 y 9): entregar el
+  enlace de recuperación solicitado, base jurídica art. 6.1.b RGPD, destinatario
+  Resend con posible tratamiento fuera del EEE con garantías, y caducidad del
+  enlace a los 90 días.
+- **Pendiente de revisión jurídica.** El texto es un borrador coherente con el
+  funcionamiento real; no afirma por sí solo el cumplimiento. Revisar en
+  particular: (a) si la base 6.1.b cubre un enlace de recuperación abierto
+  también por quien no lo solicitó pero posee el correo; (b) el contrato de
+  encargado del tratamiento y la ubicación de Resend; (c) la conveniencia de
+  mencionar la entrega en la casilla de autorización del informe (hoy ya la
+  menciona cuando la función está activa).
+- Rotar `RESEND_API_KEY` antes de desplegar y no versionarla. Si falta la
+  variable, la app oculta toda promesa de envío y responde `no_disponible`.

@@ -466,7 +466,7 @@ ESQUEMA JSON REQUERIDO:
     "plazo_seguridad_dias": "number o null (días de plazo de seguridad antes de cosecha; null si la medida no tiene plazo o no procede)",
     "advertencias": ["string: 2-3 precauciones concretas (registro del producto para este cultivo, compatibilidades, resistencia, protección del aplicador)"]
   },
-  "validacion_segunda_foto": "string (qué foto o dato concreto permitiría confirmar la hipótesis: ej: 'una foto de cerca del envés, con luz natural, para ver si hay telarañas')",
+  "validacion_segunda_foto": "string (qué foto o dato concreto aportaría información adicional sobre la hipótesis; es parte gratuita, así que describe qué aporta sin prometer que confirma: ej: 'una foto de cerca del envés, con luz natural, para ver si hay telarañas')",
   "requiere_experto": "boolean (true si la confianza es baja <0.5, la imagen es deficiente o el caso es ambiguo)",
   "razonamiento": "string (tu análisis paso a paso: qué ves, cómo lo interpretas, por qué unas hipótesis son más probables que otras)"
 }

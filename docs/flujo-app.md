@@ -79,28 +79,53 @@ un técnico).
    - El resultado se normaliza y se valida su coherencia; se marca
      `requiere_experto` cuando procede.
 6. **Resultado**.
-   - Orientación inicial gratuita: hechos observados, otras posibilidades,
-     próximos pasos prudentes. Lenguaje claro, sin porcentajes de confianza no
-     calibrados.
-   - En la propia pantalla del resultado, sin botones intermedios, se ofrece
-      el **informe completo** (tratamiento con materia activa y dosis en rango,
-      momento de aplicación y plazo de seguridad, y qué segunda foto confirma
-      el diagnóstico) a cambio de un **correo** (o un teléfono si es lo que la
-      persona prefiera). El informe se abre en pantalla y se puede guardar
-      en PDF; el correo no es un canal de entrega. Al dejar el contacto, la
-      cuota se amplía a seis análisis cada 7 días.
+   - Orientación inicial gratuita y con utilidad propia: hechos observados,
+     otras causas posibles, qué faltaría para afinar (incluida, si existe, una
+     segunda foto que aportaría información adicional, sin prometer que
+     confirma), qué comprobar ahora (con texto de respaldo si el modelo no
+     devuelve próximos pasos) y un bloque fijo de «¿Cuándo conviene que lo vea
+     una persona?». Lenguaje claro, sin porcentajes de confianza no calibrados.
+   - Después de esa orientación, en la propia pantalla se ofrecen **dos acciones
+     independientes**, sin una preseleccionada:
+     - **Abrir el informe completo**: pide solo un **correo** y explica que se
+       usa para mostrar el informe, ampliar el límite y enviar el enlace de
+       recuperación, nunca para contactar. El informe (pauta orientativa con
+       materia activa y dosis en rango, momento y plazo de seguridad cuando la
+       foto permite proponerla, y PDF) se abre en pantalla; el correo solo
+       transporta un enlace, no el contenido clínico. Al dejarlo, la cuota se
+       amplía a seis análisis cada 7 días.
+     - **Solicitar la revisión de un técnico**: pide elegir **canal** (WhatsApp,
+       correo o llamada, sin preselección) y solo el dato de ese canal (teléfono
+       para WhatsApp o llamada; correo para correo). Reutiliza cultivo, municipio
+       y síntoma ya dados. Registra la solicitud de revisión con las fotos y no
+       exige un correo si se eligió WhatsApp. Solo si el canal es correo se
+       envía también el enlace de recuperación.
+     Cualquiera de las dos abre el informe en pantalla. La revisión sigue
+     disponible después de guardar el informe. Cada confirmación dice
+     exactamente qué se ha registrado (informe sin revisión, o revisión con su
+     canal).
+   - **Entrega del enlace y estados separados**: cuando Resend acepta el envío
+     (2xx con `id`), la pantalla muestra «Enviado a tu correo» y ofrece
+     reenvío; si falla, muestra «No hemos podido enviarlo» con reintento. El
+     informe generado permanece siempre visible. Entrega no es recepción: el
+     texto avisa de la posible errata y de la carpeta de correo no deseado.
+   - Las novedades comerciales son un **opt-in independiente y voluntario por
+     correo**, separado de ambas acciones: no marcarlo no bloquea el servicio.
+     En la revisión por teléfono/WhatsApp no se ofrece, porque el teléfono dado
+     para la revisión no autoriza publicidad.
    - El tratamiento es una **sugerencia orientativa, no una prescripción**: la
      app recuerda confirmar el registro del producto y respetar la etiqueta y el
      plazo de seguridad. Las fotos **no se guardan** por defecto.
-7. **Revisión técnica (opción aparte)**.
-   - En el formulario posterior al diagnóstico, pedir que un técnico revise el
-     caso es una casilla **separada y opcional**: quien solo quiere el informe
-     no registra una solicitud de contacto ni le prometen respuesta.
-   - Al marcarla se registra un lead (con las fotos adjuntas) y se avisa al
+7. **Revisión técnica (acción aparte)**.
+   - Tras el diagnóstico, pedir que un técnico revise el caso es una **acción
+     propia con su formulario**: quien solo quiere el informe no registra una
+     solicitud de contacto ni recibe promesas de respuesta.
+   - Al solicitarla se registra un lead (con las fotos adjuntas) y se avisa al
      técnico (Telegram o webhook); entonces sí se promete respuesta en un
-     plazo máximo de 48 horas por el canal elegido. Si solo se dejó correo, el
-     canal registrado es `correo` y no se ofrece el consentimiento de
-     WhatsApp. La revisión es independiente del análisis y no tiene coste.
+     plazo máximo de 48 horas por el canal elegido. El canal se elige siempre en
+     el formulario: no hay llamada preseleccionada. La revisión es independiente
+     del análisis y no tiene coste. Si se usa también la acción del informe,
+     quedan dos leads vinculados por `diagnostico_id`.
    - El consentimiento comercial es explícito por canal
      (`leads.consentimientos_comerciales`, migración 0012): correo en el
      formulario del informe y WhatsApp solo en contacto directo con teléfono.
@@ -144,6 +169,24 @@ posterior del proveedor también consume el uso: es preferible contar de más qu
 permitir reintentos que multipliquen el gasto. Por tanto, el contador refleja
 análisis admitidos, no necesariamente diagnósticos entregados con éxito.
 
+## Enlace de recuperación del informe
+
+- Se emite al guardar el informe con correo o al pedir revisión con canal
+  correo. Nunca con teléfono o WhatsApp.
+- El token tiene 32 bytes aleatorios, se guarda solo como SHA-256 y es válido
+  90 días y multiuso (se puede abrir desde otro dispositivo sin cookie). Un
+  token nuevo invalida el anterior.
+- El correo solo lleva el enlace; no adjunta el informe ni menciona patología,
+  materia activa o dosis. La URL sale de `NEXT_PUBLIC_SITE_URL`.
+- Límites de reenvío: 3/24 h por diagnóstico, 10/7 días por correo y 30/24 h
+  por IP. El envío automático se hace una vez por lead; los siguientes son
+  manuales.
+- Solo un 2xx de Resend con `id` cuenta como aceptado. Si falla, el informe
+  sigue en pantalla y se ofrece reintentar. Sin `RESEND_API_KEY` o
+  `RESEND_FROM`, ninguna pantalla promete el envío y el endpoint responde
+  `no_disponible`.
+- Caducidad: la lectura filtra `expira_en > NOW()`; no hay borrado programado.
+
 ## Ampliación por contacto (correo o teléfono)
 
 - Se ofrece en la propia pantalla del primer resultado (formulario del informe)
@@ -170,6 +213,9 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   (art. 6.1.a). Un envío que solo desbloquea el informe no registra solicitud
   de revisión ni guarda fotos.
 - Las fotos solo se guardan si el usuario pide revisión; máximo 12 meses.
+- El enlace de recuperación se conserva 90 días; en la base de datos solo consta
+  su SHA-256. La entrega se apoya en Resend, que recibe el correo y el mensaje
+  neutro, no el informe. Base jurídica de la entrega: art. 6.1.b RGPD.
 - Detalle completo en `/privacidad` y en
   `docs/pendientes-legal-formulario.md`.
 
@@ -180,7 +226,8 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   `analisis_completado` → `resultado_visto` → `cta_revision_abierto` (primera
   interacción con el formulario del informe) →
   `informe_desbloqueado` → `lead_enviado`. Se añade `informe_pdf` cuando se
-  guarda el informe.
+  guarda el informe y `informe_envio_aceptado` / `informe_envio_fallido` para
+  medir la entrega real del enlace frente a la promesa de la pantalla.
 - La conversión se mide sobre visitas a la portada, no sobre análisis.
 
 ## Tratamiento y límites legales
@@ -198,7 +245,12 @@ análisis admitidos, no necesariamente diagnósticos entregados con éxito.
   ejecutan DDL.
 - **Variables relevantes:** `DATABASE_URL`, `GEMINI_API_KEY`,
   `DEEPSEEK_API_KEY`, `CUOTA_TELEFONO_SECRET`, `ADMIN_TOKEN`,
-  `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`.
+  `NEXT_PUBLIC_TECRURAL_WHATSAPP`, `NEXT_PUBLIC_SITE_URL`,
+  `RESEND_API_KEY`, `RESEND_FROM` (y `RESEND_REPLY_TO` opcional),
+  `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`.
+- **Coste del correo:** Resend incluye 3 000 correos/mes y 100/día en la capa
+  gratuita. Con campañas puede quedarse corto; vigilar `informe_envio_aceptado`
+  y revisar el plan antes de escalar.
 - **Panel:** `/admin` con `ADMIN_TOKEN`; pestañas de resumen (KPIs y gráficos
   interactivos con drill-down), leads (tabla ordenable, filtros, búsqueda y
   borrado definitivo vía `DELETE /api/leads`), diagnósticos (cada análisis con

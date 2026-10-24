@@ -441,7 +441,7 @@ function HomeContent() {
               </li>
               <li>
                 <span className="block text-small font-bold text-tr-forest">Informe completo</span>
-                <span className="mt-1 block text-caption text-tr-muted">Tratamiento, dosis y segunda foto. Con tu correo.</span>
+                <span className="mt-1 block text-caption text-tr-muted">Pauta orientativa con dosis y plazo si procede. Con tu correo.</span>
               </li>
               <li>
                 <span className="block text-small font-bold text-tr-forest">Revisión humana</span>
@@ -475,8 +475,8 @@ function HomeContent() {
                 <div>
                   <h3 className="font-heading font-semibold text-tr-forest">Si quieres, abre el informe completo</h3>
                   <p className="mt-2 text-body leading-relaxed text-tr-muted">
-                    Deja tu correo y el informe se abre aquí mismo. {PROPOSITO_CORREO} Incluye
-                    tratamiento orientativo, dosis y qué foto confirma la orientación. Con tu correo pasas a
+                    Deja tu correo. {PROPOSITO_CORREO} Incluye, si la foto
+                    lo permite, pauta orientativa con dosis y plazo de seguridad. Con tu correo pasas a
                     {` ${LIMITE_AMPLIADO}`}. La revisión humana es aparte y opcional.
                   </p>
                 </div>
@@ -575,8 +575,8 @@ function HomeContent() {
 
         <p className={`mb-5 rounded-[var(--tr-radius-control)] border border-tr-line bg-tr-surface p-3 text-small text-tr-muted leading-relaxed`}>
           <span className="font-semibold text-tr-ink">{LIMITE_GRATIS}, {SIN_REGISTRO}.</span> {TIEMPO_ANALISIS}.
-          Al terminar verás una orientación inicial. Si quieres el informe completo con tratamiento, dosis y
-          cómo confirmarlo, deja tu correo: {PROPOSITO_CORREO.charAt(0).toLowerCase() + PROPOSITO_CORREO.slice(1)} Con tu correo
+          Al terminar verás una orientación inicial. Si quieres el informe completo con la pauta orientativa
+          (materia activa, dosis y plazo de seguridad), deja tu correo. {PROPOSITO_CORREO} Con tu correo
           pasas a {LIMITE_AMPLIADO}. La revisión de un técnico es aparte, opcional y sin coste.
         </p>
 

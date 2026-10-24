@@ -11,10 +11,15 @@
  * - captura_realizada: el usuario cargó u hizo una foto
  * - analisis_iniciado / analisis_completado / analisis_error
  * - resultado_visto: con gravedad y si requiere experto (calidad del lead)
- * - cta_revision_abierto: empezó a rellenar el formulario tras el diagnóstico
- * - informe_desbloqueado: dejó su contacto y vio el informe completo
+ * - cta_revision_abierto: empezó a rellenar un formulario tras el diagnóstico
+ *   (lleva `intencion`: guardar el informe o pedir revisión)
+ * - informe_desbloqueado: dejó su contacto y vio el informe completo (lleva
+ *   `intencion`: informe o revisión, porque ambas acciones lo abren)
  * - informe_pdf: guardó o imprimió el informe en PDF
- * - lead_enviado / lead_error: formulario enviado
+ * - lead_enviado / lead_error: formulario enviado (lleva `intencion`)
+ * - informe_envio_aceptado: Resend confirmó el enlace (2xx con id). Solo
+ *   entonces la pantalla puede decir "enviado"; entrega ≠ recepción.
+ * - informe_envio_fallido: no se pudo entregar a Resend (red, 4xx/5xx, sin id).
  * - whatsapp_click: contacto por WhatsApp
  * - ejemplo_visto: abrió el ejemplo de la portada. Es informativo y NO forma
  *   parte del embudo: no equivale a un análisis real.
@@ -32,6 +37,8 @@ export type NombreEvento =
   | "informe_pdf"
   | "lead_enviado"
   | "lead_error"
+  | "informe_envio_aceptado"
+  | "informe_envio_fallido"
   | "whatsapp_click"
   | "ejemplo_visto";
 

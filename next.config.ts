@@ -34,6 +34,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // El informe se abre con un token: no puede quedar en cachés
+        // compartidas ni volver a mostrarse tras cerrar el enlace.
+        source: "/informe/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
         source: "/admin",
         headers: [
           { key: "Cache-Control", value: "private, no-store, max-age=0" },

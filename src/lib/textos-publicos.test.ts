@@ -39,8 +39,15 @@ describe("propósito del correo", () => {
     expect(PROPOSITO_CORREO).toContain("aquí mismo");
   });
 
-  it("aclara que el informe no llega por correo", () => {
-    expect(PROPOSITO_CORREO).toContain("No te lo enviamos por correo");
+  it("solo menciona el enlace cuando el envío está disponible", () => {
+    expect(PROPOSITO_CORREO).toContain("enlace para recuperarlo");
+    expect(PROPOSITO_CORREO).toContain("Si el envío por correo está disponible");
+    expect(PROPOSITO_CORREO).not.toContain("No te lo enviamos por correo");
+  });
+
+  it("no usa el correo para publicidad ni adjunta el informe", () => {
+    expect(PROPOSITO_CORREO).toContain("no te adjuntamos el informe");
+    expect(PROPOSITO_CORREO).toContain("usamos el correo para publicidad");
   });
 });
 

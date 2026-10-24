@@ -7,6 +7,7 @@ import { trackEvento } from "@/lib/analitica";
 import { trackMeta } from "@/components/MetaPixel";
 import { obtenerUtm } from "@/lib/utm";
 import { textosLead, avisoFotos } from "@/lib/textos-lead";
+import type { ModoLead } from "@/lib/textos-lead";
 import { LIMITE_AMPLIADO } from "@/lib/textos-publicos";
 import { TEXTOS_COMERCIALES } from "@/lib/consentimiento-comercial";
 import type {
@@ -18,6 +19,8 @@ interface LeadFormProps {
   origen: OrigenLead;
   diagnosticoId?: string;
   contexto?: ContextoDiagnosticoLead;
+  /** Intención tras el diagnóstico: guardar el informe o pedir revisión. */
+  modo?: ModoLead;
   prefill?: {
     cultivo?: string;
     municipio?: string;
@@ -27,8 +30,13 @@ interface LeadFormProps {
   mensajeInicial?: string;
   /** Fotos del análisis como data URL completo (WebP o JPEG) para adjuntar a la revisión */
   adjuntarFotos?: string[];
-  /** Se llama cuando el lead se ha guardado: permite revelar el informe completo. */
-  onEnviado?: () => void;
+  /** La entrega del enlace está configurada: los textos pueden mencionarla. */
+  envioCorreoActivo?: boolean;
+  /**
+   * Se llama cuando el lead se ha guardado. `canal` indica si la persona dejó
+   * un correo (y por tanto se le puede enviar el enlace) o solo un teléfono.
+   */
+  onEnviado?: (datos: { canal: "correo" | "telefono" }) => void;
 }
 
 const btnBase = "inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-[var(--tr-radius-control)] font-[var(--tr-font-body)] font-semibold transition-all duration-200 ";
@@ -44,14 +52,16 @@ export function LeadForm({
   origen,
   diagnosticoId,
   contexto,
+  modo = "informe",
   prefill,
   mensajeInicial = "",
   adjuntarFotos,
+  envioCorreoActivo = false,
   onEnviado,
 }: LeadFormProps) {
   const [estado, setEstado] = useState<EstadoEnvio>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [errores, setErrores] = useState<{ telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string }>({});
+  const [errores, setErrores] = useState<{ telefono?: string; email?: string; contacto?: string; canal?: string; solicitud?: string; autorizacion?: string }>({});
   const [form, setForm] = useState({
     nombre: "",
     telefono: "",
@@ -59,21 +69,22 @@ export function LeadForm({
     municipio: prefill?.municipio ?? "",
     cultivo: prefill?.cultivo ?? "",
     sintoma: "",
-    canalContacto: "llamada",
+    // Sin preselección: el canal lo elige la persona. "llamada" como valor
+    // inicial era una preferencia implícita que nadie había pedido.
+    canalContacto: "",
     mensaje: mensajeInicial,
     // En "contacto_directo" es la casilla obligatoria de la solicitud. En el
-    // flujo posterior al diagnóstico es la opción aparte y opcional de pedir
-    // que un técnico revise el caso: quien solo quiere el informe no la marca
-    // y su envío no registra una solicitud de contacto.
+    // flujo posterior al diagnóstico la intención la fija `modo`: solo la
+    // revisión registra una solicitud de contacto.
     solicitudRespuesta: false,
     consentimientoWhatsapp: false, // siempre desmarcado por defecto
-    // Solo en el flujo posterior al diagnóstico: autorización obligatoria para
-    // usar el contacto en el informe y en el límite semanal, separada de la
-    // revisión técnica.
+    // Modo informe: autorización obligatoria para usar el correo en el informe
+    // y en el límite semanal, separada de las novedades comerciales.
     autorizoInforme: false,
+    // Modo revisión: autorización obligatoria para gestionar la solicitud.
+    autorizoRevision: false,
     // Novedades comerciales por correo: opt-in voluntario y desmarcado, separado
-    // de la autorización del informe. Da igual el teléfono: por eso se guarda
-    // con su propio canal (correo) en el servidor.
+    // de la autorización del servicio. Solo se ofrece donde hay correo.
     consentimientoCorreo: false,
     web: "",
   });
@@ -82,20 +93,21 @@ export function LeadForm({
     setForm((f) => ({ ...f, [campo]: valor }));
 
   const esDirecto = origen === "contacto_directo";
+  /** Solo la revisión (o el contacto directo) registra una solicitud. */
+  const esRevision = !esDirecto && modo === "revision";
+  const solicitud = esDirecto || esRevision;
   const TELEFONO_REGEX = /^[+]?[\d\s().-]{9,20}$/;
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
   const telefono = form.telefono.trim();
   const correo = form.email.trim();
-  /** Solo se pidió correo: no tiene sentido ofrecer llamada ni WhatsApp. */
-  const soloCorreo = !telefono && Boolean(correo);
 
   /**
    * En el flujo posterior al diagnóstico las fotos solo viajan con la revisión
-   * técnica: quien únicamente desbloquea el informe no las comparte con nadie.
+   * técnica: quien únicamente abre el informe no las comparte con nadie.
    */
   const fotosAdjuntas = adjuntarFotos && adjuntarFotos.length > 0 ? adjuntarFotos : null;
-  const comparteFotos = esDirecto || form.solicitudRespuesta;
+  const comparteFotos = esDirecto || esRevision;
   const numFotos = fotosAdjuntas?.length ?? 0;
   const numFotosEnviadas = comparteFotos ? numFotos : 0;
   const fotosParaEnviar = comparteFotos && fotosAdjuntas ? fotosAdjuntas.slice(0, 3) : undefined;
@@ -103,35 +115,46 @@ export function LeadForm({
   // Los textos viven en src/lib/textos-lead.ts, que es puro y por tanto
   // verificable: la variante posterior al diagnóstico no se renderiza sin
   // completar un análisis, así que la única forma de comprobarla es aislarla.
-  const textos = textosLead(origen, numFotosEnviadas, esDirecto || form.solicitudRespuesta);
+  const textos = textosLead(
+    origen,
+    numFotosEnviadas,
+    esDirecto ? "revision" : modo,
+    envioCorreoActivo
+  );
   const aviso = avisoFotos(numFotosEnviadas);
 
   const validar = (): boolean => {
-    const nuevos: { telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string } = {};
+    const nuevos: { telefono?: string; email?: string; contacto?: string; canal?: string; solicitud?: string; autorizacion?: string } = {};
     if (telefono && !TELEFONO_REGEX.test(telefono)) {
       nuevos.telefono = "Introduce un teléfono válido (9-15 dígitos).";
     }
     if (correo && !EMAIL_REGEX.test(correo)) {
       nuevos.email = "Introduce un correo válido (por ejemplo: nombre@dominio.com).";
     }
-    // Informe completo y revisión: basta con UNO de los dos canales.
-    if (!telefono && !correo) {
-      nuevos.contacto = esDirecto
-        ? "Déjanos tu teléfono o tu correo: con uno de los dos basta para responder a tu solicitud."
-        : "Escribe tu correo para recibir el informe completo.";
+
+    if (esDirecto || esRevision) {
+      // El canal se elige siempre; nada de llamada por defecto.
+      if (!form.canalContacto) {
+        nuevos.canal = "Elige cómo prefieres que te contactemos.";
+      } else if (form.canalContacto === "correo") {
+        if (!correo) nuevos.email = "Escribe el correo al que quieres que te respondamos.";
+      } else if (!telefono) {
+        nuevos.telefono = "Para llamada o WhatsApp, deja un teléfono (o elige que te escriban al correo).";
+      }
+    } else if (!correo) {
+      nuevos.contacto = "Escribe tu correo para abrir el informe completo.";
     }
-    if (!esDirecto && !form.autorizoInforme) {
+
+    if (esRevision && !form.autorizoRevision) {
+      nuevos.autorizacion = "Confirma el uso de tus datos para gestionar la solicitud de revisión.";
+    }
+    if (!esDirecto && modo === "informe" && !form.autorizoInforme) {
       nuevos.autorizacion = "Confirma el uso del contacto para recibir el informe.";
     }
-    if (form.solicitudRespuesta) {
-      // Con revisión pedida y canal de llamada o WhatsApp, sin teléfono no hay
-      // forma de contactar: se pide el número o el cambio a correo.
-      if (!telefono && form.canalContacto !== "correo") {
-        nuevos.telefono = "Para la revisión, deja un teléfono (o elige que te escriban al correo).";
-      }
-    } else if (esDirecto) {
+    if (esDirecto && !form.solicitudRespuesta) {
       nuevos.solicitud = "Confirma que solicitas una respuesta sobre este caso.";
     }
+
     setErrores(nuevos);
     return Object.keys(nuevos).length === 0;
   };
@@ -173,6 +196,16 @@ export function LeadForm({
 
     const utm = obtenerUtm();
 
+    // Solo viaja el contacto del canal elegido. En el formulario de revisión,
+    // elegir WhatsApp o llamada no debe guardar un correo escrito antes.
+    const revisionSoloTelefono = esRevision && form.canalContacto !== "correo";
+    const telefonoEnviar = revisionSoloTelefono
+      ? undefined
+      : form.telefono.trim() || undefined;
+    const emailEnviar = revisionSoloTelefono
+      ? undefined
+      : form.email.trim() || undefined;
+
     // Canales comerciales explícitos: solo se envía el que se mostró y se
     // marcó. El canal de revisión (`canal_contacto`) no interviene aquí.
     const consentimientosComerciales: Array<{
@@ -185,7 +218,12 @@ export function LeadForm({
         texto_version: TEXTOS_COMERCIALES.whatsapp.version,
       });
     }
-    if (!esDirecto && form.consentimientoCorreo && correo) {
+    if (
+      !esDirecto &&
+      form.consentimientoCorreo &&
+      correo &&
+      (!esRevision || form.canalContacto === "correo")
+    ) {
       consentimientosComerciales.push({
         canal: "correo",
         texto_version: TEXTOS_COMERCIALES.correo.version,
@@ -198,20 +236,20 @@ export function LeadForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: form.nombre.trim() || undefined,
-          telefono: form.telefono.trim() || undefined,
-          email: form.email.trim() || undefined,
+          telefono: telefonoEnviar,
+          email: emailEnviar,
           municipio: form.municipio.trim() || undefined,
           cultivo: form.cultivo.trim() || undefined,
           sintoma: sintomaFinal,
           // Sin revisión pedida no hay mensaje: el envío no es una solicitud
           // de contacto y no necesita notas para el técnico.
-          mensaje: form.solicitudRespuesta ? (form.mensaje.trim() || undefined) : undefined,
+          mensaje: solicitud ? (form.mensaje.trim() || undefined) : undefined,
           diagnostico_id: diagnosticoId,
           origen,
-          // Sin teléfono no se puede llamar ni escribir por WhatsApp: el canal
-          // efectivo pasa a ser el correo. Sin revisión pedida no hay canal.
-          canal_contacto: form.solicitudRespuesta ? (soloCorreo ? "correo" : form.canalContacto) : undefined,
-          solicitud_respuesta: form.solicitudRespuesta,
+          // Sin revisión pedida no hay canal: guardar el informe no es una
+          // solicitud de contacto. El canal nunca se infiere del contacto.
+          canal_contacto: solicitud ? (form.canalContacto || undefined) : undefined,
+          solicitud_respuesta: solicitud,
           // Solo se envía el canal comercial que se mostró y se marcó.
           consentimientos_comerciales:
             consentimientosComerciales.length > 0
@@ -231,22 +269,30 @@ export function LeadForm({
       }
 
       setEstado("ok");
-      trackEvento("lead_enviado", { origen, cultivo: form.cultivo || undefined });
+      trackEvento("lead_enviado", {
+        origen,
+        cultivo: form.cultivo || undefined,
+        intencion: esDirecto ? "revision" : modo,
+      });
       // Conversiones de Meta, separadas por valor comercial: Lead cubre el
       // contacto; los eventos personalizados matizan quién pide revisión y
       // quién autoriza novedades. Se disparan una sola vez, al confirmarse el
       // guardado, y sin datos personales en los parámetros.
       trackMeta("Lead", { origen });
-      if (form.solicitudRespuesta) trackMeta("RevisionTecnica", { origen });
+      if (solicitud) trackMeta("RevisionTecnica", { origen });
       if (!esDirecto && form.consentimientoCorreo && Boolean(correo)) {
         trackMeta("SuscripcionCorreo", { origen });
       }
-      onEnviado?.();
+      const canalEntrega: "correo" | "telefono" =
+        !esDirecto && (modo === "informe" || form.canalContacto === "correo")
+          ? "correo"
+          : "telefono";
+      onEnviado?.({ canal: canalEntrega });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       setError(message);
       setEstado("error");
-      trackEvento("lead_error", { origen });
+      trackEvento("lead_error", { origen, intencion: esDirecto ? "revision" : modo });
     }
   };
 
@@ -256,6 +302,7 @@ export function LeadForm({
     if (esDirecto || interaccionRegistrada.current) return;
     interaccionRegistrada.current = true;
     trackEvento("cta_revision_abierto", {
+      intencion: modo,
       gravedad: contexto?.gravedad,
       requiere_experto: contexto?.requiere_experto,
       tipo: contexto?.tipo,
@@ -263,7 +310,8 @@ export function LeadForm({
   };
 
   if (estado === "ok") {
-    const conRevision = form.solicitudRespuesta;
+    const conRevision = solicitud;
+    const ofrecerWhatsApp = conRevision && (esDirecto || form.canalContacto === "correo");
     return (
       <div className={`p-5 ${cardStyles}`} aria-live="polite">
         <div className="flex items-start gap-3">
@@ -278,7 +326,7 @@ export function LeadForm({
                 Un técnico de TecRural responderá en un plazo máximo de 48 horas por el canal que elegiste.
               </p>
             )}
-            {conRevision && whatsappDisponible && (
+            {ofrecerWhatsApp && whatsappDisponible && (
               <a
                 href={urlWhatsApp(mensajeWhatsApp)}
                 target="_blank"
@@ -339,6 +387,17 @@ export function LeadForm({
           estado={estado}
           textos={textos}
         />
+      ) : modo === "revision" ? (
+        <FormularioRevision
+          origen={origen}
+          form={form}
+          set={set}
+          errores={errores}
+          setErrores={setErrores}
+          estado={estado}
+          textos={textos}
+          envioCorreoActivo={envioCorreoActivo}
+        />
       ) : (
         <FormularioInforme
           origen={origen}
@@ -348,7 +407,7 @@ export function LeadForm({
           setErrores={setErrores}
           estado={estado}
           textos={textos}
-          numFotos={numFotos}
+          envioCorreoActivo={envioCorreoActivo}
         />
       )}
     </form>
@@ -374,16 +433,18 @@ interface CampoBaseProps {
     consentimientoWhatsapp: boolean;
     consentimientoCorreo: boolean;
     autorizoInforme: boolean;
+    autorizoRevision: boolean;
     web: string;
   };
   set: (campo: string, valor: string | boolean) => void;
-  errores: { telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string };
-  setErrores: React.Dispatch<React.SetStateAction<{ telefono?: string; email?: string; contacto?: string; solicitud?: string; autorizacion?: string }>>;
+  errores: { telefono?: string; email?: string; contacto?: string; canal?: string; solicitud?: string; autorizacion?: string };
+  setErrores: React.Dispatch<React.SetStateAction<{ telefono?: string; email?: string; contacto?: string; canal?: string; solicitud?: string; autorizacion?: string }>>;
   estado: EstadoEnvio;
 }
 
 interface CamposProps extends CampoBaseProps {
   textos: { datosTratados: string };
+  envioCorreoActivo?: boolean;
 }
 
 function CampoCorreo({ origen, form, set, errores, setErrores, estado, conTelefono }: CampoBaseProps & { conTelefono: boolean }) {
@@ -404,8 +465,8 @@ function CampoCorreo({ origen, form, set, errores, setErrores, estado, conTelefo
           if (!e.target.value.trim() && form.consentimientoCorreo) {
             set("consentimientoCorreo", false);
           }
-          if (errores.email || errores.contacto) {
-            setErrores((x) => ({ ...x, email: undefined, contacto: undefined }));
+          if (errores.email || errores.contacto || errores.canal) {
+            setErrores((x) => ({ ...x, email: undefined, contacto: undefined, canal: undefined }));
           }
         }}
         disabled={estado === "enviando"}
@@ -437,8 +498,8 @@ function CampoTelefono({ origen, form, set, errores, setErrores, estado, etiquet
         value={form.telefono}
         onChange={(e) => {
           set("telefono", e.target.value);
-          if (errores.telefono || errores.contacto) {
-            setErrores((x) => ({ ...x, telefono: undefined, contacto: undefined }));
+          if (errores.telefono || errores.contacto || errores.canal) {
+            setErrores((x) => ({ ...x, telefono: undefined, contacto: undefined, canal: undefined }));
           }
         }}
         disabled={estado === "enviando"}
@@ -458,24 +519,24 @@ function CampoTelefono({ origen, form, set, errores, setErrores, estado, etiquet
 }
 
 /* ------------------------------------------------------------------------- */
-/* Flujo posterior al diagnóstico: informe con correo, revisión aparte        */
+/* Flujo posterior al diagnóstico: dos intenciones separadas                  */
 /* ------------------------------------------------------------------------- */
 
-function FormularioInforme({ origen, form, set, errores, setErrores, estado, textos, numFotos }: CamposProps & { numFotos: number }) {
+function FormularioInforme({ origen, form, set, errores, setErrores, estado, textos, envioCorreoActivo = false }: CamposProps) {
   const correo = form.email.trim();
   return (
     <div className="grid gap-4 mt-4">
       <CampoCorreo origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} conTelefono={false} />
 
-      {/* Sin ningún contacto no hay forma de entregar el informe. */}
+      {/* Sin correo no hay forma de abrir el informe ni de ampliar el límite. */}
       {errores.contacto && (
         <p className="text-small text-tr-warning-text" role="alert">
           {errores.contacto}
         </p>
       )}
 
-      {/* Autorización de uso del contacto, separada de la revisión técnica:
-          desbloquear el informe no implica que un técnico vaya a contactar. */}
+      {/* Autorización de uso del correo, separada de la revisión técnica y de
+          las novedades: abrir el informe no implica que un técnico contacte. */}
       <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
         <input
           id={`lead-autorizacion-${origen}`}
@@ -494,11 +555,15 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
         <div className="flex-1">
           <label htmlFor={`lead-autorizacion-${origen}`} className="block text-small text-tr-ink leading-relaxed">
             <span className="block font-semibold">
-              Entiendo que TecRural usará mi correo para mostrarme el informe y aplicar el límite de {LIMITE_AMPLIADO}, no para contactarme ni para publicidad. *
+              {envioCorreoActivo
+                ? `Entiendo que TecRural usará mi correo para mostrarme el informe, ampliar el límite a ${LIMITE_AMPLIADO} y enviarme el enlace de recuperación; no para contactarme ni para publicidad. *`
+                : `Entiendo que TecRural usará mi correo para mostrarme el informe y aplicar el límite de ${LIMITE_AMPLIADO}, no para contactarme ni para publicidad. *`}
             </span>
             <span className="mt-1 block text-tr-muted">
-              El informe se muestra en pantalla y puedes descargarlo en PDF; no se envía por correo.
-              Trataremos {textos.datosTratados} para estas dos finalidades. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.
+              {envioCorreoActivo
+                ? "El informe se muestra en pantalla y puedes descargarlo en PDF. También te enviaremos al correo un enlace para recuperarlo, válido 90 días; el informe no se adjunta. "
+                : "El informe se muestra en pantalla y puedes descargarlo en PDF; no se envía por correo. "}
+              Trataremos {textos.datosTratados} para estas finalidades. Lee la <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">política de privacidad</Link>.
             </span>
           </label>
           {errores.autorizacion && (
@@ -509,53 +574,8 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
         </div>
       </div>
 
-      {/* Intención aparte: la revisión técnica. Es opcional y es la única que
-          registra una solicitud de contacto con el técnico. */}
-      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
-        <input
-          id={`lead-solicitud-${origen}`}
-          type="checkbox"
-          checked={form.solicitudRespuesta}
-          onChange={(e) => set("solicitudRespuesta", e.target.checked)}
-          disabled={estado === "enviando"}
-          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
-        />
-        <label htmlFor={`lead-solicitud-${origen}`} className="text-small text-tr-ink leading-relaxed">
-          <span className="block font-semibold">Además, quiero que un técnico revise mi caso</span>
-          <span className="mt-1 block text-tr-muted">
-            Opcional. Si lo marcas, un técnico responde en un máximo de 48 horas por el canal que elijas.
-            La foto se comparte solo entonces. Sin coste ni compromiso de contratación.
-          </span>
-        </label>
-      </div>
-
-      {form.solicitudRespuesta && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
-          <CampoTelefono origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} etiquetaOpcional="necesario salvo si eliges correo" />
-          <div>
-            <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
-            <select
-              id={`lead-canal-${origen}`}
-              value={form.canalContacto}
-              onChange={(e) => set("canalContacto", e.target.value)}
-              disabled={estado === "enviando"}
-              className={inputCls}
-            >
-              <option value="llamada">Llamada telefónica</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="correo">Correo electrónico</option>
-            </select>
-          </div>
-          {numFotos > 0 && (
-            <p className="sm:col-span-2 text-caption text-tr-muted">
-              Al enviar, {numFotos === 1 ? "la foto del análisis se adjuntará" : `las ${numFotos} fotos del análisis se adjuntarán`} para la revisión. No se usan para ningún otro fin.
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Opt-in comercial de correo: voluntario, desmarcado y separado de la
-          autorización del informe. Puedes recibir el informe sin marcarlo. */}
+          autorización del informe. Puedes abrir el informe sin marcarlo. */}
       <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
         <input
           id={`lead-correo-comercial-${origen}`}
@@ -583,18 +603,7 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
         </label>
       </div>
 
-      {/* Honeypot anti-spam: oculto para personas */}
-      <div className="hidden" aria-hidden="true">
-        <label htmlFor={`lead-web-${origen}`}>Web</label>
-        <input
-          id={`lead-web-${origen}`}
-          type="text"
-          tabIndex={-1}
-          autoComplete="off"
-          value={form.web}
-          onChange={(e) => set("web", e.target.value)}
-        />
-      </div>
+      <Honeypot origen={origen} form={form} set={set} />
 
       <button
         type="submit"
@@ -606,16 +615,249 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
             Enviando...
           </>
-        ) : form.solicitudRespuesta ? (
-          "Ver mi informe y solicitar la revisión"
         ) : (
-          "Ver mi informe completo"
+          "Abrir mi informe"
         )}
       </button>
 
       <p className="text-caption text-tr-muted text-center">
-        El informe se abre al momento en pantalla. Enviarlo no implica contratación ni coste.
+        El informe se abre al momento en pantalla.{" "}
+        {envioCorreoActivo
+          ? "El enlace se envía aparte y verás en esta pantalla si se ha aceptado; si falla, podrás reintentarlo."
+          : "No se envía por correo."}{" "}
+        No registra ninguna solicitud de revisión ni implica coste.
       </p>
+    </div>
+  );
+}
+
+const CANALES_REVISION = [
+  { valor: "whatsapp", etiqueta: "WhatsApp" },
+  { valor: "correo", etiqueta: "Correo electrónico" },
+  { valor: "llamada", etiqueta: "Llamada telefónica" },
+] as const;
+
+function FormularioRevision({ origen, form, set, errores, setErrores, estado, textos, envioCorreoActivo = false }: CamposProps) {
+  const correo = form.email.trim();
+  const canal = form.canalContacto;
+
+  const elegirCanal = (valor: string) => {
+    set("canalContacto", valor);
+    // Al cambiar de canal no puede quedar el contacto del canal anterior:
+    // guardarlo en el lead permitiría enviar el informe o publicidad a una
+    // dirección que la persona ya había descartado.
+    if (valor === "correo") {
+      set("telefono", "");
+    } else {
+      set("email", "");
+      set("consentimientoCorreo", false);
+    }
+    setErrores((x) => ({ ...x, canal: undefined, telefono: undefined, email: undefined }));
+  };
+
+  return (
+    <div className="grid gap-4 mt-4">
+      <p className="text-small text-tr-muted leading-relaxed">
+        Usaremos el cultivo, el municipio y el síntoma que ya nos diste en el análisis: no tienes
+        que repetirlos.
+      </p>
+
+      <div>
+        <label htmlFor={`lead-nombre-${origen}`} className={labelCls}>
+          Nombre <span className="font-normal text-tr-muted">(opcional)</span>
+        </label>
+        <input
+          id={`lead-nombre-${origen}`}
+          type="text"
+          value={form.nombre}
+          onChange={(e) => set("nombre", e.target.value)}
+          disabled={estado === "enviando"}
+          autoComplete="name"
+          className={inputCls}
+          placeholder="Tu nombre"
+        />
+      </div>
+
+      {/* Canal explícito: sin preselección y sin dar por hecha una llamada. */}
+      <fieldset>
+        <legend className={labelCls}>¿Cómo prefieres que te respondamos? *</legend>
+        <div className="grid gap-2">
+          {CANALES_REVISION.map((opcion) => (
+            <label
+              key={opcion.valor}
+              htmlFor={`lead-canal-${origen}-${opcion.valor}`}
+              className={`flex cursor-pointer items-center gap-3 rounded-[var(--tr-radius-control)] border px-3 py-2.5 text-small ${
+                canal === opcion.valor
+                  ? "border-tr-brand-green bg-tr-leaf/10 font-semibold text-tr-forest"
+                  : "border-tr-line bg-tr-paper text-tr-ink"
+              }`}
+            >
+              <input
+                id={`lead-canal-${origen}-${opcion.valor}`}
+                type="radio"
+                name={`lead-canal-${origen}`}
+                value={opcion.valor}
+                checked={canal === opcion.valor}
+                onChange={() => elegirCanal(opcion.valor)}
+                disabled={estado === "enviando"}
+                className="h-4 w-4 accent-[var(--tr-brand-green)]"
+              />
+              {opcion.etiqueta}
+            </label>
+          ))}
+        </div>
+        {errores.canal && (
+          <p className="mt-1 text-small text-tr-warning-text" role="alert">
+            {errores.canal}
+          </p>
+        )}
+      </fieldset>
+
+      {/* Solo el dato del canal elegido: WhatsApp o llamada piden teléfono;
+          correo pide correo. Nunca los dos por si acaso. */}
+      {canal === "correo" ? (
+        <CampoCorreo origen={origen} form={form} set={set} errores={errores} setErrores={setErrores} estado={estado} conTelefono={false} />
+      ) : canal ? (
+        <CampoTelefono
+          origen={origen}
+          form={form}
+          set={set}
+          errores={errores}
+          setErrores={setErrores}
+          estado={estado}
+          etiquetaOpcional={canal === "whatsapp" ? "obligatorio para WhatsApp" : "obligatorio para la llamada"}
+        />
+      ) : null}
+
+      <div>
+        <label htmlFor={`lead-mensaje-${origen}`} className={labelCls}>
+          ¿Algo más que deba saber el técnico? <span className="font-normal text-tr-muted">(opcional)</span>
+        </label>
+        <textarea
+          id={`lead-mensaje-${origen}`}
+          rows={2}
+          value={form.mensaje}
+          onChange={(e) => set("mensaje", e.target.value)}
+          disabled={estado === "enviando"}
+          className={`${inputCls} resize-none`}
+          placeholder="Por ejemplo: el daño empezó hace dos semanas y avanza"
+        />
+      </div>
+
+      {/* Autorización de la solicitud: es la única que registra una petición de
+          contacto con el técnico. */}
+      <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+        <input
+          id={`lead-autorizacion-revision-${origen}`}
+          type="checkbox"
+          required
+          checked={form.autorizoRevision}
+          onChange={(e) => {
+            set("autorizoRevision", e.target.checked);
+            if (errores.autorizacion) setErrores((x) => ({ ...x, autorizacion: undefined }));
+          }}
+          disabled={estado === "enviando"}
+          aria-invalid={errores.autorizacion ? "true" : undefined}
+          aria-describedby={errores.autorizacion ? `lead-autorizacion-revision-error-${origen}` : undefined}
+          className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+        />
+        <div className="flex-1">
+          <label htmlFor={`lead-autorizacion-revision-${origen}`} className="block text-small text-tr-ink leading-relaxed">
+            <span className="block font-semibold">
+              Solicito que TecRural revise este caso y me responda por el canal elegido. *
+            </span>
+            <span className="mt-1 block text-tr-muted">
+              Usaremos {textos.datosTratados} para gestionar la solicitud. Lee la{" "}
+              <Link href="/privacidad" className="font-semibold text-tr-green-strong underline hover:no-underline">
+                política de privacidad
+              </Link>.
+            </span>
+          </label>
+          {errores.autorizacion && (
+            <p id={`lead-autorizacion-revision-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+              {errores.autorizacion}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Novedades comerciales: independientes y voluntarias. Solo se ofrecen
+          donde hay correo; el teléfono de la revisión no autoriza publicidad. */}
+      {canal === "correo" ? (
+        <div className="flex items-start gap-3 p-4 bg-tr-paper rounded-[var(--tr-radius-control)] border border-tr-line">
+          <input
+            id={`lead-correo-comercial-${origen}`}
+            type="checkbox"
+            checked={form.consentimientoCorreo}
+            onChange={(e) => set("consentimientoCorreo", e.target.checked)}
+            disabled={estado === "enviando" || !correo}
+            className="mt-1 h-5 w-5 flex-shrink-0 accent-[var(--tr-brand-green)]"
+          />
+          <label htmlFor={`lead-correo-comercial-${origen}`} className="text-small text-tr-ink leading-relaxed">
+            {TEXTOS_COMERCIALES.correo.texto}
+            <span className="mt-1 block text-tr-muted">
+              Opcional y desmarcado: no influye en la revisión. Puedes retirarlo cuando quiera
+              desde{" "}
+              <Link href="/baja" className="font-semibold text-tr-green-strong underline hover:no-underline">
+                la página de baja
+              </Link>.
+            </span>
+          </label>
+        </div>
+      ) : canal ? (
+        <p className="text-caption text-tr-muted">
+          Las novedades comerciales solo se ofrecen por correo; este contacto se usa únicamente
+          para responder a tu solicitud.
+        </p>
+      ) : null}
+
+      <Honeypot origen={origen} form={form} set={set} />
+
+      <button
+        type="submit"
+        disabled={estado === "enviando"}
+        className={`${btnPrimary} w-full py-3`}
+      >
+        {estado === "enviando" ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+            Enviando...
+          </>
+        ) : (
+          "Solicitar la revisión"
+        )}
+      </button>
+
+      <p className="text-caption text-tr-muted text-center">
+        No implica ninguna contratación ni coste. El informe completo también se abre en pantalla.
+        {envioCorreoActivo && canal === "correo"
+          ? " Si eliges correo, te enviaremos además un enlace de recuperación válido 90 días."
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+function Honeypot({
+  origen,
+  form,
+  set,
+}: {
+  origen: OrigenLead;
+  form: { web: string };
+  set: (campo: string, valor: string | boolean) => void;
+}) {
+  return (
+    <div className="hidden" aria-hidden="true">
+      <label htmlFor={`lead-web-${origen}`}>Web</label>
+      <input
+        id={`lead-web-${origen}`}
+        type="text"
+        tabIndex={-1}
+        autoComplete="off"
+        value={form.web}
+        onChange={(e) => set("web", e.target.value)}
+      />
     </div>
   );
 }
@@ -626,7 +868,6 @@ function FormularioInforme({ origen, form, set, errores, setErrores, estado, tex
 
 function FormularioDirecto({ origen, form, set, errores, setErrores, estado, textos }: CamposProps) {
   const telefonoLleno = Boolean(form.telefono.trim());
-  const soloCorreo = !form.telefono.trim() && Boolean(form.email.trim());
   return (
     <div className="grid gap-4 mt-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -686,18 +927,29 @@ function FormularioDirecto({ origen, form, set, errores, setErrores, estado, tex
           />
         </div>
         <div>
-          <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos?</label>
+          <label htmlFor={`lead-canal-${origen}`} className={labelCls}>¿Cómo prefieres que te contactemos? *</label>
           <select
             id={`lead-canal-${origen}`}
-            value={soloCorreo ? "correo" : form.canalContacto}
-            onChange={(e) => set("canalContacto", e.target.value)}
+            value={form.canalContacto}
+            onChange={(e) => {
+              set("canalContacto", e.target.value);
+              if (errores.canal) setErrores((x) => ({ ...x, canal: undefined }));
+            }}
             disabled={estado === "enviando"}
-            className={inputCls}
+            aria-invalid={errores.canal ? "true" : undefined}
+            aria-describedby={errores.canal ? `lead-canal-error-${origen}` : undefined}
+            className={`${inputCls} ${errores.canal ? "border-tr-warning-text" : ""}`}
           >
-            <option value="llamada" disabled={soloCorreo}>Llamada telefónica</option>
-            <option value="whatsapp" disabled={soloCorreo}>WhatsApp</option>
+            <option value="" disabled>Elige un canal</option>
+            <option value="whatsapp">WhatsApp</option>
             <option value="correo">Correo electrónico</option>
+            <option value="llamada">Llamada telefónica</option>
           </select>
+          {errores.canal && (
+            <p id={`lead-canal-error-${origen}`} className="mt-1 text-small text-tr-warning-text" role="alert">
+              {errores.canal}
+            </p>
+          )}
         </div>
       </div>
 

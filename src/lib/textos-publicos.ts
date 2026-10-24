@@ -17,9 +17,13 @@ export const LIMITE_AMPLIADO = "6 análisis cada 7 días";
 /** Sin cuenta: el primer análisis no pide registro. */
 export const SIN_REGISTRO = "sin registro";
 
-/** Propósito del correo en el informe: se abre en pantalla, no se envía. */
+/**
+ * Propósito del correo en el informe: el informe se abre en pantalla y, si la
+ * entrega está configurada, se envía un enlace de recuperación. La redacción es
+ * condicional porque sin RESEND_API_KEY no existe envío y prometerlo sería falso.
+ */
 export const PROPOSITO_CORREO =
-  "El informe se abre aquí mismo, en esta pantalla. No te lo enviamos por correo.";
+  "El informe se abre aquí mismo, en esta pantalla. Si el envío por correo está disponible, te enviamos además un enlace para recuperarlo; no te adjuntamos el informe ni usamos el correo para publicidad.";
 
 /** Compromiso de la revisión técnica: opcional, sin coste, 48 horas máximo. */
 export const REVISION_TECNICA =

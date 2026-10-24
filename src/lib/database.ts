@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { enmascararIp } from "./accesos-ip";
@@ -398,6 +399,32 @@ function aplicarMigraciones(): Promise<void> {
   await db`
     CREATE INDEX IF NOT EXISTS idx_leads_consentimientos_comerciales
     ON leads USING GIN (consentimientos_comerciales)
+  `;
+
+  // Migración 0013: enlaces de recuperación del informe. Se guarda solo el
+  // SHA-256 del token; el token en claro viaja una vez en el correo y no se
+  // persiste. La caducidad se resuelve filtrando por `expira_en` al leer, porque
+  // esta función no puede ejecutar UPDATE ni DELETE (guard de prebuild).
+  await db`
+    CREATE TABLE IF NOT EXISTS enlaces_informe (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      diagnostico_id UUID REFERENCES diagnosticos(id) ON DELETE SET NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expira_en TIMESTAMPTZ NOT NULL,
+      ultimo_acceso_en TIMESTAMPTZ,
+      accesos INTEGER NOT NULL DEFAULT 0
+    )
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_enlaces_informe_token
+    ON enlaces_informe(token_hash)
+  `;
+
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_enlaces_informe_diagnostico
+    ON enlaces_informe(diagnostico_id, creado_en DESC)
   `;
 })();
 }
@@ -1204,6 +1231,158 @@ export async function obtenerHistorial(usuarioId: string, limit = 50): Promise<D
     proveedor_usado: row.proveedor ?? undefined,
     created_at: row.created_at,
   }));
+}
+
+/**
+ * Carga un diagnóstico por id. La usan los enlaces de recuperación, que no
+ * tienen cookie: el token es la única credencial y ya se validó antes.
+ */
+export async function obtenerDiagnosticoPorId(
+  id: string
+): Promise<DiagnosticoWithMeta | null> {
+  const db = getSql();
+  const [row] = await db`
+    SELECT id, usuario_id, imagen_url, organo, especie, diagnostico_json, nombre_planta, feedback_usuario, contexto_usuario, proveedor, created_at
+    FROM diagnosticos
+    WHERE id = ${id}
+    LIMIT 1
+  `;
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    usuario_id: row.usuario_id,
+    imagen_url: row.imagen_url,
+    organo_detectado: row.organo,
+    especie_identificada: row.especie,
+    ...row.diagnostico_json,
+    nombre_planta: row.nombre_planta,
+    feedback_usuario: row.feedback_usuario,
+    contexto_usuario: row.contexto_usuario,
+    proveedor_usado: row.proveedor ?? undefined,
+    created_at: row.created_at?.toString(),
+  };
+}
+
+export interface DatosEnvioInforme {
+  diagnosticoId: string;
+  email: string;
+}
+
+/**
+ * Devuelve el correo del último lead con email de un diagnóstico, solo si el
+ * diagnóstico pertenece al visitante de la cookie. Así el endpoint no se puede
+ * usar como rebotador de correo hacia direcciones ajenas.
+ */
+export async function datosEnvioInforme(
+  diagnosticoId: string,
+  usuarioId: string
+): Promise<DatosEnvioInforme | null> {
+  const db = getSql();
+  const [row] = await db`
+    SELECT d.id, l.email
+    FROM diagnosticos d
+    JOIN LATERAL (
+      SELECT email
+      FROM leads
+      WHERE diagnostico_id = d.id
+        AND usuario_id = d.usuario_id
+        AND email IS NOT NULL
+        AND btrim(email) <> ''
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) l ON TRUE
+    WHERE d.id = ${diagnosticoId}
+      AND d.usuario_id = ${usuarioId}
+    LIMIT 1
+  `;
+  if (!row?.email) return null;
+  return { diagnosticoId: String(row.id), email: String(row.email) };
+}
+
+const TOKEN_RE = /^[A-Za-z0-9_-]{20,100}$/;
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Emite un token nuevo sin tocar los anteriores. La revocación se hace solo
+ * cuando Resend acepta el envío: si el reenvío falla, el enlace que la persona
+ * ya tenía en su buzón sigue siendo válido.
+ *
+ * Devuelve también el número de intento, que forma parte de la clave de
+ * idempotencia de Resend: un reenvío real debe enviar otro correo, no
+ * reutilizar el anterior.
+ */
+export async function crearEnlaceInforme(
+  diagnosticoId: string
+): Promise<{ token: string; intento: number; enlaceId: string }> {
+  const db = getSql();
+  const [cuenta] = await db`
+    SELECT COUNT(*)::int AS total
+    FROM enlaces_informe
+    WHERE diagnostico_id = ${diagnosticoId}
+  `;
+  const intento = Number(cuenta?.total ?? 0) + 1;
+  const token = randomBytes(32).toString("base64url");
+
+  const [fila] = await db`
+    INSERT INTO enlaces_informe (diagnostico_id, token_hash, expira_en)
+    VALUES (${diagnosticoId}, ${hashToken(token)}, NOW() + INTERVAL '90 days')
+    RETURNING id
+  `;
+
+  return { token, intento, enlaceId: String(fila.id) };
+}
+
+/**
+ * Revoca los enlaces anteriores del diagnóstico, conservando el que se acaba
+ * de aceptar. Se llama después de que Resend confirme el envío.
+ */
+export async function revocarEnlacesAnteriores(
+  diagnosticoId: string,
+  enlaceId: string
+): Promise<void> {
+  await getSql()`
+    UPDATE enlaces_informe
+    SET expira_en = NOW()
+    WHERE diagnostico_id = ${diagnosticoId}
+      AND id <> ${enlaceId}
+      AND expira_en > NOW()
+  `;
+}
+
+/** Revoca un enlace que no llegó a entregarse, sin tocar el anterior. */
+export async function revocarEnlace(enlaceId: string): Promise<void> {
+  await getSql()`
+    UPDATE enlaces_informe
+    SET expira_en = NOW()
+    WHERE id = ${enlaceId}
+      AND expira_en > NOW()
+  `;
+}
+
+/**
+ * Resuelve un token en su diagnóstico. El filtro `expira_en > NOW()` es la
+ * única caducidad: no hay proceso de limpieza que pueda fallar o retrasarse.
+ * Un token inválido y uno caducado devuelven lo mismo (null).
+ */
+export async function resolverEnlaceInforme(
+  token: string
+): Promise<DiagnosticoWithMeta | null> {
+  if (!TOKEN_RE.test(token)) return null;
+  const db = getSql();
+  const [fila] = await db`
+    UPDATE enlaces_informe
+    SET ultimo_acceso_en = NOW(),
+        accesos = accesos + 1
+    WHERE token_hash = ${hashToken(token)}
+      AND expira_en > NOW()
+    RETURNING diagnostico_id
+  `;
+  if (!fila?.diagnostico_id) return null;
+  return obtenerDiagnosticoPorId(String(fila.diagnostico_id));
 }
 
 // ============================================================================

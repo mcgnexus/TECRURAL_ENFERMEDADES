@@ -43,6 +43,8 @@ const PERMITIDOS: NombreEvento[] = [
   "informe_pdf",
   "lead_enviado",
   "lead_error",
+  "informe_envio_aceptado",
+  "informe_envio_fallido",
   "whatsapp_click",
   // Informativo: mide el interés por el ejemplo de la portada. No es un paso
   // del embudo y no debe contarse como análisis real (ver ORDEN_EMBUDO).
